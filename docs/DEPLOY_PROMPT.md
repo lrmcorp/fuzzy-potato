@@ -28,6 +28,7 @@ HOW IT FITS TOGETHER
 VALUES YOU NEED FROM THE OWNER (never print them in logs or reports)
 - ARAH_PASSWORD        dashboard password chosen by the owner, 12+ characters, no single quote
 - OPENROUTER_API_KEY   from openrouter.ai/keys
+- CLAUDE_CODE_OAUTH_TOKEN  token printed by `claude setup-token`, for the fallback AI (optional)
 - TELEGRAM_BOT_TOKEN   from @BotFather            (optional)
 - TELEGRAM_CHAT_ID     the owner's numeric id     (optional)
 - VPS_SSH_KEY          the same private key already stored as a secret in lrmcorp/ln
@@ -35,8 +36,8 @@ VALUES YOU NEED FROM THE OWNER (never print them in logs or reports)
 STEPS
 
 1. Repository secrets and variable. In GitHub, open lrmcorp/fuzzy-potato > Settings > Secrets and variables
-   > Actions. Under Secrets create: VPS_SSH_KEY, ARAH_PASSWORD, OPENROUTER_API_KEY, and, if the owner uses
-   Telegram, TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID. Under Variables create VPS_DEPLOY_ENABLED = true.
+   > Actions. Under Secrets create: VPS_SSH_KEY, ARAH_PASSWORD, OPENROUTER_API_KEY, and the optional ones the
+   owner gave you: CLAUDE_CODE_OAUTH_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID. Under Variables create VPS_DEPLOY_ENABLED = true.
 
 2. Caddy site. Merge the pull request in lrmcorp/ln that adds the `arah.lnint.xyz` site to
    deploy/Caddyfile.domain. Its deploy workflow restarts Caddy. Until ARAH is running, the new site answers
@@ -91,4 +92,41 @@ REPORT BACK TO THE OWNER
   the image installs it serves the dashboard and marks the session cookie Secure behind proxy headers, the
   script that writes the server settings, and the syntax of the workflow and compose files. Ask the operator
   for the output of steps 4 and 5.
-- The Claude Code fallback is not part of the container. On this server ARAH runs on OpenRouter only.
+- The image includes Claude Code as the fallback AI. It is used only when `CLAUDE_CODE_OAUTH_TOKEN` is set;
+  the owner creates that token once with `claude setup-token` on their own computer. Without it ARAH runs on
+  OpenRouter only.
+- To deploy by hand instead of through GitHub Actions, see "Deploying by hand on the server" below.
+
+## Deploying by hand on the server
+
+Run as root on the server (for example through Tencent "Run commands"). The repository is public, so no
+login is needed to fetch it.
+
+1. Fetch or update the code:
+
+   ```bash
+   cd /home/ubuntu && if [ -d arah/.git ]; then git -C arah pull --ff-only; else git clone https://github.com/lrmcorp/fuzzy-potato.git arah; fi
+   ```
+
+2. Write the settings once. Replace each `...` with the real value; leave out the lines you do not have.
+   The file is created with mode 600 and the values are not echoed back:
+
+   ```bash
+   cd /home/ubuntu/arah && bash deploy/write-vps-env.sh <<'VALUES'
+   ARAH_PASSWORD=...
+   OPENROUTER_API_KEY=...
+   CLAUDE_CODE_OAUTH_TOKEN=...
+   TELEGRAM_BOT_TOKEN=...
+   TELEGRAM_CHAT_ID=...
+   VALUES
+   ```
+
+3. Build, start and check:
+
+   ```bash
+   cd /home/ubuntu/arah && bash deploy/vps-up.sh
+   ```
+
+The site `arah.lnint.xyz` still comes from the Caddy container of `lrmcorp/ln`, so that repository's
+pull request must be merged for the address to work and to survive its next deploy. To update ARAH later,
+repeat steps 1 and 3.

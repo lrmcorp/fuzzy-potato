@@ -74,7 +74,9 @@ installs no second proxy and says so.
 
 On the LRM server a Caddy container from `lrmcorp/ln` already serves ports 80 and 443. There ARAH runs as a
 container on the shared network `lnint-edge` (`deploy/Dockerfile`, `deploy/compose.yaml`), and
-`.github/workflows/deploy.yml` deploys every push to `main`. The hand-over text for the operator is in
+`.github/workflows/deploy.yml` deploys every push to `main` once the repository variable `VPS_DEPLOY_ENABLED`
+is `true`; `deploy/vps-up.sh` does the same by hand on the server. The image includes Claude Code as the
+fallback AI, used when `CLAUDE_CODE_OAUTH_TOKEN` is set. The hand-over text for the operator is in
 [docs/DEPLOY_PROMPT.md](docs/DEPLOY_PROMPT.md).
 
 Settings live in `.env`:
