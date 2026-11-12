@@ -164,7 +164,8 @@ async def _openrouter_json(db: DB, settings: Settings, role: str, system: str, u
                 "temperature": temperature,
                 # The limit covers hidden reasoning as well as the answer, so it is generous;
                 # reasoning is kept light because the inputs are already digested.
-                "max_tokens": max_tokens,
+                # The deep model reasons at length before answering, so it gets more room.
+                "max_tokens": max_tokens * 3 if model == settings.model_deep else max_tokens,
                 "reasoning": {"effort": "low"},
                 "usage": {"include": True},
             }
@@ -193,6 +194,11 @@ async def _openrouter_json(db: DB, settings: Settings, role: str, system: str, u
                      (int(time.time()), model, role, tin, tout, float(cost)))
                 choice = data["choices"][0]
                 db.set("llm_error", None)
+                if choice.get("finish_reason") == "length" and model != settings.model_quick:
+                    # Still cut off: the quick model answers the same prompt in far fewer tokens.
+                    log.warning("%s ran out of tokens on %s; retrying on %s", model, role, settings.model_quick)
+                    model = settings.model_quick
+                    continue
                 if choice.get("finish_reason") == "length":
                     raise LLMError("the model ran out of tokens before finishing its answer")
                 return _extract_json(choice["message"].get("content") or "")
