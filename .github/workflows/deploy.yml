@@ -1,0 +1,84 @@
+name: Deploy ARAH to the VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: arah-vps
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+      - name: Check that the built web assets are committed
+        run: test -f arah/static/index.html && ls arah/static/assets/*.js >/dev/null
+
+  deploy:
+    needs: validate
+    if: ${{ vars.VPS_DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      VPS: ubuntu@43.152.240.47
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prepare pinned SSH identity
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          test -n "$VPS_SSH_KEY"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/arah_vps"
+          cp deploy/known_hosts "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/arah_vps" "$HOME/.ssh/known_hosts"
+          ssh-keygen -F 43.152.240.47 -f "$HOME/.ssh/known_hosts" >/dev/null
+      - name: Upload exact commit
+        run: |
+          printf '%s\n' "$GITHUB_SHA" > .deploy-revision
+          ssh -i "$HOME/.ssh/arah_vps" -o StrictHostKeyChecking=yes "$VPS" 'mkdir -p ~/arah'
+          rsync -az --delete -e "ssh -i $HOME/.ssh/arah_vps -o StrictHostKeyChecking=yes" \
+            --exclude='.git/' --exclude='node_modules/' --exclude='web/' --exclude='tests/' \
+            --exclude='data/' --exclude='.venv/' --exclude='.env*' ./ "$VPS":~/arah/
+      # Secrets travel over SSH on stdin and are written to ~/arah/.env.vps (mode 600) on the server.
+      - name: Write settings on the server
+        env:
+          ARAH_PASSWORD: ${{ secrets.ARAH_PASSWORD }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          printf 'ARAH_PASSWORD=%s\nOPENROUTER_API_KEY=%s\nTELEGRAM_BOT_TOKEN=%s\nTELEGRAM_CHAT_ID=%s\n' \
+            "$ARAH_PASSWORD" "$OPENROUTER_API_KEY" "$TELEGRAM_BOT_TOKEN" "$TELEGRAM_CHAT_ID" \
+            | ssh -i "$HOME/.ssh/arah_vps" -o StrictHostKeyChecking=yes "$VPS" 'bash ~/arah/deploy/write-vps-env.sh'
+      - name: Build, start and verify on the server
+        run: |
+          ssh -i "$HOME/.ssh/arah_vps" -o StrictHostKeyChecking=yes "$VPS" "
+            set -e
+            cd ~/arah
+            test \"\$(cat .deploy-revision)\" = '$GITHUB_SHA'
+            sudo -n docker network inspect lnint-edge >/dev/null 2>&1 || sudo -n docker network create lnint-edge
+            sudo -n docker compose -f deploy/compose.yaml up -d --build
+            for i in \$(seq 1 40); do
+              state=\$(sudo -n docker inspect --format '{{.State.Health.Status}}' \$(sudo -n docker compose -f deploy/compose.yaml ps -q arah))
+              [ \"\$state\" = healthy ] && break
+              sleep 3
+            done
+            echo \"container health: \$state\"
+            [ \"\$state\" = healthy ] || { sudo -n docker compose -f deploy/compose.yaml logs --tail 60 arah; exit 1; }
+            sudo -n docker image prune -f >/dev/null"
+      # Fails until lrmcorp/ln has deployed its Caddy site for arah.lnint.xyz; the container itself is already verified above.
+      - name: Verify public HTTPS
+        run: |
+          curl -fsS --connect-timeout 5 --max-time 12 --retry 8 --retry-delay 5 --retry-all-errors \
+            https://arah.lnint.xyz/api/session | grep -q '"auth_required":true'

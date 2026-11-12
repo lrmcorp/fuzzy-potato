@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import os
 import re
 import secrets
 from pathlib import Path
@@ -71,9 +72,10 @@ def up(host: str = typer.Option(None), port: int = typer.Option(None)):
         typer.echo("Refusing to listen on a public address without ARAH_PASSWORD. Run `arah init` first.")
         raise typer.Exit(1)
     typer.echo(f"ARAH is starting on http://{host}:{port}")
-    # Behind the local reverse proxy, take the visitor's address and scheme from its headers.
+    # Behind a reverse proxy, take the visitor's address and scheme from its headers. In a container
+    # the proxy is another container, so the deployment sets ARAH_TRUSTED_PROXIES there.
     uvicorn.run("arah.api:create_app", factory=True, host=host, port=port, log_level="info",
-                proxy_headers=True, forwarded_allow_ips="127.0.0.1")
+                proxy_headers=True, forwarded_allow_ips=os.environ.get("ARAH_TRUSTED_PROXIES", "127.0.0.1"))
 
 
 @app.command()

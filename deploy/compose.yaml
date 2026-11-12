@@ -1,0 +1,24 @@
+name: arah
+
+services:
+  arah:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    env_file: ../.env.vps
+    volumes:
+      - arah_data:/data
+    networks:
+      edge:
+        aliases: [arah]
+    # No published ports: only the Caddy container on lnint-edge reaches arah:8787.
+
+networks:
+  # Shared with the Caddy container from lrmcorp/ln, which serves arah.lnint.xyz.
+  edge:
+    name: lnint-edge
+    external: true
+
+volumes:
+  arah_data:
