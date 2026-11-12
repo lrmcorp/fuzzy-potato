@@ -1,5 +1,8 @@
 # Deployment prompt for the server operator
 
+> For a direct deploy on the LRM server with one command, use [SERVER_PROMPT.md](SERVER_PROMPT.md)
+> (in Indonesian). This file describes the GitHub Actions route.
+
 Copy the block below and hand it to the person (or AI agent) who manages the server and the GitHub
 repositories. Secret values go to them through a private channel, never into a ticket or shared chat.
 
