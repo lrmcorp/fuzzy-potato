@@ -113,18 +113,42 @@ async def _claude_json(db: DB, settings: Settings, role: str, system: str, user:
     return _extract_json(str(data["result"]))
 
 
+# After a provider refuses for credit, login or quota, skip it for a while instead of
+# failing one request per call before every fallback.
+SKIP_SECONDS = 30 * 60
+
+
 async def chat_json(db: DB, settings: Settings, role: str, system: str, user: str, deep: bool = False,
                     max_tokens: int = 6000, temperature: float = 0.3) -> dict:
-    """One JSON-returning call to the configured provider, recorded against its budget."""
-    if not settings.llm_enabled:
+    """One JSON-returning call. Tries the main provider, then the fallback if one is set up."""
+    order = settings.provider_order
+    if not order:
         raise LLMError("no LLM provider configured")
-    if settings.use_claude:
+    now = time.time()
+    awake = [p for p in order if now - (db.get(f"llm_skip:{p}") or 0) > SKIP_SECONDS] or order
+    last: Exception | None = None
+    for i, provider in enumerate(awake):
         try:
-            return await _claude_json(db, settings, role, system, user, deep)
+            if provider == "claude":
+                out = await _claude_json(db, settings, role, system, user, deep)
+            else:
+                out = await _openrouter_json(db, settings, role, system, user, deep, max_tokens, temperature)
+            db.set("llm_last", {"at": int(time.time()), "provider": provider, "fallback": provider != order[0]})
+            db.set("llm_error", None)
+            return out
         except (LLMError, BudgetExceeded) as e:
-            if not settings.openrouter_key:
-                raise
-            log.warning("Claude unavailable (%s); using OpenRouter for this call", e)
+            last = e
+            if isinstance(e, BudgetExceeded) or (db.get("llm_error") or {}).get("kind") in ("credit", "auth", "limit"):
+                db.set(f"llm_skip:{provider}", int(time.time()))
+            if i + 1 < len(awake):
+                log.warning("%s unavailable (%s); falling back to %s", provider, str(e)[:120], awake[i + 1])
+    assert last is not None
+    raise last
+
+
+async def _openrouter_json(db: DB, settings: Settings, role: str, system: str, user: str, deep: bool,
+                           max_tokens: int, temperature: float) -> dict:
+    """One call through OpenRouter, with spend recorded against the dollar budget."""
     state = budget_state(db, settings)
     if state["over"]:
         raise BudgetExceeded(f"LLM budget reached (${state['month']:.2f} this month, ${state['day']:.2f} today)")

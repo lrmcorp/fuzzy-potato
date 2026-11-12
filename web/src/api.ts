@@ -49,7 +49,7 @@ export interface Track {
 }
 export interface Status {
   version: string; data_at: number | null; data_errors: Record<string, string>; news_at: number | null;
-  llm_enabled: boolean; llm_error: {kind: string} | null; models: {provider: string; quick: string; deep: string}; claude_calls_today: number;
+  llm_enabled: boolean; llm_error: {kind: string} | null; models: {provider: string; quick: string; deep: string; fallback: string | null}; llm_last: {provider: string; fallback: boolean; at: number} | null; claude_calls_today: number;
   budget: {day: number; month: number; cap_day: number; cap_month: number; over: boolean};
   telegram_enabled: boolean; schedule: {slot: string; time: string}[]; timezone: string;
 }

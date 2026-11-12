@@ -219,7 +219,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         ds = db.get("data_status") or {}
         return {"version": __version__, "data_at": ds.get("at"), "data_errors": ds.get("errors", {}),
                 "news_at": db.get("news_at"), "llm_enabled": settings.llm_enabled, "llm_error": db.get("llm_error"),
-                "models": settings.llm_names, "claude_calls_today": claude_calls_today(db),
+                "models": settings.llm_names, "llm_last": db.get("llm_last"), "claude_calls_today": claude_calls_today(db),
                 "budget": budget_state(db, settings), "telegram_enabled": settings.telegram_enabled,
                 "schedule": [{"slot": s, "time": t} for s, t in BRIEF_SCHEDULE], "timezone": settings.timezone}
 

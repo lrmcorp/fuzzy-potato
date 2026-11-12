@@ -21,6 +21,7 @@ const S = {
   llm_auth: ['Login AI ditolak. Periksa kunci OpenRouter atau token Claude di file .env.', 'The AI sign-in was refused. Check the OpenRouter key or the Claude token in the .env file.'],
   llm_limit: ['Kuota paket Claude sedang habis, jadi brief ini disusun tanpa tim analis AI.', 'The Claude plan quota is used up for now, so this brief was built without the AI analyst team.'],
   llm_error: ['Tim analis AI gagal dijalankan. Periksa log ARAH.', 'The AI analyst team failed to run. Check the ARAH log.'],
+  fallback: ['cadangan', 'fallback'], last_used: ['terakhir memakai', 'last used'],
   calls_today: ['panggilan Claude hari ini', 'Claude calls today'],
   why: ['Kenapa', 'Why'], watch: ['Yang perlu diawasi', 'What to watch'],
   horizon: ['Rentang waktu', 'Horizon'], pick_horizon: ['Pilih rentang waktu', 'Choose a horizon'],

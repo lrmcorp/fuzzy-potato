@@ -43,8 +43,9 @@ class Settings:
     model_deep: str = field(
         default_factory=lambda: os.environ.get("ARAH_MODEL_DEEP", "deepseek/deepseek-v4-pro")
     )
-    # Which service the analyst team runs on: "openrouter", "claude" (the Claude Code CLI signed in
-    # with your own Claude plan), or "auto" (Claude when the CLI is installed, else OpenRouter).
+    # Main service for the analyst team: "openrouter" (DeepSeek) or "claude" (the Claude Code CLI
+    # signed in with your own Claude plan). The other one is the fallback when it is set up.
+    llm_fallback: bool = field(default_factory=lambda: os.environ.get("ARAH_LLM_FALLBACK", "on").lower() != "off")
     llm_provider: str = field(default_factory=lambda: os.environ.get("ARAH_LLM_PROVIDER", "openrouter").lower())
     claude_bin: str = field(default_factory=lambda: os.environ.get("ARAH_CLAUDE_BIN", "claude"))
     claude_quick: str = field(default_factory=lambda: os.environ.get("ARAH_CLAUDE_MODEL_QUICK", "haiku"))
@@ -65,20 +66,26 @@ class Settings:
         return shutil.which(self.claude_bin) is not None
 
     @property
-    def use_claude(self) -> bool:
-        if self.llm_provider == "claude":
-            return self.claude_available
-        return self.llm_provider == "auto" and self.claude_available
+    def provider_order(self) -> list[str]:
+        """Providers to try, first to last. The first is the main one, the rest are fallbacks."""
+        have = {"openrouter": bool(self.openrouter_key), "claude": self.claude_available}
+        first = "claude" if self.llm_provider == "claude" else "openrouter"
+        second = "openrouter" if first == "claude" else "claude"
+        order = [first] + ([second] if self.llm_fallback else [])
+        return [p for p in order if have[p]]
 
     @property
     def llm_enabled(self) -> bool:
-        return self.use_claude or bool(self.openrouter_key)
+        return bool(self.provider_order)
 
     @property
     def llm_names(self) -> dict:
-        if self.use_claude:
-            return {"provider": "claude", "quick": self.claude_quick, "deep": self.claude_deep}
-        return {"provider": "openrouter", "quick": self.model_quick, "deep": self.model_deep}
+        models = {"openrouter": (self.model_quick, self.model_deep), "claude": (self.claude_quick, self.claude_deep)}
+        order = self.provider_order
+        if not order:
+            return {"provider": "none", "quick": "", "deep": "", "fallback": None}
+        return {"provider": order[0], "quick": models[order[0]][0], "deep": models[order[0]][1],
+                "fallback": order[1] if len(order) > 1 else None}
 
     @property
     def telegram_enabled(self) -> bool:

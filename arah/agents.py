@@ -202,7 +202,7 @@ async def run_team(db: DB, settings: Settings) -> dict | None:
     except (LLMError, BudgetExceeded) as e:
         log.warning("chief skipped: %s", e)
         return {"desks": desks, "debate": {"bull": bull, "bear": bear}}
-    out: dict = {"desks": desks, "debate": {"bull": bull, "bear": bear}, "model": f"{settings.llm_names['provider']}:{settings.llm_names['deep']}"}
+    out: dict = {"desks": desks, "debate": {"bull": bull, "bear": bear}, "model": (db.get("llm_last") or {}).get("provider")}
     out["headline"] = _text(raw.get("headline"))
     world = raw.get("world") if isinstance(raw.get("world"), dict) else {}
     points = []

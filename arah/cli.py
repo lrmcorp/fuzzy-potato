@@ -39,14 +39,15 @@ def init(force: bool = typer.Option(False, help="Overwrite an existing .env")):
         f"ARAH_PASSWORD={password}\n"
         f"ARAH_SECRET={secrets.token_hex(32)}\n"
         "ARAH_HOST=127.0.0.1\nARAH_PORT=8787\nARAH_TIMEZONE=Asia/Jakarta\n\n"
-        "# AI analyst team (optional). Provider: openrouter, claude, or auto.\n"
+        "# AI analyst team (optional). Main provider: openrouter (DeepSeek) or claude.\n"
+        "# The other one is used as the fallback when it is set up (ARAH_LLM_FALLBACK=off disables that).\n"
         "# claude = the Claude Code CLI on this machine, signed in with your own Claude plan:\n"
         "#   npm install -g @anthropic-ai/claude-code && claude setup-token\n"
         "# then put the token in CLAUDE_CODE_OAUTH_TOKEN below. Leave ANTHROPIC_API_KEY unset.\n"
-        "ARAH_LLM_PROVIDER=openrouter\n"
+        "ARAH_LLM_PROVIDER=openrouter\nARAH_LLM_FALLBACK=on\n"
         "CLAUDE_CODE_OAUTH_TOKEN=\n"
         "ARAH_CLAUDE_MODEL_QUICK=haiku\nARAH_CLAUDE_MODEL_DEEP=sonnet\nARAH_CLAUDE_CALLS_DAY=150\n"
-        "# OpenRouter key from openrouter.ai (also the fallback when Claude is unavailable)\n"
+        "# OpenRouter key from openrouter.ai\n"
         "OPENROUTER_API_KEY=\n"
         "ARAH_MODEL_QUICK=deepseek/deepseek-v4.1-flash\nARAH_MODEL_DEEP=deepseek/deepseek-v4-pro\n"
         "ARAH_BUDGET_USD_MONTH=30\nARAH_BUDGET_USD_DAY=2\n\n"
@@ -131,7 +132,9 @@ def doctor():
     s = get_settings()
     typer.echo(f"data dir        : {s.data_dir.resolve()}")
     typer.echo(f"dashboard login : {'on' if s.password else 'OFF (set ARAH_PASSWORD)'}")
-    typer.echo(f"AI provider     : {s.llm_provider} -> {s.llm_names['provider'] if s.llm_enabled else 'none (rule-based mode)'}")
+    names = s.llm_names
+    typer.echo(f"AI provider     : {names['provider'] if s.llm_enabled else 'none (rule-based mode)'}"
+               + (f", fallback {names['fallback']}" if names["fallback"] else ""))
     typer.echo(f"Claude CLI      : {'found' if s.claude_available else 'not found'}")
     typer.echo(f"OpenRouter key  : {'set' if s.openrouter_key else 'not set'}")
     typer.echo(f"Telegram        : {'set' if s.telegram_enabled else 'not set'}")

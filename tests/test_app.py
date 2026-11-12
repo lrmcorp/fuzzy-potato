@@ -126,7 +126,7 @@ async def test_claude_provider_runs_cli_without_api_key(db, tmp_path, monkeypatc
     fake.chmod(0o755)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "must-not-be-used")
     s = Settings(llm_provider="claude", claude_bin=str(fake), openrouter_key="")
-    assert s.use_claude and s.llm_enabled and s.llm_names["provider"] == "claude"
+    assert s.provider_order == ["claude"] and s.llm_names["provider"] == "claude"
     assert await llm.chat_json(db, s, "t", "sys", "user") == {"ok": True}
     row = db.one("SELECT model, cost_usd FROM llm_usage")
     assert row["model"] == "claude:haiku" and row["cost_usd"] == 0
@@ -139,3 +139,28 @@ async def test_claude_provider_runs_cli_without_api_key(db, tmp_path, monkeypatc
         await llm.chat_json(db, broken, "t", "s", "u")
     assert db.get("llm_error")["kind"] == "auth"
     assert not Settings(llm_provider="claude", claude_bin="/nonexistent/claude").llm_enabled
+
+
+async def test_openrouter_first_then_claude_fallback(db, tmp_path, monkeypatch):
+    from arah import llm
+
+    fake = tmp_path / "claude"
+    fake.write_text("#!/bin/sh\ncat > /dev/null\nprintf '%s' '{\"is_error\": false, \"result\": \"{\\\"from\\\": \\\"claude\\\"}\", \"usage\": {}}'\n")
+    fake.chmod(0o755)
+    s = Settings(llm_provider="openrouter", openrouter_key="k", claude_bin=str(fake))
+    assert s.provider_order == ["openrouter", "claude"] and s.llm_names["fallback"] == "claude"
+    assert Settings(llm_provider="openrouter", openrouter_key="k", claude_bin=str(fake), llm_fallback=False).provider_order == ["openrouter"]
+    calls = []
+
+    async def no_credit(db_, s_, *a):
+        calls.append(1)
+        db_.set("llm_error", {"at": 0, "kind": "credit"})
+        raise llm.LLMError("OpenRouter refused the request (402)")
+
+    monkeypatch.setattr(llm, "_openrouter_json", no_credit)
+    assert await llm.chat_json(db, s, "t", "sys", "user") == {"from": "claude"}
+    assert db.get("llm_last") == db.get("llm_last") | {"provider": "claude", "fallback": True}
+    assert db.get("llm_error") is None
+    # OpenRouter is skipped for a while after a credit refusal, so it is not retried on every call.
+    assert await llm.chat_json(db, s, "t", "sys", "user") == {"from": "claude"}
+    assert len(calls) == 1

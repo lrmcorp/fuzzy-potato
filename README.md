@@ -57,10 +57,11 @@ Then edit `.env`:
 | Variable | What it does |
 |---|---|
 | `ARAH_PASSWORD` | Dashboard password (generated for you). |
-| `ARAH_LLM_PROVIDER` | `openrouter`, `claude` or `auto`. Picks what the AI analyst team runs on. |
+| `ARAH_LLM_PROVIDER` | Main provider for the AI analyst team: `openrouter` (default) or `claude`. The other one is the fallback when it is set up. |
+| `ARAH_LLM_FALLBACK` | `on` (default) or `off`. Off means only the main provider is used. |
 | `CLAUDE_CODE_OAUTH_TOKEN` | For `claude`: the token printed by `claude setup-token`. |
 | `ARAH_CLAUDE_MODEL_QUICK`, `ARAH_CLAUDE_MODEL_DEEP`, `ARAH_CLAUDE_CALLS_DAY` | Claude models (default `haiku` and `sonnet`) and a daily call cap (default 150). |
-| `OPENROUTER_API_KEY` | For `openrouter`, and the fallback when Claude is unavailable. Without any provider ARAH runs on the model and facts only. |
+| `OPENROUTER_API_KEY` | Key for OpenRouter. Without any provider ARAH runs on the model and facts only. |
 | `ARAH_MODEL_QUICK`, `ARAH_MODEL_DEEP` | OpenRouter model ids. Defaults are DeepSeek models. |
 | `ARAH_BUDGET_USD_MONTH`, `ARAH_BUDGET_USD_DAY` | Spending caps. Past the cap the team is skipped. |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Bot token from @BotFather and your own chat id. Only that chat is answered. |
@@ -79,9 +80,11 @@ ssh -L 8787:127.0.0.1:8787 user@your-vps
 
 Then open `http://127.0.0.1:8787`. To keep ARAH running after logout, use `deploy/arah.service`.
 
-## Running the analyst team on your Claude plan
+## Claude Code as the fallback (or the main provider)
 
-ARAH can call the Claude Code CLI in print mode instead of OpenRouter. One brief is 8 calls
+By default the team runs on DeepSeek through OpenRouter. When OpenRouter refuses a call (no credit, bad key,
+budget cap reached, or an outage), ARAH finishes that call on the Claude Code CLI, signed in with your own
+Claude plan, and skips OpenRouter for the next 30 minutes. Set `ARAH_LLM_PROVIDER=claude` to reverse the order. One brief is 8 calls
 (5 desks, a bull, a bear, the chief), and took about 96 seconds in testing.
 
 ```bash
@@ -92,7 +95,7 @@ npm install -g @anthropic-ai/claude-code
 claude setup-token
 ```
 
-Put the printed token in `.env` as `CLAUDE_CODE_OAUTH_TOKEN`, set `ARAH_LLM_PROVIDER=claude`, and restart.
+Put the printed token in `.env` as `CLAUDE_CODE_OAUTH_TOKEN` and restart. `arah doctor` shows the main provider and the fallback.
 
 - Calls draw on the same plan quota as your own use of Claude. `ARAH_CLAUDE_CALLS_DAY` caps them.
 - Do not set `ANTHROPIC_API_KEY` on the VPS: the CLI would bill that key instead of the plan. ARAH also
