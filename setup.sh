@@ -108,7 +108,14 @@ fi
 say "5/6 Domain and automatic updates"
 PORT="$(grep '^ARAH_PORT=' .env | cut -d= -f2)"; PORT="${PORT:-8787}"
 DOMAIN="$(printf '%s' "${ARAH_DOMAIN:-}" | tr '[:upper:]' '[:lower:]')"
-if [ -n "$DOMAIN" ] && command -v apt-get >/dev/null; then
+# Another web server may already own ports 80 and 443 (for example a Caddy container that fronts
+# several apps). A second proxy cannot bind them, so in that case nothing is installed here.
+port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+ports_taken() { ! command -v caddy >/dev/null && { port_open 80 || port_open 443; }; }
+if [ -n "$DOMAIN" ] && ports_taken; then
+  echo "Ports 80/443 are already served by another web server on this machine, so no second proxy was installed." >&2
+  echo "Add a site for $DOMAIN to that existing proxy and point it at this app (port $PORT)." >&2
+elif [ -n "$DOMAIN" ] && command -v apt-get >/dev/null; then
   command -v caddy >/dev/null || { $SUDO apt-get update -qq; $SUDO apt-get install -y -qq caddy; }
   if ! $SUDO grep -q "^$DOMAIN {" /etc/caddy/Caddyfile 2>/dev/null; then
     [ -f /etc/caddy/Caddyfile ] && $SUDO cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak.$(date +%s)"
