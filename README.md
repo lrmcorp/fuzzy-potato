@@ -19,7 +19,7 @@ The product requirements are in [docs/PRD.md](docs/PRD.md). The visual direction
    touching a level.
 2. **Facts.** Trend, stretch, volatility and cross-market drivers (for USD/IDR: the dollar index, US yields,
    VIX, IHSG, oil) are turned into numbered plain-language facts.
-3. **AI analyst team (optional).** With an OpenRouter key, DeepSeek models play country desks (Indonesia,
+3. **AI analyst team (optional).** Claude (through your own Claude plan) or DeepSeek (through OpenRouter) plays country desks (Indonesia,
    US, Japan, Singapore, global), a bull and a bear, and a chief strategist who gives one conclusion. The
    team may nudge the model's probability by at most 6 points, and every claim must cite a numbered fact or
    headline. Claims without a valid citation are discarded.
@@ -57,7 +57,10 @@ Then edit `.env`:
 | Variable | What it does |
 |---|---|
 | `ARAH_PASSWORD` | Dashboard password (generated for you). |
-| `OPENROUTER_API_KEY` | Turns on the AI analyst team. Without it ARAH runs on the model and facts only. |
+| `ARAH_LLM_PROVIDER` | `openrouter`, `claude` or `auto`. Picks what the AI analyst team runs on. |
+| `CLAUDE_CODE_OAUTH_TOKEN` | For `claude`: the token printed by `claude setup-token`. |
+| `ARAH_CLAUDE_MODEL_QUICK`, `ARAH_CLAUDE_MODEL_DEEP`, `ARAH_CLAUDE_CALLS_DAY` | Claude models (default `haiku` and `sonnet`) and a daily call cap (default 150). |
+| `OPENROUTER_API_KEY` | For `openrouter`, and the fallback when Claude is unavailable. Without any provider ARAH runs on the model and facts only. |
 | `ARAH_MODEL_QUICK`, `ARAH_MODEL_DEEP` | OpenRouter model ids. Defaults are DeepSeek models. |
 | `ARAH_BUDGET_USD_MONTH`, `ARAH_BUDGET_USD_DAY` | Spending caps. Past the cap the team is skipped. |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Bot token from @BotFather and your own chat id. Only that chat is answered. |
@@ -75,6 +78,28 @@ ssh -L 8787:127.0.0.1:8787 user@your-vps
 ```
 
 Then open `http://127.0.0.1:8787`. To keep ARAH running after logout, use `deploy/arah.service`.
+
+## Running the analyst team on your Claude plan
+
+ARAH can call the Claude Code CLI in print mode instead of OpenRouter. One brief is 8 calls
+(5 desks, a bull, a bear, the chief), and took about 96 seconds in testing.
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+```bash
+claude setup-token
+```
+
+Put the printed token in `.env` as `CLAUDE_CODE_OAUTH_TOKEN`, set `ARAH_LLM_PROVIDER=claude`, and restart.
+
+- Calls draw on the same plan quota as your own use of Claude. `ARAH_CLAUDE_CALLS_DAY` caps them.
+- Do not set `ANTHROPIC_API_KEY` on the VPS: the CLI would bill that key instead of the plan. ARAH also
+  removes it from the CLI's environment.
+- The CLI gets no tools. It can read the prompt and answer, nothing else.
+- This is for your own use with your own plan. Anthropic does not allow offering Claude plan login to
+  other people through an app, so if ARAH is ever shared, switch to an API key provider.
 
 ## Commands
 

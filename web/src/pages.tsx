@@ -59,7 +59,7 @@ export function Today({onAuth}: PageProps) {
         <EmptyState title={t('no_brief_title')} description={t('no_brief_desc')} actions={<Spinner size="md" />} />
       ) : (
         <>
-          {llm_error && <Banner status="warning" title={t(llm_error === 'credit' ? 'llm_credit' : 'llm_auth')} />}
+          {llm_error && <Banner status="warning" title={t(`llm_${llm_error}` as const)} />}
           <BriefBody brief={brief} building={building} rebuild={rebuild} />
         </>
       )}
@@ -483,7 +483,7 @@ export function SettingsPage({onAuth, onLang, themeMode, onTheme, authRequired}:
         {s => (
           <dl className="plan wide">
             <div><dt>{t('data_at')}</dt><dd>{when(s.data_at) || '-'}</dd></div>
-            <div><dt>{t('ai_team')}</dt><dd>{s.llm_enabled ? `${t('on')} (${s.models.quick}, ${s.models.deep})` : t('off')}{s.llm_error ? ` · ${t(s.llm_error.kind === 'credit' ? 'llm_credit' : 'llm_auth')}` : ''}</dd></div>
+            <div><dt>{t('ai_team')}</dt><dd>{s.llm_enabled ? `${t('on')}: ${s.models.provider} (${s.models.quick}, ${s.models.deep})` : t('off')}{s.models.provider === 'claude' ? ` · ${s.claude_calls_today} ${t('calls_today')}` : ''}</dd></div>
             <div><dt>{t('budget')}</dt><dd>${num(s.budget.month, 2)} / ${num(s.budget.cap_month, 0)}</dd></div>
             <div><dt>{t('telegram')}</dt><dd>{s.telegram_enabled ? t('on') : t('off')}</dd></div>
             <div><dt>{t('schedule')} ({s.timezone})</dt><dd>{s.schedule.map(x => x.time).join(' · ')}</dd></div>

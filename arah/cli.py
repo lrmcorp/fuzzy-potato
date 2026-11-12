@@ -39,7 +39,14 @@ def init(force: bool = typer.Option(False, help="Overwrite an existing .env")):
         f"ARAH_PASSWORD={password}\n"
         f"ARAH_SECRET={secrets.token_hex(32)}\n"
         "ARAH_HOST=127.0.0.1\nARAH_PORT=8787\nARAH_TIMEZONE=Asia/Jakarta\n\n"
-        "# AI analyst team (optional). Get a key at openrouter.ai\n"
+        "# AI analyst team (optional). Provider: openrouter, claude, or auto.\n"
+        "# claude = the Claude Code CLI on this machine, signed in with your own Claude plan:\n"
+        "#   npm install -g @anthropic-ai/claude-code && claude setup-token\n"
+        "# then put the token in CLAUDE_CODE_OAUTH_TOKEN below. Leave ANTHROPIC_API_KEY unset.\n"
+        "ARAH_LLM_PROVIDER=openrouter\n"
+        "CLAUDE_CODE_OAUTH_TOKEN=\n"
+        "ARAH_CLAUDE_MODEL_QUICK=haiku\nARAH_CLAUDE_MODEL_DEEP=sonnet\nARAH_CLAUDE_CALLS_DAY=150\n"
+        "# OpenRouter key from openrouter.ai (also the fallback when Claude is unavailable)\n"
         "OPENROUTER_API_KEY=\n"
         "ARAH_MODEL_QUICK=deepseek/deepseek-v4.1-flash\nARAH_MODEL_DEEP=deepseek/deepseek-v4-pro\n"
         "ARAH_BUDGET_USD_MONTH=30\nARAH_BUDGET_USD_DAY=2\n\n"
@@ -124,7 +131,9 @@ def doctor():
     s = get_settings()
     typer.echo(f"data dir        : {s.data_dir.resolve()}")
     typer.echo(f"dashboard login : {'on' if s.password else 'OFF (set ARAH_PASSWORD)'}")
-    typer.echo(f"OpenRouter key  : {'set' if s.llm_enabled else 'not set (rule-based mode)'}")
+    typer.echo(f"AI provider     : {s.llm_provider} -> {s.llm_names['provider'] if s.llm_enabled else 'none (rule-based mode)'}")
+    typer.echo(f"Claude CLI      : {'found' if s.claude_available else 'not found'}")
+    typer.echo(f"OpenRouter key  : {'set' if s.openrouter_key else 'not set'}")
     typer.echo(f"Telegram        : {'set' if s.telegram_enabled else 'not set'}")
     for name, url in (("Yahoo Finance", "https://query1.finance.yahoo.com/v8/finance/chart/IDR=X?range=1d&interval=1h"),
                       ("Google News", "https://news.google.com/rss/search?q=rupiah&hl=id&gl=ID&ceid=ID:id"),

@@ -111,3 +111,31 @@ def test_login_is_rate_limited(db):
     c = TestClient(create_app(Settings(password="pw", secret="k" * 32), db, background=False))
     codes = [c.post("/api/login", json={"password": "bad"}).status_code for _ in range(10)]
     assert codes[:8] == [401] * 8 and codes[-1] == 429
+
+
+async def test_claude_provider_runs_cli_without_api_key(db, tmp_path, monkeypatch):
+    from arah import llm
+
+    fake = tmp_path / "claude"
+    # Stand-in for the Claude CLI: reports whether an API key leaked into its environment.
+    fake.write_text(
+        "#!/bin/sh\ncat > /dev/null\n"
+        "if [ \"$1\" = \"-p\" ] && [ -z \"$ANTHROPIC_API_KEY\" ]; then\n"
+        "  echo '{\"is_error\": false, \"result\": \"```json\\n{\\\"ok\\\": true}\\n```\", \"usage\": {\"input_tokens\": 5, \"output_tokens\": 3}}'\n"
+        "else\n  echo '{\"is_error\": true, \"result\": \"Please run /login\"}'; exit 1\nfi\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "must-not-be-used")
+    s = Settings(llm_provider="claude", claude_bin=str(fake), openrouter_key="")
+    assert s.use_claude and s.llm_enabled and s.llm_names["provider"] == "claude"
+    assert await llm.chat_json(db, s, "t", "sys", "user") == {"ok": True}
+    row = db.one("SELECT model, cost_usd FROM llm_usage")
+    assert row["model"] == "claude:haiku" and row["cost_usd"] == 0
+    with pytest.raises(llm.BudgetExceeded):
+        await llm.chat_json(db, Settings(llm_provider="claude", claude_bin=str(fake), claude_calls_day=1), "t", "s", "u")
+    broken = Settings(llm_provider="claude", claude_bin=str(fake), claude_quick="x")
+    monkeypatch.setattr(llm, "claude_calls_today", lambda d: 0)
+    fake.write_text("#!/bin/sh\ncat > /dev/null\necho '{\"is_error\": true, \"result\": \"Please run /login\"}'\nexit 1\n")
+    with pytest.raises(llm.LLMError):
+        await llm.chat_json(db, broken, "t", "s", "u")
+    assert db.get("llm_error")["kind"] == "auth"
+    assert not Settings(llm_provider="claude", claude_bin="/nonexistent/claude").llm_enabled

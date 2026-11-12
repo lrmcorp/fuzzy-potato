@@ -20,7 +20,7 @@ from .config import BRIEF_SCHEDULE, DEFAULT_HORIZONS, Settings, get_settings, pa
 from .data.news import headlines
 from .data.yahoo import refresh_many
 from .db import DB
-from .llm import budget_state
+from .llm import budget_state, claude_calls_today
 from .runtime import Runtime
 from .service import all_horizons, build_view, track_record, validation
 from .signals import snapshot
@@ -181,7 +181,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
     async def analyze(key: str):
         a = asset_or_404(key)
         if not settings.llm_enabled:
-            raise HTTPException(409, "no OpenRouter key configured")
+            raise HTTPException(409, "no LLM provider configured")
         ins = await analyze_asset(db, settings, a)
         if ins is None:
             raise HTTPException(502, "analysis unavailable (budget reached or the model returned nothing usable)")
@@ -219,7 +219,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         ds = db.get("data_status") or {}
         return {"version": __version__, "data_at": ds.get("at"), "data_errors": ds.get("errors", {}),
                 "news_at": db.get("news_at"), "llm_enabled": settings.llm_enabled, "llm_error": db.get("llm_error"),
-                "models": {"quick": settings.model_quick, "deep": settings.model_deep},
+                "models": settings.llm_names, "claude_calls_today": claude_calls_today(db),
                 "budget": budget_state(db, settings), "telegram_enabled": settings.telegram_enabled,
                 "schedule": [{"slot": s, "time": t} for s, t in BRIEF_SCHEDULE], "timezone": settings.timezone}
 

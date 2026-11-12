@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,6 +43,13 @@ class Settings:
     model_deep: str = field(
         default_factory=lambda: os.environ.get("ARAH_MODEL_DEEP", "deepseek/deepseek-v4-pro")
     )
+    # Which service the analyst team runs on: "openrouter", "claude" (the Claude Code CLI signed in
+    # with your own Claude plan), or "auto" (Claude when the CLI is installed, else OpenRouter).
+    llm_provider: str = field(default_factory=lambda: os.environ.get("ARAH_LLM_PROVIDER", "openrouter").lower())
+    claude_bin: str = field(default_factory=lambda: os.environ.get("ARAH_CLAUDE_BIN", "claude"))
+    claude_quick: str = field(default_factory=lambda: os.environ.get("ARAH_CLAUDE_MODEL_QUICK", "haiku"))
+    claude_deep: str = field(default_factory=lambda: os.environ.get("ARAH_CLAUDE_MODEL_DEEP", "sonnet"))
+    claude_calls_day: int = field(default_factory=lambda: _int("ARAH_CLAUDE_CALLS_DAY", 150))
     budget_usd_month: float = field(default_factory=lambda: _float("ARAH_BUDGET_USD_MONTH", 30.0))
     budget_usd_day: float = field(default_factory=lambda: _float("ARAH_BUDGET_USD_DAY", 2.0))
 
@@ -53,8 +61,24 @@ class Settings:
         return self.data_dir / "arah.db"
 
     @property
+    def claude_available(self) -> bool:
+        return shutil.which(self.claude_bin) is not None
+
+    @property
+    def use_claude(self) -> bool:
+        if self.llm_provider == "claude":
+            return self.claude_available
+        return self.llm_provider == "auto" and self.claude_available
+
+    @property
     def llm_enabled(self) -> bool:
-        return bool(self.openrouter_key)
+        return self.use_claude or bool(self.openrouter_key)
+
+    @property
+    def llm_names(self) -> dict:
+        if self.use_claude:
+            return {"provider": "claude", "quick": self.claude_quick, "deep": self.claude_deep}
+        return {"provider": "openrouter", "quick": self.model_quick, "deep": self.model_deep}
 
     @property
     def telegram_enabled(self) -> bool:

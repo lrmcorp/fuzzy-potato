@@ -49,7 +49,7 @@ export interface Track {
 }
 export interface Status {
   version: string; data_at: number | null; data_errors: Record<string, string>; news_at: number | null;
-  llm_enabled: boolean; llm_error: {kind: string} | null; models: {quick: string; deep: string};
+  llm_enabled: boolean; llm_error: {kind: string} | null; models: {provider: string; quick: string; deep: string}; claude_calls_today: number;
   budget: {day: number; month: number; cap_day: number; cap_month: number; over: boolean};
   telegram_enabled: boolean; schedule: {slot: string; time: string}[]; timezone: string;
 }
@@ -74,7 +74,7 @@ export const api = {
   session: () => call<{auth_required: boolean; authed: boolean; lang: Lang; version: string}>('/api/session'),
   login: (password: string) => call('/api/login', {method: 'POST', body: JSON.stringify({password})}),
   logout: () => call('/api/logout', {method: 'POST'}),
-  brief: () => call<{brief: Brief | null; building: boolean; llm_error: 'credit' | 'auth' | null}>('/api/brief'),
+  brief: () => call<{brief: Brief | null; building: boolean; llm_error: 'credit' | 'auth' | 'limit' | 'error' | null}>('/api/brief'),
   runBrief: () => call<{started: boolean}>('/api/brief/run', {method: 'POST'}),
   markets: (group: string, horizon: string) => call<{rows: MarketRow[]}>(`/api/markets?group=${group}&horizon=${horizon}`),
   asset: (key: string, horizon: string) => call<AssetView>(`/api/asset/${encodeURIComponent(key)}?horizon=${encodeURIComponent(horizon)}`),
