@@ -121,7 +121,7 @@ async def test_claude_provider_runs_cli_without_api_key(db, tmp_path, monkeypatc
     fake.write_text(
         "#!/bin/sh\ncat > /dev/null\n"
         "if [ \"$1\" = \"-p\" ] && [ -z \"$ANTHROPIC_API_KEY\" ]; then\n"
-        "  echo '{\"is_error\": false, \"result\": \"```json\\n{\\\"ok\\\": true}\\n```\", \"usage\": {\"input_tokens\": 5, \"output_tokens\": 3}}'\n"
+        "  printf '%s' '{\"is_error\": false, \"result\": \"Here it is: {\\\"ok\\\": true}\", \"usage\": {\"input_tokens\": 5, \"output_tokens\": 3}}'\n"
         "else\n  echo '{\"is_error\": true, \"result\": \"Please run /login\"}'; exit 1\nfi\n")
     fake.chmod(0o755)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "must-not-be-used")
