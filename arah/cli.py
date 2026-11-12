@@ -141,6 +141,8 @@ def doctor():
     typer.echo(f"Telegram        : {'set' if s.telegram_enabled else 'not set'}")
     for name, url in (("Yahoo Finance", "https://query1.finance.yahoo.com/v8/finance/chart/IDR=X?range=1d&interval=1h"),
                       ("Google News", "https://news.google.com/rss/search?q=rupiah&hl=id&gl=ID&ceid=ID:id"),
+                      ("BCA rates", "https://www.bca.co.id/id/informasi/kurs"),
+                      ("Event calendar", "https://nfs.faireconomy.media/ff_calendar_thisweek.json"),
                       ("OpenRouter", "https://openrouter.ai/api/v1/models")):
         try:
             code = httpx.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15).status_code

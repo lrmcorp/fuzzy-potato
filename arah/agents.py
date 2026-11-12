@@ -308,18 +308,23 @@ async def ask(db: DB, settings: Settings, question: str, context: list[str]) -> 
         "\"points\": [2 to 3 of {\"text\": {id,en} (max 22 words), \"refs\": [context ids]}], "
         "\"risk\": {id,en} (one sentence: what could make this wrong)}"
     )
-    try:
-        raw = await chat_json(db, settings, "ask", system, user, temperature=0.2)
-    except (LLMError, BudgetExceeded) as e:
-        log.warning("ask skipped: %s", e)
-        return None
-    answer = _text(raw.get("answer"))
-    points = []
-    for pt in raw.get("points", [])[:3] if isinstance(raw.get("points"), list) else []:
-        text = _text(pt.get("text")) if isinstance(pt, dict) else None
-        if text and _refs(pt.get("refs"), valid):
-            points.append({"text": text, "lean": 0})
-    if not answer or raw.get("verdict") not in ("good", "bad") or not points:
+    # The answer must cite the context. A model sometimes forgets on the first try, so it gets a second.
+    for attempt in range(2):
+        try:
+            raw = await chat_json(db, settings, "ask", system, user, temperature=0.2 + 0.2 * attempt)
+        except (LLMError, BudgetExceeded) as e:
+            log.warning("ask skipped: %s", e)
+            return None
+        answer = _text(raw.get("answer"))
+        points = []
+        for pt in raw.get("points", [])[:3] if isinstance(raw.get("points"), list) else []:
+            text = _text(pt.get("text")) if isinstance(pt, dict) else None
+            if text and _refs(pt.get("refs"), valid):
+                points.append({"text": text, "lean": 0})
+        if answer and raw.get("verdict") in ("good", "bad") and points:
+            break
+        log.warning("ask attempt %d returned an unusable answer: %s", attempt + 1, str(raw)[:200])
+    else:
         return None
     conf = raw.get("confidence") if raw.get("confidence") in ("thin", "fair", "strong") else "thin"
     return {"verdict": raw["verdict"], "confidence": conf, "answer": answer, "points": points,

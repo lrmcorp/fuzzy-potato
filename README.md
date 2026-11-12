@@ -3,12 +3,16 @@
 *Arah* means "direction". ARAH is a self-hosted web app and Telegram bot that tells one person,
 in plain Bahasa Indonesia or English, where markets are heading and why:
 
-- **Indonesia:** good or not now, and next month, with the reason;
+- **Indonesia:** good or not now, and next month, with the reason and whether foreign investors are buying or selling;
 - **Abroad:** the same for the US, Japan, Singapore and China, for anyone thinking of expanding;
-- **Rupiah against the US dollar and the yuan (RMB):** good or not now, and next month;
+- **Rupiah against the US dollar and the yuan (RMB):** good or not now, and next month, at BCA's bank rates;
 - one sentence on what is happening in the world and a short view of what is likely next;
+- **Events to watch** this week, each with the reason it matters;
+- **Ask ARAH:** type any question and get a yes or no with reasons;
+- **Calculator:** what a rupiah amount buys today in USD, CNY, SGD, JPY or EUR, the likely range in a month, and whether to exchange now or in parts;
+- **Alerts** on Telegram when an answer changes, and a **7-day report** of how many calls were right;
 - behind each answer: "Why?" opens three reasons, "See the chart" opens the forecast for any horizon from one hour to months;
-- stock picks for Indonesia and the US, and a rupiah watch level with the chance of touching levels such as 18,500.
+- stock picks for Indonesia and the US.
 
 "Good" is from the side of someone holding rupiah: rising stocks are good, a weaker rupiah is not.
 Every answer is a yes or a no. "Next month" takes the likelier side even when the edge is thin, and states
@@ -45,18 +49,18 @@ ARAH is a research tool. Nothing it shows is investment advice.
 
 ## Install on a Linux VPS
 
-Needs Python 3.11 or newer. A 2 vCPU, 2 GB machine is enough.
+Needs Python 3.11 or newer. A 2 vCPU, 2 GB machine is enough. One command does everything: system
+packages, install, questions for your keys, a background service that starts on boot, and a final check.
 
 ```bash
-git clone https://github.com/lrmcorp/fuzzy-potato.git
+git clone https://github.com/lrmcorp/fuzzy-potato.git && cd fuzzy-potato && ./setup.sh
 ```
 
-```bash
-cd fuzzy-potato && ./install.sh
-```
+The script asks for three optional things and skips any you leave empty: an OpenRouter API key
+(openrouter.ai/keys), a Telegram bot token (@BotFather) and your Telegram chat id (@userinfobot). It prints
+the dashboard password at the end. Run it again any time; it keeps what is already set.
 
-The installer creates `.venv`, installs ARAH and writes `.env` with a generated dashboard password.
-Then edit `.env`:
+Settings live in `.env`:
 
 | Variable | What it does |
 |---|---|
@@ -70,19 +74,13 @@ Then edit `.env`:
 | `ARAH_BUDGET_USD_MONTH`, `ARAH_BUDGET_USD_DAY` | Spending caps. Past the cap the team is skipped. |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Bot token from @BotFather and your own chat id. Only that chat is answered. |
 
-Start it:
-
-```bash
-.venv/bin/arah up
-```
-
 ARAH listens on `127.0.0.1:8787` only. Reach it from your own computer through an SSH tunnel:
 
 ```bash
 ssh -L 8787:127.0.0.1:8787 user@your-vps
 ```
 
-Then open `http://127.0.0.1:8787`. To keep ARAH running after logout, use `deploy/arah.service`.
+Then open `http://127.0.0.1:8787`. After editing `.env`, run `sudo systemctl restart arah`.
 
 ## Claude Code as the fallback (or the main provider)
 
@@ -119,13 +117,19 @@ Put the printed token in `.env` as `CLAUDE_CODE_OAUTH_TOKEN` and restart. `arah 
 | `arah validate` | Re-run the historical test. |
 | `arah doctor` | Check configuration and connectivity. |
 
-Telegram: `/brief`, `/arah USD 1w`, `/analisa BBCA`, `/rek id`, `/alert USDIDR > 18500`, `/alerts`, `/lang en`.
+Telegram: `/brief`, `/tanya <question>` (or just type the question), `/hitung 100000000 USD`, `/rapor`, `/arah USD 1w`,
+`/analisa BBCA`, `/rek id`, `/alert USDIDR > 18500`, `/alerts`, `/lang en`.
 
 Briefs go out at 07:30, 12:00, 16:30, 20:00 and 05:00 WIB, plus a weekly outlook on Sunday 19:00.
 
 ## Data and its limits
 
 - Prices come from Yahoo Finance and are delayed by about 10 to 15 minutes for IDX.
+- Currency rates shown on the summary and used by the calculator are BCA's e-Rate from bca.co.id. The direction and
+  range are still computed from market history and re-based onto the BCA rate.
+- The event calendar covers the current week only. Indonesian events appear only when a headline states the date.
+- Foreign flow is read from news headlines by the Indonesia desk, with the source linked. The exchange's own
+  pages refuse automated access.
 - Hourly USD/IDR quotes from this source often stand still outside Jakarta hours. ARAH flags hour-level
   rupiah forecasts as less reliable.
 - Yahoo's currency series contain bad ticks, sometimes for several days. ARAH filters jumps that snap
@@ -136,7 +140,7 @@ Briefs go out at 07:30, 12:00, 16:30, 20:00 and 05:00 WIB, plus a weekly outlook
 
 ## Not built yet
 
-Against the PRD: the Kronos model, the `idx` data layer (foreign flow, bandarmology), paper trading,
+Against the PRD: the Kronos model, the `idx` data layer (per-stock foreign flow, bandarmology), paper trading,
 forum sentiment and the Japan/Singapore stock lists are still to come. See the status table at the end of
 the PRD.
 

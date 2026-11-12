@@ -94,9 +94,9 @@ export function Today({onAuth}: PageProps) {
 }
 
 function Summary({brief, simple, building, rebuild, canAsk}: {brief: Brief; simple: Simple; building: boolean; rebuild: () => void; canAsk: boolean}) {
-  const {t, l, nm, when} = useT();
+  const {t, l, nm, when, lang} = useT();
   const rep = brief.report;
-  const dayOf = (ts: number) => new Intl.DateTimeFormat(undefined, {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}).format(ts * 1000);
+  const dayOf = (ts: number) => new Intl.DateTimeFormat(lang === 'id' ? 'id-ID' : 'en-US', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}).format(ts * 1000);
   const ab = simple.abroad;
   return (
     <>

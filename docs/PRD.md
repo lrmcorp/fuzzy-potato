@@ -609,6 +609,12 @@ rupiah against the dollar, rupiah against the yuan. Each shows "now" and "next m
 not good, with one reason; "Why?" and "See the chart" are the only two further steps. A China desk, the Shanghai
 index and a computed CNY/IDR rate were added for it. The Telegram brief uses the same format.
 
+### Added after first use (all run live once)
+BCA e-Rate as the rate on screen (bca.co.id), this week's event calendar, foreign flow read from headlines by the
+Indonesia desk, Telegram alerts when an answer changes, an exchange calculator, a 7-day report card, a free-question
+box ("Ask ARAH"), and `setup.sh`, a one-command VPS setup with a systemd service. The systemd step and Telegram
+delivery could not be run in the build environment.
+
 ### Changes from the PRD, with reasons
 | PRD | Built | Why |
 |---|---|---|
