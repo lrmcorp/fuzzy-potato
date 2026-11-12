@@ -71,7 +71,9 @@ def up(host: str = typer.Option(None), port: int = typer.Option(None)):
         typer.echo("Refusing to listen on a public address without ARAH_PASSWORD. Run `arah init` first.")
         raise typer.Exit(1)
     typer.echo(f"ARAH is starting on http://{host}:{port}")
-    uvicorn.run("arah.api:create_app", factory=True, host=host, port=port, log_level="info")
+    # Behind the local reverse proxy, take the visitor's address and scheme from its headers.
+    uvicorn.run("arah.api:create_app", factory=True, host=host, port=port, log_level="info",
+                proxy_headers=True, forwarded_allow_ips="127.0.0.1")
 
 
 @app.command()

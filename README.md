@@ -60,6 +60,16 @@ The script asks for three optional things and skips any you leave empty: an Open
 (openrouter.ai/keys), a Telegram bot token (@BotFather) and your Telegram chat id (@userinfobot). It prints
 the dashboard password at the end. Run it again any time; it keeps what is already set.
 
+To serve the dashboard on your own domain over HTTPS and update automatically from `main`:
+
+```bash
+ARAH_DOMAIN=arah.example.com ARAH_AUTO_UPDATE=1 ./setup.sh
+```
+
+That installs Caddy as an HTTPS reverse proxy and a timer that pulls `main` every five minutes, restarts, and
+rolls back if the new version does not start. A full hand-over text for a server operator is in
+[docs/DEPLOY_PROMPT.md](docs/DEPLOY_PROMPT.md).
+
 Settings live in `.env`:
 
 | Variable | What it does |
@@ -74,7 +84,7 @@ Settings live in `.env`:
 | `ARAH_BUDGET_USD_MONTH`, `ARAH_BUDGET_USD_DAY` | Spending caps. Past the cap the team is skipped. |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Bot token from @BotFather and your own chat id. Only that chat is answered. |
 
-ARAH listens on `127.0.0.1:8787` only. Reach it from your own computer through an SSH tunnel:
+ARAH listens on `127.0.0.1:8787` only. Without a domain, reach it from your own computer through an SSH tunnel:
 
 ```bash
 ssh -L 8787:127.0.0.1:8787 user@your-vps
