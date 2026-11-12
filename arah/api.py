@@ -9,13 +9,14 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import __version__
-from .agents import analyze_asset, get_insight
+from .agents import analyze_asset, ask, get_insight
+from .extras import ask_context, calc, weekly_report
 from .config import BRIEF_SCHEDULE, DEFAULT_HORIZONS, Settings, get_settings, parse_horizon
 from .data.news import headlines
 from .data.yahoo import refresh_many
@@ -55,6 +56,10 @@ class LoginBody(BaseModel):
 class SettingsBody(BaseModel):
     lang: str | None = Field(default=None, pattern="^(id|en)$")
     levels: dict[str, list[float]] | None = None
+
+
+class AskBody(BaseModel):
+    question: str = Field(min_length=5, max_length=400)
 
 
 class AlertBody(BaseModel):
@@ -132,7 +137,8 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
     def brief():
         b = db.latest_report("brief")
         err = db.get("llm_error") if settings.llm_enabled else None
-        return {"brief": b, "building": rt._brief_lock.locked(), "llm_error": (err or {}).get("kind")}
+        return {"brief": b, "building": rt._brief_lock.locked(), "llm_error": (err or {}).get("kind"),
+                "llm_enabled": settings.llm_enabled}
 
     @app.post("/api/brief/run", dependencies=[Depends(auth)])
     async def brief_run():
@@ -187,6 +193,22 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
             raise HTTPException(502, "analysis unavailable (budget reached or the model returned nothing usable)")
         return {"ok": True}
 
+    @app.get("/api/calc", dependencies=[Depends(auth)])
+    def calculator(amount: float = Query(gt=0, le=1e15), currency: str = Query(pattern="^(USD|CNY|SGD|JPY|EUR)$")):
+        out = calc(db, amount, currency)
+        if not out:
+            raise HTTPException(503, "no rate available for that currency yet")
+        return out
+
+    @app.post("/api/ask", dependencies=[Depends(auth)])
+    async def ask_question(body: AskBody):
+        if not settings.llm_enabled:
+            raise HTTPException(409, "no LLM provider configured")
+        out = await ask(db, settings, body.question.strip(), ask_context(db, db.latest_report("brief")))
+        if not out:
+            raise HTTPException(502, "no usable answer")
+        return out
+
     @app.get("/api/recs", dependencies=[Depends(auth)])
     def recs():
         return db.latest_report("recs") or {"ID": [], "US": [], "screened": {"ID": 0, "US": 0}, "at": None}
@@ -211,7 +233,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
                 elif v:
                     row["horizons"][h] = {"grade": "insufficient", "n": v.get("n", 0)}
             tests.append(row)
-        return {"live": track_record(db), "tests": tests, "validating": rt.status["validating"],
+        return {"live": track_record(db), "report": weekly_report(db), "tests": tests, "validating": rt.status["validating"],
                 "validated_at": db.get("validated_at")}
 
     @app.get("/api/status", dependencies=[Depends(auth)])

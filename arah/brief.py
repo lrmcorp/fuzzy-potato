@@ -8,6 +8,7 @@ from .agents import WORLD_KEYS, get_insight, run_team
 from .config import Settings
 from .data.news import headlines
 from .db import DB
+from .extras import events_for_brief, weekly_report
 from .outlook import build_simple
 from .service import all_horizons, build_view
 from .signals import both, fmt_num, fmt_pct, snapshot
@@ -127,6 +128,9 @@ async def build_brief(db: DB, settings: Settings, slot: str = "manual", use_llm:
         "headline": (team or {}).get("headline") or rule_headline(world, usd),
         "outlook": (team or {}).get("outlook"),
         "simple": build_simple(db, snaps),
+        "events": events_for_brief(db, (team or {}).get("desks")),
+        "foreign": (((team or {}).get("desks") or {}).get("ID") or {}).get("foreign"),
+        "report": weekly_report(db),
         "world": world, "tiles": tiles, "assets": assets, "countries": countries,
         "recs": {c: [{k: r[k] for k in ("key", "name", "price", "decimals", "strengths", "p_up_1m")} for r in recs.get(c, [])[:3]]
                  for c in ("ID", "US")},

@@ -103,3 +103,35 @@ def test_parse_rss_strips_publisher_and_survives_garbage():
 
 def test_idx_tick_table():
     assert idx_tick(150) == 1 and idx_tick(450) == 2 and idx_tick(1500) == 5 and idx_tick(4000) == 10 and idx_tick(9000) == 25
+
+
+def test_bca_parse_takes_erate_and_rejects_bad_rows():
+    from arah.data.bca import parse
+
+    html = '''
+      <a data-value-buy="18172.00-18010.00-18010.00" data-value-sell="18282.00-18290.00-18290.00" data-text=USD>USD</a>
+      <a data-value-buy="2698.47-2639.21-0" data-value-sell="2764.06-2807.97-0" data-text=CNH>CNH</a>
+      <a data-value-buy="18172.00-1-1" data-value-sell="18282.00-1-1" data-text=USD>duplicate, ignored</a>
+      <a data-value-buy="100.00-1-1" data-value-sell="90.00-1-1" data-text=XXX>sell below buy</a>
+      <a data-value-buy="1.00-1-1" data-value-sell="1.00-1-1" data-text=IDR>IDR</a>'''
+    rates = parse(html)
+    assert rates == {"USD": {"buy": 18172.0, "sell": 18282.0}, "CNH": {"buy": 2698.47, "sell": 2764.06}}
+    assert parse("<html>nothing here</html>") == {}
+
+
+def test_calendar_keeps_high_impact_and_merges_twins():
+    from arah.data.calendar import pick
+
+    raw = [
+        {"title": "CPI m/m", "country": "USD", "date": "2026-11-10T08:30:00-05:00", "impact": "High"},
+        {"title": "Core CPI m/m", "country": "USD", "date": "2026-11-10T08:30:00-05:00", "impact": "High"},
+        {"title": "Fed speaker", "country": "USD", "date": "2026-11-11T08:30:00-05:00", "impact": "Medium"},
+        {"title": "BOJ Policy Rate", "country": "JPY", "date": "2026-11-12T00:00:00-05:00", "impact": "Medium"},
+        {"title": "Something", "country": "EUR", "date": "2026-11-12T00:00:00-05:00", "impact": "High"},
+        {"title": "Broken date", "country": "USD", "date": "soon", "impact": "High"},
+        "not a dict",
+    ]
+    events = pick(raw)
+    assert [e["title"] for e in events] == ["CPI m/m, Core CPI m/m", "BOJ Policy Rate"]
+    assert events[0]["country"] == "US" and "inflasi" in events[0]["why"]["id"].lower()
+    assert pick({"oops": 1}) == []

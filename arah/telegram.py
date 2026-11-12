@@ -4,13 +4,15 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+import re
 import time
 
 import httpx
 
-from .agents import analyze_asset, get_insight
+from .agents import analyze_asset, ask, get_insight
 from .config import Settings, parse_horizon
 from .db import DB
+from .extras import ask_context, calc, weekly_report
 from .service import all_horizons, build_view
 from .signals import fmt_num
 from .universe import resolve
@@ -21,11 +23,13 @@ DIR_WORD = {"id": {"up": "cenderung naik", "down": "cenderung turun", "flat": "b
             "en": {"up": "leans up", "down": "leans down", "flat": "unclear"}}
 
 HELP = {
-    "id": ("<b>ARAH</b>\n/brief : ringkasan arah dunia sekarang\n/arah USD 1w : prakiraan satu aset (contoh: /arah BBCA 2w, /arah IHSG 4h)\n"
+    "id": ("<b>ARAH</b>\n/brief : ringkasan: Indonesia, luar negeri, kurs\n/tanya ... : tanya apa saja, mis. /tanya bagus tidak ekspansi ke Singapura?\n"
+           "/hitung 100000000 USD : rupiah jadi berapa dolar, yuan (CNY), SGD, JPY, EUR\n/rapor : berapa tebakan ARAH yang benar minggu ini\n/arah USD 1w : prakiraan satu aset (contoh: /arah BBCA 2w, /arah IHSG 4h)\n"
            "/analisa BBCA : analisa mendalam oleh tim AI\n/rek id atau /rek us : saham rekomendasi\n"
            "/alert USDIDR &gt; 18500 : pasang peringatan harga\n/alerts : daftar peringatan\n/lang id atau /lang en\n\n"
            "Rentang waktu: 1h 4h 1d 1w 2w 3w 1m, atau bebas seperti 3d, 6h, 5w."),
-    "en": ("<b>ARAH</b>\n/brief : where the world is heading now\n/arah USD 1w : forecast for one asset (e.g. /arah BBCA 2w, /arah IHSG 4h)\n"
+    "en": ("<b>ARAH</b>\n/brief : summary: Indonesia, abroad, currencies\n/tanya ... : ask anything, e.g. /tanya is expanding to Singapore a good idea?\n"
+           "/hitung 100000000 USD : what your rupiah buys in USD, CNY, SGD, JPY, EUR\n/rapor : how many ARAH calls were right this week\n/arah USD 1w : forecast for one asset (e.g. /arah BBCA 2w, /arah IHSG 4h)\n"
            "/analisa BBCA : deep analysis by the AI team\n/rek id or /rek us : recommended stocks\n"
            "/alert USDIDR &gt; 18500 : set a price alert\n/alerts : list alerts\n/lang id or /lang en\n\n"
            "Horizons: 1h 4h 1d 1w 2w 3w 1m, or free-form such as 3d, 6h, 5w."),
@@ -106,6 +110,36 @@ def format_brief(brief: dict, lang: str) -> str:
     return "\n".join(lines)
 
 
+def format_report(report: dict, lang: str) -> str:
+    if not report.get("total"):
+        return ("Rapor minggu ini: belum ada prakiraan yang jatuh tempo." if lang == "id"
+                else "This week's report: no forecast has come due yet.")
+    if lang == "id":
+        return f"<b>Rapor 7 hari:</b> {report['right']} tebakan arah benar, {report['wrong']} salah, dari {report['total']}."
+    return f"<b>7-day report:</b> {report['right']} direction calls right, {report['wrong']} wrong, out of {report['total']}."
+
+
+def format_calc(c: dict, lang: str) -> str:
+    cur = c["currency"]
+    src = ("kurs jual BCA" if c["source"] == "bca" else "kurs pasar") if lang == "id" else ("BCA selling rate" if c["source"] == "bca" else "market rate")
+    lines = [esc(c["summary"][lang]), f"{'Kurs' if lang == 'id' else 'Rate'}: {fmt_num(c['rate'], 2, lang)} ({src})",
+             (f"Sebulan lagi kira-kira {fmt_num(c['next_low'], 2, lang)} sampai {fmt_num(c['next_high'], 2, lang)} {cur}." if lang == "id"
+              else f"In a month roughly {fmt_num(c['next_low'], 2, lang)} to {fmt_num(c['next_high'], 2, lang)} {cur}."),
+             f"<b>{esc(c['advice'][lang])}</b>"]
+    return "\n".join(lines)
+
+
+def format_answer(a: dict, lang: str) -> str:
+    conf = {"thin": ("tipis", "thin"), "fair": ("cukup", "fair"), "strong": ("kuat", "strong")}[a["confidence"]][0 if lang == "id" else 1]
+    head = f"{MARK[a['verdict']]} <b>{'Bagus' if a['verdict'] == 'good' else 'Kurang bagus'}</b>" if lang == "id" else \
+        f"{MARK[a['verdict']]} <b>{'Good' if a['verdict'] == 'good' else 'Not good'}</b>"
+    lines = [f"{head} ({'keyakinan' if lang == 'id' else 'confidence'} {conf})", esc(a["answer"][lang])]
+    lines += [f"• {esc(p['text'][lang])}" for p in a["points"]]
+    if a.get("risk"):
+        lines.append(("Risiko: " if lang == "id" else "Risk: ") + esc(a["risk"][lang]))
+    return "\n".join(lines)
+
+
 def format_recs(recs: dict, market: str, lang: str) -> str:
     cards = recs.get(market, [])
     if not cards:
@@ -170,6 +204,19 @@ class Bot:
             if not brief and self.on_brief:
                 brief = await self.on_brief()
             return format_brief(brief, lang) if brief else ("Brief belum tersedia." if lang == "id" else "No brief yet.")
+        if cmd in ("/rapor", "/report"):
+            return format_report(weekly_report(self.db), lang)
+        if cmd in ("/hitung", "/calc"):
+            usage = "Contoh: /hitung 100000000 USD" if lang == "id" else "Example: /hitung 100000000 USD"
+            try:
+                amount = float(re.sub(r"[.,_ ]", "", args[0]))
+                cur = {"RMB": "CNY", "YUAN": "CNY", "CNH": "CNY"}.get(args[1].upper(), args[1].upper())
+            except (IndexError, ValueError):
+                return usage
+            out = calc(self.db, amount, cur) if amount > 0 else None
+            return format_calc(out, lang) if out else usage
+        if cmd in ("/tanya", "/ask"):
+            return await self._ask(" ".join(args), lang)
         if cmd in ("/rek", "/rec"):
             market = (args[0].upper() if args else "ID")
             recs = self.db.latest_report("recs")
@@ -186,6 +233,9 @@ class Bot:
         if cmd in ("/arah", "/fx", "/forecast", "/analisa", "/analyze") or not cmd.startswith("/"):
             words = args if cmd.startswith("/") else parts
             asset = next((a for w in words if (a := resolve(w))), None)
+            if not asset and not cmd.startswith("/"):
+                # Plain text that names no asset is a question for the consultant.
+                return await self._ask(text.strip(), lang)
             if not asset:
                 return ("Aset tidak dikenali. Contoh: /arah USD 1w, /arah BBCA 2w." if lang == "id"
                         else "Unknown asset. Examples: /arah USD 1w, /arah BBCA 2w.")
@@ -210,6 +260,18 @@ class Bot:
                 text_out += f"\n\n<code>{strip}</code>"
             return text_out
         return HELP[lang]
+
+    async def _ask(self, question: str, lang: str) -> str:
+        question = question.strip()[:400]
+        if len(question) < 5:
+            return "Tulis pertanyaannya setelah /tanya." if lang == "id" else "Write your question after /tanya."
+        if not self.settings.llm_enabled:
+            return ("Fitur tanya butuh tim analis AI (isi kunci OpenRouter atau pasang Claude Code)." if lang == "id"
+                    else "Asking needs the AI analyst team (add an OpenRouter key or install Claude Code).")
+        a = await ask(self.db, self.settings, question, ask_context(self.db, self.db.latest_report("brief")))
+        if not a:
+            return "Maaf, pertanyaan itu belum bisa dijawab sekarang." if lang == "id" else "Sorry, that cannot be answered right now."
+        return format_answer(a, lang)
 
     def _add_alert(self, args: list[str], lang: str) -> str:
         usage = "Contoh: /alert USDIDR > 18500" if lang == "id" else "Example: /alert USDIDR > 18500"

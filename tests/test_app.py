@@ -164,3 +164,44 @@ async def test_openrouter_first_then_claude_fallback(db, tmp_path, monkeypatch):
     # OpenRouter is skipped for a while after a credit refusal, so it is not retried on every call.
     assert await llm.chat_json(db, s, "t", "sys", "user") == {"from": "claude"}
     assert len(calls) == 1
+
+
+def test_answers_are_yes_or_no_and_calculator_uses_bank_rate(db):
+    from arah.extras import calc, flips, weekly_report
+    from arah.outlook import build_simple
+
+    db.set("bca_rates", {"at": int(time.time()), "rates": {"USD": {"buy": 990.0, "sell": 1010.0}}})
+    s = build_simple(db, {})
+    cards = [s["indonesia"], s["usd"], s["cny"], *s["abroad"]["countries"]]
+    assert all(c["now"]["state"] in ("good", "bad") and c["next"]["state"] in ("good", "bad") for c in cards)
+    assert s["abroad"]["now"]["state"] in ("good", "bad") and s["abroad"]["next"]["state"] in ("good", "bad")
+    usd = s["usd"]
+    assert usd["price"] == 1000.0 and usd["bca"]["sell"] == 1010.0
+    lo, hi = usd["next"]["range"]
+    assert lo < 1000.0 < hi
+    # The percentage in the sentence is the chance of the side the label picked.
+    shown = int(usd["next"]["text"]["en"].split(": ")[1].split("%")[0])
+    assert shown >= 50
+    c = calc(db, 1_010_000, "USD")
+    assert c["source"] == "bca" and c["rate"] == 1010.0 and abs(c["now"] - 1000.0) < 1e-6
+    assert c["next_low"] < c["now"] < c["next_high"] and c["plan"] in ("now", "wait", "split")
+    assert calc(db, 1000, "XXX") is None
+    assert weekly_report(db) == {"days": 7, "total": 0, "right": 0, "wrong": 0}
+
+    old = {"simple": s}
+    import copy
+    new = copy.deepcopy(old)
+    assert flips(old, new, "id") == []
+    new["simple"]["usd"]["next"]["state"] = "good" if usd["next"]["state"] == "bad" else "bad"
+    out = flips(old, new, "en")
+    assert len(out) == 1 and "Rupiah vs US dollar" in out[0]
+    assert flips(None, new, "id") == []
+
+
+def test_calc_and_ask_endpoints_validate_input(db):
+    c = TestClient(create_app(Settings(password="", secret="k" * 32, openrouter_key="", claude_bin="/nonexistent"), db, background=False))
+    assert c.get("/api/calc?amount=1000000&currency=USD").status_code == 200
+    assert c.get("/api/calc?amount=-5&currency=USD").status_code == 422
+    assert c.get("/api/calc?amount=5&currency=DROP").status_code == 422
+    assert c.post("/api/ask", json={"question": "hi"}).status_code == 422
+    assert c.post("/api/ask", json={"question": "Bagus tidak ekspansi?"}).status_code == 409

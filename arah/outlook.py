@@ -7,6 +7,7 @@ rupiah, which is not.
 from __future__ import annotations
 
 from .agents import get_insight
+from .data.bca import bca_rate
 from .db import DB
 from .service import build_view
 from .signals import both, fmt_num, fmt_pct
@@ -49,6 +50,12 @@ def card(db: DB, key: str, snaps: dict) -> dict | None:
     if view.get("error"):
         return None
     snap, f = view["snapshot"], view["forecast"]
+    # For currencies the number on screen is the bank's rate, the one the owner actually pays. The
+    # forecast keeps its shape and is re-based onto it: Yahoo's rupiah quote jumps about 1% between hours.
+    bca = bca_rate(db, key)
+    shown = bca["mid"] if bca else snap["price"]
+    scale = shown / f["s0"] if f["s0"] else 1.0
+    lo_px, hi_px = f["q05"] * scale, f["q95"] * scale
     now_dir, next_dir = price_now(snap), price_next(f["p_up"])
     now_state, next_state = state_of(now_dir, asset), state_of(next_dir, asset)
     fx = asset.klass == "fx"
@@ -59,7 +66,7 @@ def card(db: DB, key: str, snaps: dict) -> dict | None:
         m = fmt_pct(snap["chg1m"] or 0, lang)
         if fx:
             word = {1: ("Rupiah melemah", "The rupiah weakened"), -1: ("Rupiah menguat", "The rupiah strengthened")}[now_dir][i]
-            return f"{word}: {fmt_num(snap['price'], d, lang)} ({m} {'sebulan' if i == 0 else 'this month'})."
+            return f"{word}: {fmt_num(shown, d, lang)} ({m} {'sebulan' if i == 0 else 'this month'})."
         word = {1: ("Naik", "Up"), -1: ("Turun", "Down")}[now_dir][i]
         return f"{word}: {m} {'dalam sebulan' if i == 0 else 'over the month'}."
 
@@ -68,7 +75,7 @@ def card(db: DB, key: str, snaps: dict) -> dict | None:
     def next_text(lang: str) -> str:
         i = 0 if lang == "id" else 1
         p = round(f["p_up"] * 100)
-        lo, hi = fmt_num(f["q05"], d, lang), fmt_num(f["q95"], d, lang)
+        lo, hi = fmt_num(lo_px, d, lang), fmt_num(hi_px, d, lang)
         # Always state the chance of the side that was picked, so the number matches the label.
         if fx:
             side = (("rupiah melemah", "the rupiah weakens") if next_dir > 0 else ("rupiah menguat", "the rupiah strengthens"))[i]
@@ -84,14 +91,14 @@ def card(db: DB, key: str, snaps: dict) -> dict | None:
     reasons = sorted(view["reasons"], key=lambda r: r["lean"] == 0)[:3]
     return {
         "key": key, "name": asset.name, "name_en": asset.nm("en"), "decimals": d, "klass": asset.klass,
-        "price": snap["price"], "chg1m": snap["chg1m"],
+        "price": shown, "chg1m": snap["chg1m"], "bca": bca,
         "now": {"state": now_state, "name": dict(zip(("id", "en"), STATE_NAMES[now_state])), "text": both(now_text)},
         "next": {"state": next_state, "name": dict(zip(("id", "en"), NEXT_NAMES[next_state])), "text": both(next_text),
-                 "p_up": f["p_up"], "range": [f["q05"], f["q95"]], "strength": st},
+                 "p_up": f["p_up"], "range": [lo_px, hi_px], "strength": st},
         "why": reasons[0]["text"] if reasons else None,
         "reasons": reasons, "watch": view.get("watch"),
         "from_team": bool(ins), "grade": (view.get("validation") or {}).get("grade"),
-        "touch": f["touch"] if key == "USDIDR" else {},
+        "touch": f["touch"] if key == "USDIDR" and not bca else {},
     }
 
 

@@ -12,13 +12,16 @@ from apscheduler.triggers.interval import IntervalTrigger
 from .agents import get_insight
 from .brief import build_brief
 from .config import BRIEF_SCHEDULE, DEFAULT_HORIZONS, WEEKLY_OUTLOOK, Settings
+from .data.bca import refresh_bca
+from .data.calendar import refresh_calendar
 from .data.news import refresh_news
+from .extras import flips
 from .data.yahoo import build_synthetic, refresh_many
 from .db import DB
 from .recommend import build_recs
 from .service import record_forecasts, score_forecasts, validation
 from .signals import fmt_num
-from .telegram import Bot, format_brief
+from .telegram import Bot, format_brief, format_report
 from .universe import SYNTHETIC, BY_KEY, DEFAULT_LEVELS, GAUGES, MACRO, STOCKS
 
 log = logging.getLogger("arah.runtime")
@@ -39,6 +42,7 @@ class Runtime:
             errors = await refresh_many(self.db, symbols, force=force)
             if stocks:
                 errors |= await refresh_many(self.db, [a.symbol for a in STOCKS], intervals=("1d",), force=force)
+            await refresh_bca(self.db)
             for key, (num, den) in SYNTHETIC.items():
                 build_synthetic(self.db, BY_KEY[key].symbol, BY_KEY[num].symbol, BY_KEY[den].symbol)
             self.status["data_errors"] = errors
@@ -67,17 +71,28 @@ class Runtime:
 
     async def run_brief(self, slot: str, push: bool = True) -> dict:
         async with self._brief_lock:
+            old = self.db.latest_report("brief")
             await self.refresh_data(stocks=False)
             try:
                 await refresh_news(self.db)
+                await refresh_calendar(self.db)
             except Exception:
-                log.exception("news refresh failed")
+                log.exception("news or calendar refresh failed")
             if not self.db.latest_report("recs", max_age=20 * 3600):
                 await self.refresh_data(stocks=True)
                 await build_recs(self.db)
             brief = await build_brief(self.db, self.settings, slot=slot)
+        lang = self.db.get("lang", "id")
         if push:
-            await self.bot.send(format_brief(brief, self.db.get("lang", "id")))
+            text = format_brief(brief, lang)
+            if slot == "weekly":
+                text += "\n\n" + format_report(brief.get("report") or {}, lang)
+            await self.bot.send(text)
+        # An answer that changed is worth a message of its own, whichever brief found it.
+        changed = flips(old, brief, lang) if slot != "startup" else []
+        if changed:
+            head = "<b>Jawaban ARAH berubah</b>" if lang == "id" else "<b>ARAH's answers changed</b>"
+            await self.bot.send(head + "\n" + "\n".join(changed))
         return brief
 
     async def check_alerts(self) -> None:

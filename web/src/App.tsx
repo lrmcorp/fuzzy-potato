@@ -5,10 +5,10 @@ import {api, type Lang} from './api';
 import {Lines} from './components';
 import {useHashRoute, useLoad} from './hooks';
 import {LangCtx, useT, type Key} from './i18n';
-import {AssetPage, Login, Markets, SettingsPage, Today, TrackPage, World} from './pages';
+import {AssetPage, CalcPage, Login, Markets, SettingsPage, Today, TrackPage, World} from './pages';
 
 const NAV: {to: string; key: Key}[] = [
-  {to: '/', key: 'nav_today'}, {to: '/saham', key: 'nav_stocks'}, {to: '/dunia', key: 'nav_world'}, {to: '/atur', key: 'nav_settings'},
+  {to: '/', key: 'nav_today'}, {to: '/hitung', key: 'nav_calc'}, {to: '/saham', key: 'nav_stocks'}, {to: '/dunia', key: 'nav_world'}, {to: '/atur', key: 'nav_settings'},
 ];
 // Reference pages: reachable from the footer so the main row stays at four items.
 const MORE: {to: string; key: Key}[] = [{to: '/kurs', key: 'nav_fx'}, {to: '/rekam', key: 'nav_track'}];
@@ -73,6 +73,7 @@ export default function App() {
     const p = {onAuth};
     const page = route === '/' ? <Today {...p} />
       : route === '/kurs' ? <Markets {...p} kind="fx" key="fx" />
+      : route === '/hitung' ? <CalcPage {...p} />
       : route === '/saham' ? <Markets {...p} kind="stocks" key="stocks" />
       : route === '/dunia' ? <World {...p} />
       : route === '/rekam' ? <TrackPage {...p} />

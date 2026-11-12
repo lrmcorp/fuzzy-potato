@@ -30,14 +30,20 @@ export interface SimpleCard {
   key: string; name: string; name_en: string; decimals: number; klass: string; country?: string; price: number;
   now: {state: State; name: L; text: L}; next: {state: State; name: L; text: L; p_up: number; range: [number, number]};
   why: L | null; reasons: Reason[]; watch: L | null; from_team: boolean; grade: Validation['grade'] | null;
-  touch: Record<string, number>;
+  touch: Record<string, number>; bca: {currency: string; buy: number; sell: number; at: number} | null;
 }
+export interface EventItem {at: number; country: string; title?: string; what?: L; why?: L; source: 'calendar' | 'news'}
+export interface Report {days: number; total: number; right: number; wrong: number}
+export interface Answer {verdict: State; confidence: 'thin' | 'fair' | 'strong'; answer: L; points: Reason[]; risk: L | null}
+export interface Calc {currency: string; amount_idr: number; rate: number; source: 'bca' | 'market'; rate_at: number | null; now: number;
+  next_low: number; next_high: number; plan: 'now' | 'wait' | 'split'; advice: L; summary: L}
 export interface Simple {
   indonesia: SimpleCard | null; usd: SimpleCard | null; cny: SimpleCard | null;
   abroad?: {now: {state: State; name: L; text: L}; next: {state: State; name: L}; countries: SimpleCard[]};
 }
 export interface Brief {
   at: number; mode: 'team' | 'rules'; headline: L; outlook: L | null; simple?: Simple;
+  events?: EventItem[]; foreign?: {side: 'buy' | 'sell'; text: L; sources: {title: string; source: string; url: string}[]} | null; report?: Report;
   world: {stance: string; name: L; summary: L; points: {text: L}[]};
   tiles: Tile[]; assets: AssetView[]; countries: Record<string, Country>;
 }
@@ -54,7 +60,7 @@ export interface MarketRow {
 export interface TrackRow {horizon: string; name: L; n: number; calls: number; call_hits: number; brier: number | null;
   brier_quant: number | null; cover90: number | null}
 export interface Track {
-  live: {by_horizon: TrackRow[]; pending: number; scored: number};
+  report: Report; live: {by_horizon: TrackRow[]; pending: number; scored: number};
   tests: {key: string; name: string; name_en: string; horizons: Record<string, Validation>}[];
   validating: boolean; validated_at: number | null;
 }
@@ -85,7 +91,9 @@ export const api = {
   session: () => call<{auth_required: boolean; authed: boolean; lang: Lang; version: string}>('/api/session'),
   login: (password: string) => call('/api/login', {method: 'POST', body: JSON.stringify({password})}),
   logout: () => call('/api/logout', {method: 'POST'}),
-  brief: () => call<{brief: Brief | null; building: boolean; llm_error: 'credit' | 'auth' | 'limit' | 'error' | null}>('/api/brief'),
+  brief: () => call<{brief: Brief | null; building: boolean; llm_error: 'credit' | 'auth' | 'limit' | 'error' | null; llm_enabled: boolean}>('/api/brief'),
+  calc: (amount: number, currency: string) => call<Calc>(`/api/calc?amount=${amount}&currency=${currency}`),
+  ask: (question: string) => call<Answer>('/api/ask', {method: 'POST', body: JSON.stringify({question})}),
   runBrief: () => call<{started: boolean}>('/api/brief/run', {method: 'POST'}),
   markets: (group: string, horizon: string) => call<{rows: MarketRow[]}>(`/api/markets?group=${group}&horizon=${horizon}`),
   asset: (key: string, horizon: string) => call<AssetView>(`/api/asset/${encodeURIComponent(key)}?horizon=${encodeURIComponent(horizon)}`),

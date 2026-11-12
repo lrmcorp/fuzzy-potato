@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useState, type ReactNode} from 'react';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
@@ -9,7 +9,7 @@ import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/Segment
 import {Selector} from '@astryxdesign/core/Selector';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {api, ApiError, type Brief, type Lang, type MarketRow, type RecCard, type Simple, type SimpleCard, type State} from './api';
+import {api, ApiError, type Answer, type Brief, type Calc, type Lang, type MarketRow, type RecCard, type Simple, type SimpleCard, type State} from './api';
 import {FanChart, Spark} from './charts';
 import {AssetLink, Async, Change, Glyph, GradeNote, HorizonStrip, Reasons, Verdict, VigilanceLine} from './components';
 import {useLoad} from './hooks';
@@ -28,8 +28,8 @@ function Pill({label, state, name}: {label: string; state: State; name: string})
 }
 
 /** One question, two answers (now, next month), one reason. "Why?" opens the rest. */
-function Answer({id, title, sub, card}: {id: string; title: string; sub: string; card: SimpleCard}) {
-  const {t, l} = useT();
+function Answer({id, title, sub, card, extra}: {id: string; title: string; sub: string; card: SimpleCard; extra?: ReactNode}) {
+  const {t, l, num} = useT();
   return (
     <section className="answer" aria-labelledby={id}>
       <h2 id={id} className="answer-h">{title}</h2>
@@ -40,6 +40,8 @@ function Answer({id, title, sub, card}: {id: string; title: string; sub: string;
       </div>
       <p className="answer-line">{l(card.now.text)}</p>
       <p className="answer-line">{l(card.next.text)}</p>
+      {card.bca && <p className="note">{t('bca_line', {buy: num(card.bca.buy, card.bca.buy < 1000 ? 2 : 0), sell: num(card.bca.sell, card.bca.sell < 1000 ? 2 : 0)})}</p>}
+      {extra}
       <WhyBox card={card} />
     </section>
   );
@@ -79,20 +81,22 @@ export function Today({onAuth}: PageProps) {
 
   return (
     <Async state={state}>
-      {({brief, llm_error}) => !brief || !brief.simple ? (
+      {({brief, llm_error, llm_enabled}) => !brief || !brief.simple ? (
         <EmptyState title={t('no_brief_title')} description={t('no_brief_desc')} actions={<Spinner size="md" />} />
       ) : (
         <>
           {llm_error && <Banner status="warning" title={t(`llm_${llm_error}` as const)} />}
-          <Summary brief={brief} simple={brief.simple} building={building} rebuild={rebuild} />
+          <Summary brief={brief} simple={brief.simple} building={building} rebuild={rebuild} canAsk={llm_enabled} />
         </>
       )}
     </Async>
   );
 }
 
-function Summary({brief, simple, building, rebuild}: {brief: Brief; simple: Simple; building: boolean; rebuild: () => void}) {
+function Summary({brief, simple, building, rebuild, canAsk}: {brief: Brief; simple: Simple; building: boolean; rebuild: () => void; canAsk: boolean}) {
   const {t, l, nm, when} = useT();
+  const rep = brief.report;
+  const dayOf = (ts: number) => new Intl.DateTimeFormat(undefined, {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}).format(ts * 1000);
   const ab = simple.abroad;
   return (
     <>
@@ -102,7 +106,12 @@ function Summary({brief, simple, building, rebuild}: {brief: Brief; simple: Simp
         {brief.outlook && <p className="verdict"><strong>{t('my_view')}:</strong> {l(brief.outlook)}</p>}
       </header>
 
-      {simple.indonesia && <Answer id="q-id" title={t('q_id')} sub={t('sub_id')} card={simple.indonesia} />}
+      {simple.indonesia && (
+        <Answer id="q-id" title={t('q_id')} sub={t('sub_id')} card={simple.indonesia} extra={brief.foreign && (
+          <p className="answer-line"><strong>{t(brief.foreign.side === 'buy' ? 'foreign_buy' : 'foreign_sell')}.</strong> {l(brief.foreign.text)}{' '}
+            {brief.foreign.sources[0] && <a className="muted" href={brief.foreign.sources[0].url} target="_blank" rel="noopener noreferrer">{brief.foreign.sources[0].source}</a>}</p>
+        )} />
+      )}
 
       {ab && (
         <section className="answer" aria-labelledby="q-ab">
@@ -133,10 +142,100 @@ function Summary({brief, simple, building, rebuild}: {brief: Brief; simple: Simp
       {simple.usd && <Answer id="q-usd" title={t('q_usd')} sub={t('sub_fx')} card={simple.usd} />}
       {simple.cny && <Answer id="q-cny" title={t('q_cny')} sub={t('sub_fx')} card={simple.cny} />}
 
-      <p className="note mode">{t(brief.mode === 'team' ? 'mode_team' : 'mode_rules')}</p>
+      <section className="answer" aria-labelledby="q-ev">
+        <h2 id="q-ev" className="answer-h">{t('events_h')}</h2>
+        {(brief.events ?? []).length === 0 ? <p className="note">{t('no_events')}</p> : (
+          <ul className="events">
+            {(brief.events ?? []).map((e, i) => (
+              <li key={i}>
+                <span className="event-when">{dayOf(e.at)} · {t(`c_${e.country}` as 'c_US')}</span>
+                <strong>{e.title ?? l(e.what)}</strong>
+                {e.why ? <span>{l(e.why)}</span> : <span className="muted">{t('from_news')}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {canAsk && <AskBox />}
+
+      <p className="note mode">
+        {rep && rep.total > 0 ? t('report_line', {right: rep.right, wrong: rep.wrong}) : t('report_none')}{' '}
+        {t(brief.mode === 'team' ? 'mode_team' : 'mode_rules')}
+      </p>
       <div className="actions">
         <Button label={building ? t('building') : t('refresh_brief')} onClick={rebuild} isLoading={building} />
       </div>
+    </>
+  );
+}
+
+function AskBox() {
+  const {t, l} = useT();
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [a, setA] = useState<Answer | null>(null);
+  const send = async () => {
+    if (q.trim().length < 5) { setErr(t('ask_short')); return; }
+    setBusy(true); setErr(null); setA(null);
+    try { setA(await api.ask(q.trim())); } catch { setErr(t('ask_fail')); } finally { setBusy(false); }
+  };
+  return (
+    <section className="answer" aria-labelledby="q-ask">
+      <h2 id="q-ask" className="answer-h">{t('ask_h')}</h2>
+      <div className="toolbar">
+        <TextInput label={t('ask_label')} placeholder={t('ask_ph')} value={q} onChange={setQ} onEnter={send} width="100%"
+          status={err ? {type: 'error', message: err} : undefined} />
+        <Button label={t('ask_btn')} variant="primary" onClick={send} isLoading={busy} />
+      </div>
+      {a && (
+        <div aria-live="polite">
+          <div className="pills"><Pill label={`${t('conf')} ${t(`c_${a.confidence}` as const)}`} state={a.verdict} name={t(a.verdict)} /></div>
+          <p className="verdict">{l(a.answer)}</p>
+          <Reasons items={a.points} />
+          {a.risk && <p className="watch"><strong>{t('risk_one')}:</strong> {l(a.risk)}</p>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function CalcPage({onAuth}: PageProps) {
+  const {t, l, num, when, lang} = useT();
+  const [amount, setAmount] = useState('100000000');
+  const [cur, setCur] = useState('USD');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [c, setC] = useState<Calc | null>(null);
+  const run = async () => {
+    const v = Number(amount.replace(/[^0-9]/g, ''));
+    if (!(v > 0)) { setErr(t('calc_bad')); return; }
+    setBusy(true); setErr(null);
+    try { setC(await api.calc(v, cur)); }
+    catch (e) { if (e instanceof ApiError && e.status === 401) onAuth(); setErr(t('load_failed')); }
+    finally { setBusy(false); }
+  };
+  const names: Record<string, [string, string]> = {USD: ['Dolar AS (USD)', 'US dollar (USD)'], CNY: ['Yuan China (RMB)', 'Chinese yuan (RMB)'],
+    SGD: ['Dolar Singapura (SGD)', 'Singapore dollar (SGD)'], JPY: ['Yen Jepang (JPY)', 'Japanese yen (JPY)'], EUR: ['Euro (EUR)', 'Euro (EUR)']};
+  return (
+    <>
+      <header className="page-head"><Heading level={1}>{t('calc_title')}</Heading><p className="lead">{t('calc_lead')}</p></header>
+      <div className="toolbar">
+        <TextInput label={t('amount')} value={amount} onChange={setAmount} onEnter={run} inputMode="numeric" width={200}
+          status={err ? {type: 'error', message: err} : undefined} />
+        <Selector label={t('currency')} value={cur} onChange={setCur} width={220}
+          options={Object.entries(names).map(([k, v]) => ({value: k, label: v[lang === 'id' ? 0 : 1]}))} />
+        <Button label={t('calc_btn')} variant="primary" onClick={run} isLoading={busy} />
+      </div>
+      {c && (
+        <section className="answer" aria-live="polite">
+          <p className="verdict">{l(c.summary)}</p>
+          <p className="answer-line">{t('rate')}: {num(c.rate, 2)} ({t(c.source === 'bca' ? 'rate_bca' : 'rate_market')}{c.rate_at ? `, ${when(c.rate_at)}` : ''})</p>
+          <p className="answer-line">{t('in_month')} {num(c.next_low, 2)} {t('to')} {num(c.next_high, 2)} {c.currency}.</p>
+          <p className="answer-line"><strong>{l(c.advice)}</strong></p>
+        </section>
+      )}
     </>
   );
 }
