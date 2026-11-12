@@ -20,10 +20,12 @@ set_line() {  # set_line NAME VALUE
 grep -q '^ARAH_SECRET=' .env.vps || set_line ARAH_SECRET "$(openssl rand -hex 32)"
 grep -q '^ARAH_TIMEZONE=' .env.vps || set_line ARAH_TIMEZONE Asia/Jakarta
 
-allowed=' ARAH_PASSWORD OPENROUTER_API_KEY TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID ARAH_BUDGET_USD_MONTH ARAH_BUDGET_USD_DAY ARAH_MODEL_QUICK ARAH_MODEL_DEEP '
+allowed=' ARAH_PASSWORD OPENROUTER_API_KEY CLAUDE_CODE_OAUTH_TOKEN TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID ARAH_LLM_PROVIDER ARAH_LLM_FALLBACK ARAH_CLAUDE_MODEL_QUICK ARAH_CLAUDE_MODEL_DEEP ARAH_CLAUDE_CALLS_DAY ARAH_BUDGET_USD_MONTH ARAH_BUDGET_USD_DAY ARAH_MODEL_QUICK ARAH_MODEL_DEEP '
 while IFS= read -r line; do
   name="${line%%=*}"; value="${line#*=}"
-  [[ "$line" == *=* && "$allowed" == *" $name "* && -n "$value" ]] || continue
+  name="${name#"${name%%[![:space:]]*}"}"  # lines pasted from the docs may be indented
+  # "..." is the placeholder in the docs: a line left that way is not a value.
+  [[ "$line" == *=* && "$allowed" == *" $name "* && -n "$value" && "$value" != "..." ]] || continue
   if [[ "$value" == *"'"* ]]; then echo "$name must not contain a single quote." >&2; exit 1; fi
   set_line "$name" "$value"
 done
