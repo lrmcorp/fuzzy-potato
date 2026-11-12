@@ -141,8 +141,14 @@ table.grid td { text-align: center; }
 .chart-table { margin-top: 0.5rem; font-size: 0.8125rem; }
 .chart-table summary { cursor: pointer; padding: 0.6rem 0; min-height: 44px; color: var(--color-text-secondary); }
 
-.login { min-height: 100dvh; display: grid; place-items: center; padding: 1rem; }
-.login form { display: grid; gap: 1rem; width: min(22rem, 100%); }
+/* Login: one centred column. The logo is half the column wide, the title a third of the logo's
+   visual weight, and the gaps step down 2rem, 1.5rem, 1rem so the form reads as one block. */
+.login { min-height: 100dvh; display: grid; place-items: center; padding: 1.5rem 1.25rem 12dvh; }
+.login-card { display: grid; gap: 1rem; width: min(21rem, 100%); }
+.login-brand { display: grid; justify-items: center; text-align: center; gap: 0.25rem; margin-bottom: 1.5rem; }
+.login-brand .lrm-mark.full { width: 10.5rem; margin-bottom: 2rem; }
+.login-title { font-size: 1.75rem; font-weight: 700; line-height: 1.2; margin: 0; letter-spacing: 0.01em; }
+.login-brand .note { margin: 0; font-size: 0.9375rem; }
 
 /* Summary page: one question per block. Colour means good or not for the owner, and the word is always there. */
 .answer { margin-top: 1.75rem; padding-top: 1rem; border-top: 2px solid var(--color-text-primary); }
