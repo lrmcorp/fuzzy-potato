@@ -67,7 +67,14 @@ ARAH_DOMAIN=arah.example.com ARAH_AUTO_UPDATE=1 ./setup.sh
 ```
 
 That installs Caddy as an HTTPS reverse proxy and a timer that pulls `main` every five minutes, restarts, and
-rolls back if the new version does not start. A full hand-over text for a server operator is in
+rolls back if the new version does not start. If another web server already owns ports 80 and 443, the script
+installs no second proxy and says so.
+
+### Docker, behind an existing Caddy container
+
+On the LRM server a Caddy container from `lrmcorp/ln` already serves ports 80 and 443. There ARAH runs as a
+container on the shared network `lnint-edge` (`deploy/Dockerfile`, `deploy/compose.yaml`), and
+`.github/workflows/deploy.yml` deploys every push to `main`. The hand-over text for the operator is in
 [docs/DEPLOY_PROMPT.md](docs/DEPLOY_PROMPT.md).
 
 Settings live in `.env`:

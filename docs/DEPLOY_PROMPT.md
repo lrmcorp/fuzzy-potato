@@ -1,111 +1,94 @@
 # Deployment prompt for the server operator
 
-Copy everything in the block below and hand it to the person (or AI agent) who manages the server.
-Fill in the five values marked `<...>` first. Secrets go to the operator through a private channel,
-never into a ticket or a chat that others can read.
+Copy the block below and hand it to the person (or AI agent) who manages the server and the GitHub
+repositories. Secret values go to them through a private channel, never into a ticket or shared chat.
+
+This is written for the LRM server (Tencent Lighthouse, `43.152.240.47`), where one Caddy container from
+`lrmcorp/ln` already serves ports 80 and 443 and other apps join it on the Docker network `lnint-edge`.
+For any other Linux server, use `./setup.sh` as described in the README instead.
 
 ```text
 TASK
-Deploy the ARAH web app on our Linux server and make it update itself whenever the `main` branch changes.
-When you finish, the dashboard must be reachable at https://arah.lnint.xyz behind a login, the Telegram
-bot must answer /brief, and new commits on `main` must go live within about five minutes without anyone
-logging in to the server.
+Put the ARAH app online at https://arah.lnint.xyz and make every merge to `main` deploy by itself.
+When you finish: the dashboard asks for the owner's password over HTTPS, the Telegram bot answers /brief,
+and a push to `main` of lrmcorp/fuzzy-potato goes live through GitHub Actions without anyone logging in
+to the server.
 
-WHAT ARAH IS
-A single Python service (FastAPI, SQLite, no Docker, no Node at runtime) that listens on 127.0.0.1:8787.
-The repository ships `setup.sh`, which installs everything, and `deploy/update.sh`, which does updates.
-Repository: https://github.com/lrmcorp/fuzzy-potato  (branch: main)
+HOW IT FITS TOGETHER
+- ARAH runs as one Docker container named `arah` (service `arah`, compose project `arah`) in ~/arah on the
+  server. It publishes no ports. Its data lives in the Docker volume `arah_arah_data`.
+- The existing Caddy container from lrmcorp/ln reaches it as `arah:8787` over the network `lnint-edge`
+  and serves https://arah.lnint.xyz. That site block lives in lrmcorp/ln (deploy/Caddyfile.domain), because
+  every ln deploy replaces that file on the server.
+- GitHub Actions in lrmcorp/fuzzy-potato (.github/workflows/deploy.yml) tests the code, copies the commit
+  to ~/arah, writes ~/arah/.env.vps (mode 600) from repository secrets, builds and starts the container,
+  waits for it to be healthy, then checks the public URL.
+- DNS: the A record arah.lnint.xyz -> 43.152.240.47 is already active. Do not add an AAAA record.
 
-VALUES YOU NEED (ask the owner; do not print them in logs or reports)
-- ARAH_PASSWORD        = <dashboard password chosen by the owner, 12+ characters>
-- OPENROUTER_API_KEY   = <OpenRouter key>
-- TELEGRAM_BOT_TOKEN   = <token from @BotFather>
-- TELEGRAM_CHAT_ID     = <the owner's numeric Telegram chat id>
-- Git access           = <read-only deploy key or token, if the repository is private>
-
-SERVER REQUIREMENTS
-- Ubuntu 22.04+ or Debian 12+, 2 vCPU, 2 GB RAM, 10 GB disk, systemd, sudo.
-- Python 3.11 or newer (the script installs it on Ubuntu/Debian if missing).
-- Outbound HTTPS to: github.com, pypi.org, files.pythonhosted.org, query1.finance.yahoo.com,
-  news.google.com, www.cnbcindonesia.com, www.bca.co.id, nfs.faireconomy.media, openrouter.ai,
-  api.telegram.org.
-- Inbound: ports 80 and 443 open to the internet (Caddy needs both for the certificate). Port 8787 stays closed.
+VALUES YOU NEED FROM THE OWNER (never print them in logs or reports)
+- ARAH_PASSWORD        dashboard password chosen by the owner, 12+ characters, no single quote
+- OPENROUTER_API_KEY   from openrouter.ai/keys
+- TELEGRAM_BOT_TOKEN   from @BotFather            (optional)
+- TELEGRAM_CHAT_ID     the owner's numeric id     (optional)
+- VPS_SSH_KEY          the same private key already stored as a secret in lrmcorp/ln
 
 STEPS
 
-1. DNS. Create an A record `arah.lnint.xyz` pointing to this server's public IPv4 address (and an AAAA
-   record if the server has public IPv6). Confirm before continuing:
-       dig +short arah.lnint.xyz
-   The answer must be this server's address. Do not continue until it is.
+1. Repository secrets and variable. In GitHub, open lrmcorp/fuzzy-potato > Settings > Secrets and variables
+   > Actions. Under Secrets create: VPS_SSH_KEY, ARAH_PASSWORD, OPENROUTER_API_KEY, and, if the owner uses
+   Telegram, TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID. Under Variables create VPS_DEPLOY_ENABLED = true.
 
-2. Firewall. Allow 80 and 443, keep SSH, and make sure 8787 is not exposed:
-       sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw status
-   If a cloud firewall or security group sits in front of the server, open 80 and 443 there as well.
+2. Caddy site. Merge the pull request in lrmcorp/ln that adds the `arah.lnint.xyz` site to
+   deploy/Caddyfile.domain. Its deploy workflow restarts Caddy. Until ARAH is running, the new site answers
+   502; int.lnint.xyz and agent.lnint.xyz are not affected. Confirm the ln workflow run is green.
 
-3. Service user and code. Use a dedicated non-root user that has sudo:
-       sudo adduser --disabled-password --gecos "" arah && sudo usermod -aG sudo arah
-       sudo -iu arah
-       git clone -b main https://github.com/lrmcorp/fuzzy-potato.git ~/arah && cd ~/arah
-   If the repository is private, add a read-only deploy key for this user first
-   (ssh-keygen -t ed25519, add the public key under the repository's Settings > Deploy keys, clone with the
-   git@github.com:lrmcorp/fuzzy-potato.git URL). The same key is what automatic updates will use.
+3. First ARAH deploy. Merge the ARAH pull request to `main` of lrmcorp/fuzzy-potato, or open Actions >
+   "Deploy ARAH to the VPS" > Run workflow. Both jobs (validate, deploy) must end green.
 
-4. Install, configure, start. Pass the values in the environment, run the script, then unset them.
-   Turn shell history off for this session first (`set +o history`) so the values are not saved:
-        export ARAH_PASSWORD='...' OPENROUTER_API_KEY='...' TELEGRAM_BOT_TOKEN='...' TELEGRAM_CHAT_ID='...'
-        ARAH_DOMAIN=arah.lnint.xyz ARAH_AUTO_UPDATE=1 ./setup.sh
-        unset ARAH_PASSWORD OPENROUTER_API_KEY TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID
-   The script: installs Python packages into ./.venv, writes ./.env (mode 600) with the owner's dashboard
-   password, installs and starts the `arah` systemd service, installs Caddy and adds an HTTPS reverse proxy
-   for the domain, installs the `arah-update` timer, and runs a connectivity check.
-   It is safe to run again: it keeps values that are already set.
+4. Verify on the server (Tencent "Run commands" as root works; `~` is /home/ubuntu):
+       docker ps --format '{{.Names}}  {{.Status}}  {{.Networks}}  {{.Ports}}' | grep -i arah
+           -> one container, "healthy", network lnint-edge, no published ports
+       docker exec ln-demo-caddy-1 wget -qO- http://arah:8787/api/session
+           -> JSON containing "auth_required":true
+       curl -sI https://arah.lnint.xyz | head -1
+           -> HTTP/2 200
+       ss -ltnp | grep 8787
+           -> empty (the port is not open on the host)
+       cat /home/ubuntu/arah/.deploy-revision
+           -> the commit that GitHub shows as deployed
+   Then open https://arah.lnint.xyz, sign in with the owner's password, and wait about a minute for the first
+   summary. If Telegram is configured, send /brief to the bot and confirm a reply.
 
-5. Verify. Every check must pass:
-       systemctl is-active arah caddy arah-update.timer          -> three lines saying "active"
-       curl -s http://127.0.0.1:8787/api/session                 -> JSON with "auth_required":true
-       curl -sI https://arah.lnint.xyz | head -1                 -> HTTP/2 200
-       ss -ltnp | grep 8787                                      -> bound to 127.0.0.1 only
-       ./.venv/bin/arah doctor                                   -> every source 200, provider "openrouter"
-   Then open https://arah.lnint.xyz in a browser, log in with the owner's dashboard password,
-   and wait about one minute for the first summary. Send /brief to the Telegram bot and confirm a reply.
-
-6. Verify automatic deployment.
-       systemctl list-timers arah-update.timer                   -> shows the next run within 5 minutes
-       sudo systemctl start arah-update && journalctl -u arah-update -n 20 --no-pager
-   With nothing new on `main` the run exits silently. After the next merge to `main`, the log must show
-   "Update to <commit> is live." within about five minutes. If a new version fails to start, the script
-   rolls back to the previous commit on its own and logs it; report that to the owner.
-
-7. Optional fallback AI. Only if the owner asks for it: install Claude Code for the `arah` user
-   (npm install -g @anthropic-ai/claude-code), run `claude setup-token` with the owner present, put the
-   token in ~/arah/.env as CLAUDE_CODE_OAUTH_TOKEN, then `sudo systemctl restart arah`.
-   Do not set ANTHROPIC_API_KEY on this server.
+5. Verify automatic deployment. Make any small merge to `main` (or re-run the workflow) and confirm that
+   /home/ubuntu/arah/.deploy-revision changes to the new commit and the container is healthy again.
 
 OPERATIONS
-- Logs:                 journalctl -u arah -f        (app)      journalctl -u arah-update -n 50   (deploys)
-- Restart:              sudo systemctl restart arah
-- Change a setting:     edit ~/arah/.env, then restart
-- Change the password:  edit ARAH_PASSWORD in ~/arah/.env, then restart. Every device is signed out and must log in again.
-- Manual update:        sudo ~/arah/deploy/update.sh
-- Roll back by hand:    cd ~/arah && git reset --hard <commit> && ./.venv/bin/pip install -e . && sudo systemctl restart arah
-                        (also stop the timer first, or it will update again: sudo systemctl stop arah-update.timer)
-- Backup:               ~/arah/data/arah.db and ~/arah/.env. Copy both off the server daily.
+- Logs:              cd /home/ubuntu/arah && docker compose -f deploy/compose.yaml logs -f --tail 100 arah
+- Restart:           cd /home/ubuntu/arah && docker compose -f deploy/compose.yaml restart arah
+- Change a setting or the password: change the repository secret, then re-run the deploy workflow.
+                     A new password signs every device out.
+- Roll back:         revert the commit on `main`; the workflow deploys the previous code.
+- Backup:            the Docker volume arah_arah_data (file arah.db) and /home/ubuntu/arah/.env.vps.
+- Connectivity check: docker compose -f deploy/compose.yaml exec arah arah doctor
 
 RULES
-- Never commit, paste or log the contents of .env.
-- Do not open port 8787 and do not disable the dashboard password.
-- Do not edit tracked files on the server: automatic updates are fast-forward only and will stop if you do.
-- If any verification step fails, stop and report the exact command and its output instead of working around it.
+- Never commit, paste or log the contents of .env.vps or any secret.
+- Do not publish port 8787 and do not remove the dashboard password.
+- Do not edit files under /home/ubuntu/arah or /home/ubuntu/ln by hand: both are replaced on every deploy.
+  Change the repositories instead.
+- If a step fails, stop and report the exact command and its output instead of working around it.
 
 REPORT BACK TO THE OWNER
-1. The dashboard URL. The owner already knows the password; do not send it back.
-2. The output of step 5 and step 6.
+1. Links to the two green workflow runs (ln and fuzzy-potato).
+2. The output of steps 4 and 5.
 3. Anything that did not match these instructions.
 ```
 
 ## Notes for the owner
 
-- The HTTPS proxy (Caddy), the systemd service and the update timer could not be run in the build
-  environment, which has no systemd. The script's other steps were run on a fresh clone. Ask the operator
-  for the step 5 and step 6 output so you know those parts work on the real server.
-- Automatic deployment follows `main`. Merging a pull request is what releases it.
+- The container image, the GitHub Actions deploy and the Caddy site could not be run in the build
+  environment (no Docker daemon, no access to the server). What was checked there: the app installed the way
+  the image installs it serves the dashboard and marks the session cookie Secure behind proxy headers, the
+  script that writes the server settings, and the syntax of the workflow and compose files. Ask the operator
+  for the output of steps 4 and 5.
+- The Claude Code fallback is not part of the container. On this server ARAH runs on OpenRouter only.
