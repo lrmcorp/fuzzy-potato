@@ -4,7 +4,7 @@
 |---|---|
 | **Document** | Product Requirements Document (PRD) |
 | **Product (working name)** | **ARAH** — *"arah"* = "direction" in Bahasa Indonesia |
-| **Version** | 0.1 (draft for review) |
+| **Version** | 0.2 (draft for review — LLM decision: DeepSeek via OpenRouter) |
 | **Date** | 2026-11-12 |
 | **Owner** | Single owner / single user |
 | **Status** | Draft — awaiting owner approval before implementation |
@@ -16,7 +16,8 @@
 
 | Topic | Decision |
 |---|---|
-| LLM | **Multi-provider** (Claude, OpenAI, Gemini, DeepSeek, OpenRouter, …) **plus an internal LLM self-hosted on the VPS** (Ollama / vLLM). |
+| LLM | **DeepSeek models via OpenRouter** for all agents (decided in v0.2; no self-hosted LLM at launch). The LLM layer stays provider-agnostic (OpenAI-compatible API), so switching to another OpenRouter model or adding a local LLM later is only a config change. |
+| Hardware | **No large VPS required.** Develop on the owner's own laptop/PC first, then move to a small VPS (2–4 vCPU, 4–8 GB RAM) so briefs and alerts run 24/7. |
 | Market & news data | Start with free sources; **paid sources are optional and the PRD must state their budget** (see §11). |
 | Execution | **Analysis + paper trading only.** No live orders with real money. |
 | Asset coverage | **Indonesian stocks (IDX)**, **US stocks**, **FX (currencies)**, **crypto & commodities**. |
@@ -95,8 +96,8 @@ Each repository was cloned and reviewed (commit hashes in §17). The table below
 |---|---|---|
 | ✅ **Adopt (core)** | Multi-agent LangGraph architecture: Analyst team → Bull/Bear researcher debate → Research Manager → Trader → Risk team (aggressive/conservative/neutral) → Portfolio Manager | Best-designed "trading firm" agent pipeline among the references; it is the backbone of G6 (one conclusion). |
 | ✅ Adopt | Five-tier rating scale (Buy / Overweight / Hold / Underweight / Sell) and its deterministic rating parser | Gives a consistent, machine-readable verdict. |
-| ✅ Adopt | Quick-think vs deep-think model tiers, each with its own provider | Lets cheap or local models do bulk work while a strong cloud model makes the final decision. Controls cost. |
-| ✅ Adopt | Multi-provider registry incl. Ollama and `openai_compatible` (vLLM, llama.cpp) | Directly satisfies "multi-provider + internal LLM on VPS". |
+| ✅ Adopt | Quick-think vs deep-think model tiers, each with its own provider | Lets the cheaper DeepSeek chat model do bulk work while the DeepSeek reasoning model makes the final decision. Controls cost. |
+| ✅ Adopt | Multi-provider registry incl. Ollama and `openai_compatible` (vLLM, llama.cpp) | Lets ARAH call DeepSeek through OpenRouter today and keeps the option of a local model later. |
 | ✅ Adopt | Point-in-time integrity (no look-ahead), decision log memory, checkpoint resume, structured outputs | Essential for honest backtests (G8). |
 | ✅ Adopt | Vendors: FRED (macro), SEC EDGAR (US fundamentals), Reddit, StockTwits, Polymarket (event probabilities) | Good US and global coverage. |
 | ⚠️ Adapt | Sentiment, News, Fundamentals and Market analysts | Add Indonesian sources and Bahasa Indonesia news understanding. |
@@ -197,7 +198,7 @@ Defined in detail in §6.
 - **FR-4.2** Agents load **skills** (SKILL.md files) on demand (Vibe-Trading pattern), from a curated ARAH skill set (§7).
 - **FR-4.3** Agents call tools for data (idx MCP, data providers, Forecast Engine). **No unsourced numbers:** every figure in a report must trace to a tool call.
 - **FR-4.4** Final output = **one Chief Strategist verdict** per request: rating (5-tier), direction + probability per horizon, key drivers, key risks and what would change the view (invalidation).
-- **FR-4.5** Selectable research depth: *Quick* (single pass, local model), *Standard* (1 debate round) and *Deep* (2–3 rounds, deep-think cloud model).
+- **FR-4.5** Selectable research depth: *Quick* (single pass, quick-tier DeepSeek model), *Standard* (1 debate round) and *Deep* (2–3 rounds, deep-think cloud model).
 - **FR-4.6** Each agent's full report and the debate transcript are stored and viewable (U7).
 
 ### 5.5 Recommendations (Indonesia & US)
@@ -377,7 +378,7 @@ Implikasi: kebutuhan USD < 1 bulan → pertimbangkan beli bertahap; eksportir (A
 |---|---|---|
 | Backend API | **Python 3.12, FastAPI** | REST + WebSocket/SSE for push |
 | Agent orchestration | **LangGraph** (from TradingAgents) + skill loader (Vibe pattern) | Checkpointing, resume |
-| LLM gateway | **LiteLLM** (or a custom router) → Claude / OpenAI / Gemini / DeepSeek / OpenRouter / **Ollama / vLLM local** | Quick/deep tiers, per-provider fallback, **budget caps** |
+| LLM gateway | **OpenRouter** (OpenAI-compatible API) → **DeepSeek** models; thin router (LiteLLM or custom) so other providers / a local Ollama can be added later | Quick/deep tiers, fallback between DeepSeek models/hosts, **budget caps** |
 | Forecasting service | PyTorch + **Kronos**, statsmodels / arch | Separate worker; GPU optional |
 | IDX data | **`idx` binary** (Rust) via CLI JSON + MCP | Pinned version, cached |
 | Other data | yfinance, FRED, SEC EDGAR, ccxt, RSS, GDELT, Reddit, StockTwits, Polymarket, optional paid APIs | Provider interface + fallback |
@@ -393,7 +394,7 @@ Implikasi: kebutuhan USD < 1 bulan → pertimbangkan beli bertahap; eksportir (A
 Scheduler → Data refresh (providers → Postgres/Timescale) → Forecast Engine (Kronos + baselines → Ledger) → Agent graph (tools read DB, idx MCP, forecast results) → Chief Strategist verdict → Report store → Push (Telegram + Web) → Ledger scoring when the horizon expires → Track Record.
 
 ### 9.3 Deployment & access
-- One VPS running Docker Compose. Services bind to **localhost only**.
+- Docker Compose on the owner's laptop (development) or one small VPS (production). Services bind to **localhost only**.
 - The owner reaches the web dashboard through **Tailscale/WireGuard** or an SSH tunnel. Optionally, a reverse proxy (Caddy) with HTTPS and single-user login (password + TOTP).
 - The Telegram bot uses outbound polling only, so no inbound port is needed.
 
@@ -414,17 +415,20 @@ arah/
 
 ---
 
-## 10. VPS Recommendation (owner has no VPS yet)
+## 10. Hardware / VPS Recommendation (owner has no VPS yet)
 
-Prices are **indicative (late 2026) and must be re-checked at purchase**.
+Because all LLM work runs on **DeepSeek via OpenRouter**, ARAH needs no GPU and no large server. Kronos-small (24.7M params) runs comfortably on CPU. Prices are **indicative (late 2026) and must be re-checked at purchase**.
 
-| Option | Spec | Can run locally | Indicative cost / month | Recommendation |
-|---|---|---|---|---|
-| **A. CPU-only (starter)** | 8 vCPU, 32 GB RAM, 240 GB NVMe | Postgres, all services, **Kronos-small/base on CPU** (daily forecasts are fine), local LLM **7–8B Q4** for quick tasks (slow, ~5–10 tok/s) | **US$40–80** (Hetzner, Contabo, OVH; Jakarta/Singapore region for lower latency, e.g. Biznet Gio or IDCloudHost at a premium) | ✅ **Start here (hybrid):** cloud LLM for deep-think, local LLM for summarising and bulk tasks |
-| **B. GPU (mid)** | 1× 24 GB GPU (RTX 4090 / L4 / A5000), 16 vCPU, 64 GB RAM | Local **14–32B Q4** models (Qwen/Llama class) for most agents, Kronos fine-tuning | **US$250–500** (RunPod, Vast.ai, Lambda, Hetzner GPU) | When the owner wants mostly local/private inference |
-| **C. GPU (high)** | 1× 48–80 GB GPU (A6000 / L40S / A100) | 70B-class Q4 local models, faster batch forecasts | **US$600–1,500+** | Only if the evaluation shows local models must match cloud quality |
+| Option | Spec | Indicative cost | Notes |
+|---|---|---|---|
+| **1. Owner's laptop/PC (development)** | ≥ 8 GB RAM (16 GB ideal), Docker | **Free** | ✅ Start here. Briefs and alerts only run while the machine is on. |
+| **2. Small VPS (production)** | 2–4 vCPU, 4–8 GB RAM, 80 GB SSD; Singapore or Jakarta region | **≈ US$5–15 / month** | ✅ Recommended once stable: 24/7 briefs and Telegram alerts. |
+| 3. Home mini PC | e.g. Intel N100, 16 GB RAM | ≈ Rp 2–4 juta one-off | 24/7 without a monthly fee; depends on home power and internet. |
+| 4. Oracle Cloud Always Free | ARM, up to 4 cores / 24 GB | Free | Capacity is often unavailable; card verification required; no SLA. |
 
-**Recommended path:** start with **Option A plus cloud LLM APIs** (hybrid). After about 2 months of track record, compare the quality and cost of local versus cloud models, and only then decide whether to move to Option B.
+**Lite mode (for 4 GB machines):** SQLite instead of Postgres/Timescale, no Redis (in-process scheduler) and Kronos-mini/small only. Selected with `arah install --lite`.
+
+**Later (optional):** if the owner wants private, self-hosted inference, add a GPU server (≈ US$250–500/month) running Ollama/vLLM and point the router at it. No code changes are needed.
 
 ---
 
@@ -439,23 +443,27 @@ Prices are **indicative and must be verified** before subscribing. ARAH works on
 | **Tier 1 — Better quality (recommended upgrade)** | Real-time-ish **FX + US** data API (e.g. Twelve Data, Polygon/Massive, Finnhub paid tier: ~$30–80); news API with sentiment (Marketaux / Finnhub / Benzinga basic: ~$0–50); **IDX real-time** via the owner's Stockbit/broker account (opt-in; cost depends on the owner's subscription) or an Indonesian market-data API vendor (verify pricing) | **≈ US$50–150** |
 | **Tier 2 — Pro** | X/Twitter API (≈ $200+), premium news (Reuters/Bloomberg-grade feeds are typically enterprise pricing), TradingEconomics calendar/forecasts, official IDX data feed licence | **US$300 – several thousand** |
 
-### 11.2 LLM API cost (hybrid setup)
-Assumptions: 5 scheduled briefs/day, ~15 deep analyses/day (recommendations + on-demand), quick tier on a local or cheap model, deep tier on a frontier model.
+### 11.2 LLM cost — DeepSeek via OpenRouter
+Model choice (exact model IDs are set at install time from the current OpenRouter catalogue):
+- **Quick tier** (analysts, researchers, debaters, trader, summaries): DeepSeek's general chat model.
+- **Deep tier** (Research Manager, Portfolio Manager, Chief Strategist, FX verdicts): DeepSeek's reasoning model.
+
+Assumptions: 5 scheduled briefs/day, ~15 analyses/day. DeepSeek is among the lowest-priced capable models, so costs are low:
 
 | Usage profile | Indicative cost / month |
 |---|---|
-| Light (local quick tier + ~5 deep runs/day) | **US$20–60** |
-| Standard (as assumed above) | **US$60–200** |
-| Heavy (deep mode on everything, 3 debate rounds) | **US$300+** |
+| Light (briefs + ~5 analyses/day) | **US$3–10** |
+| Standard (as assumed above) | **US$10–30** |
+| Heavy (deep mode on everything, 3 debate rounds) | **US$30–80** |
 
-**Built-in budget guard:** daily and monthly spend caps per provider. Above the cap, ARAH falls back to the local model and notifies the owner on Telegram.
+OpenRouter is prepaid credit, so spending cannot exceed the balance. **Built-in budget guard:** daily and monthly caps; above the cap, ARAH downgrades to the quick-tier model or Quick depth and notifies the owner on Telegram.
 
 ### 11.3 Total indicative monthly cost
 | Setup | Total |
 |---|---|
-| Minimum (VPS A + Tier 0 data + light LLM) | **≈ US$60–140** |
-| Recommended (VPS A + Tier 1 data + standard LLM) | **≈ US$150–430** |
-| Local-heavy (VPS B + Tier 1 + light cloud LLM) | **≈ US$330–700** |
+| Development (own laptop + Tier 0 data + DeepSeek) | **≈ US$5–30** |
+| Recommended (small VPS + Tier 0 data + DeepSeek standard) | **≈ US$15–45** (≈ Rp 250–750 rb) |
+| Upgraded data (small VPS + Tier 1 data + DeepSeek standard) | **≈ US$65–200** |
 
 ---
 
@@ -464,10 +472,10 @@ Assumptions: 5 scheduled briefs/day, ~15 deep analyses/day (recommendations + on
 | ID | Requirement |
 |---|---|
 | NFR-1 Performance | Quick analysis < 60 s, Standard < 4 min, Deep < 10 min; daily brief ready by its scheduled time (jobs start 45 min early). |
-| NFR-2 Availability | Single VPS; auto-restart (systemd/Docker); failed jobs retried; Telegram notice if a brief fails. |
+| NFR-2 Availability | Single host (laptop or small VPS); auto-restart (systemd/Docker); failed jobs retried; Telegram notice if a brief fails. |
 | NFR-3 Data freshness | Every report shows each source's data timestamp; stale data is flagged. |
 | NFR-4 Security | Localhost binding + VPN; single-user auth with TOTP; Telegram whitelist; secrets in `.env`/Docker secrets with `chmod 600`; no secrets in logs; dependencies pinned and scanned. |
-| NFR-5 Privacy | The owner's portfolio and watchlist can be routed to the **local LLM only** (a setting). |
+| NFR-5 Privacy | Prompts (incl. watchlist/portfolio context) go to OpenRouter and the DeepSeek inference host. Use OpenRouter's provider-routing and data-policy settings (e.g. restrict to providers that do not train on or retain prompts); never send credentials or account identifiers in prompts; a portfolio-anonymisation option sends weights instead of absolute amounts. |
 | NFR-6 Cost control | Per-provider budget caps, token accounting per job and a dashboard. |
 | NFR-7 Reproducibility | Each report has a run card: model versions, prompts, data snapshot IDs and parameters. |
 | NFR-8 Integrity | Point-in-time data, an append-only ledger and lookahead checks in CI. |
@@ -497,7 +505,7 @@ These targets are **hypotheses to validate**, not promises.
 
 | Phase | Scope | Duration (est.) |
 |---|---|---|
-| **M0 — Foundation** | Repo skeleton, Docker Compose, `arah` CLI, Postgres/Timescale, LLM gateway (multi-provider + Ollama), auth, i18n scaffolding | 1–2 weeks |
+| **M0 — Foundation** | Repo skeleton, Docker Compose, `arah` CLI, Postgres/Timescale, LLM gateway (OpenRouter → DeepSeek, budget guard), auth, i18n scaffolding | 1–2 weeks |
 | **M1 — Data layer** | idx integration (CLI/MCP), yfinance/FRED/EDGAR/RSS/GDELT/Reddit/ccxt providers, fallback and cache, data-health monitor | 2 weeks |
 | **M2 — Forecast engine** | Kronos service, baselines, level-touch probabilities, Forecast Ledger + scoring, walk-forward evaluation harness | 2–3 weeks |
 | **M3 — Agent team** | LangGraph graph (analysts, debate, trader, risk, PM, chief strategist), curated skills, new ID/FX/political skills, grounding validator | 3 weeks |
@@ -520,8 +528,9 @@ Total to v1: **about 14–16 weeks** of focused development (estimate).
 | Delayed IDX data (~10–15 min) hurts 1h horizons | Lower accuracy | Flag intraday IDX forecasts low-confidence; opt-in real-time source |
 | Stockbit / scraping ToS | Account ban / legal | Off by default; owner opt-in; prefer official or public sources |
 | Look-ahead bias in backtests | Overstated accuracy | Point-in-time store, lookahead checks, out-of-sample holdouts |
-| LLM cost overrun | Budget | Caps, local fallback, quick/deep tiering, caching of shared analyses |
+| LLM cost overrun | Budget | Caps, downgrade to the cheaper quick-tier model, quick/deep tiering, caching of shared analyses |
 | Political analysis bias | Poor or partisan output | Neutral market-impact framing, multiple sources, bull/bear debate |
+| OpenRouter / DeepSeek outage or model deprecation | Analyses fail or change in quality | Retry with backoff, fallback to another DeepSeek host or model via OpenRouter routing, model IDs pinned in config, quality re-checked via the track record after any model change |
 | GPL contamination (freqtrade) | Licence obligations | Concepts only; optional sidecar process; no code copying |
 | Regulatory (OJK) if shared or sold | Legal | Single-user, personal use; revisit before any sharing |
 
