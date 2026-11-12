@@ -1,7 +1,7 @@
 # Deployment prompt for the server operator
 
 Copy everything in the block below and hand it to the person (or AI agent) who manages the server.
-Fill in the four values marked `<...>` first. Secrets go to the operator through a private channel,
+Fill in the five values marked `<...>` first. Secrets go to the operator through a private channel,
 never into a ticket or a chat that others can read.
 
 ```text
@@ -17,6 +17,7 @@ The repository ships `setup.sh`, which installs everything, and `deploy/update.s
 Repository: https://github.com/lrmcorp/fuzzy-potato  (branch: main)
 
 VALUES YOU NEED (ask the owner; do not print them in logs or reports)
+- ARAH_PASSWORD        = <dashboard password chosen by the owner, 12+ characters>
 - OPENROUTER_API_KEY   = <OpenRouter key>
 - TELEGRAM_BOT_TOKEN   = <token from @BotFather>
 - TELEGRAM_CHAT_ID     = <the owner's numeric Telegram chat id>
@@ -51,10 +52,10 @@ STEPS
 
 4. Install, configure, start. Pass the values in the environment, run the script, then unset them.
    Turn shell history off for this session first (`set +o history`) so the values are not saved:
-        export OPENROUTER_API_KEY='...' TELEGRAM_BOT_TOKEN='...' TELEGRAM_CHAT_ID='...'
+        export ARAH_PASSWORD='...' OPENROUTER_API_KEY='...' TELEGRAM_BOT_TOKEN='...' TELEGRAM_CHAT_ID='...'
         ARAH_DOMAIN=arah.lnint.xyz ARAH_AUTO_UPDATE=1 ./setup.sh
-        unset OPENROUTER_API_KEY TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID
-   The script: installs Python packages into ./.venv, writes ./.env (mode 600) with a generated dashboard
+        unset ARAH_PASSWORD OPENROUTER_API_KEY TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID
+   The script: installs Python packages into ./.venv, writes ./.env (mode 600) with the owner's dashboard
    password, installs and starts the `arah` systemd service, installs Caddy and adds an HTTPS reverse proxy
    for the domain, installs the `arah-update` timer, and runs a connectivity check.
    It is safe to run again: it keeps values that are already set.
@@ -65,7 +66,7 @@ STEPS
        curl -sI https://arah.lnint.xyz | head -1                 -> HTTP/2 200
        ss -ltnp | grep 8787                                      -> bound to 127.0.0.1 only
        ./.venv/bin/arah doctor                                   -> every source 200, provider "openrouter"
-   Then open https://arah.lnint.xyz in a browser, log in with the dashboard password printed by setup.sh,
+   Then open https://arah.lnint.xyz in a browser, log in with the owner's dashboard password,
    and wait about one minute for the first summary. Send /brief to the Telegram bot and confirm a reply.
 
 6. Verify automatic deployment.
@@ -84,6 +85,7 @@ OPERATIONS
 - Logs:                 journalctl -u arah -f        (app)      journalctl -u arah-update -n 50   (deploys)
 - Restart:              sudo systemctl restart arah
 - Change a setting:     edit ~/arah/.env, then restart
+- Change the password:  edit ARAH_PASSWORD in ~/arah/.env, then restart. Every device is signed out and must log in again.
 - Manual update:        sudo ~/arah/deploy/update.sh
 - Roll back by hand:    cd ~/arah && git reset --hard <commit> && ./.venv/bin/pip install -e . && sudo systemctl restart arah
                         (also stop the timer first, or it will update again: sudo systemctl stop arah-update.timer)
@@ -96,7 +98,7 @@ RULES
 - If any verification step fails, stop and report the exact command and its output instead of working around it.
 
 REPORT BACK TO THE OWNER
-1. The dashboard URL and, through a private channel, the dashboard password.
+1. The dashboard URL. The owner already knows the password; do not send it back.
 2. The output of step 5 and step 6.
 3. Anything that did not match these instructions.
 ```

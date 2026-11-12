@@ -4,6 +4,7 @@
 # Answers can also be given up front, for unattended runs:
 #   OPENROUTER_API_KEY=... TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... ./setup.sh
 # Optional:
+#   ARAH_PASSWORD=...              use this dashboard password instead of a generated one (12+ characters)
 #   ARAH_DOMAIN=arah.example.com   serve the dashboard on that domain over HTTPS (installs Caddy)
 #   ARAH_AUTO_UPDATE=1             pull new commits from origin/main every 5 minutes and restart
 set -euo pipefail
@@ -60,6 +61,12 @@ ask() {  # ask NAME "question" [secret]: keep an existing or pre-set value, else
 }
 if [ ! -f .env ]; then .venv/bin/arah init >/dev/null; echo "Created .env with a new dashboard password."; fi
 chmod 600 .env
+PASSWORD_GIVEN=""
+if [ -n "${ARAH_PASSWORD:-}" ]; then
+  if [ "${#ARAH_PASSWORD}" -lt 12 ]; then echo "ARAH_PASSWORD must be at least 12 characters." >&2; exit 1; fi
+  set_env ARAH_PASSWORD "$ARAH_PASSWORD"; PASSWORD_GIVEN=1
+  echo "Dashboard password: set to the one you provided."
+fi
 ask OPENROUTER_API_KEY "OpenRouter API key, from openrouter.ai/keys" secret
 ask TELEGRAM_BOT_TOKEN "Telegram bot token, from @BotFather" secret
 ask TELEGRAM_CHAT_ID "Your Telegram chat id, from @userinfobot"
@@ -152,7 +159,7 @@ IP="$(hostname -I 2>/dev/null | awk '{print $1}')"; IP="${IP:-your-vps-ip}"
 cat <<DONE
 
 ARAH is set up.
-  Dashboard password : $(grep '^ARAH_PASSWORD=' .env | cut -d= -f2)
+  Dashboard password : $( [ -n "$PASSWORD_GIVEN" ] && echo "the one you provided" || grep '^ARAH_PASSWORD=' .env | cut -d= -f2- )
   Open the dashboard : $( [ -n "$DOMAIN" ] && echo "https://$DOMAIN" || echo "ssh -L $PORT:127.0.0.1:$PORT $USER_NAME@$IP  then http://127.0.0.1:$PORT" )
   Telegram           : send /brief to your bot
   Logs               : journalctl -u arah -f

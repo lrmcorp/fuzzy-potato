@@ -30,7 +30,8 @@ from .universe import BY_KEY, COUNTRIES, CRYPTO, COMMODITIES, DEFAULT_LEVELS, FX
 log = logging.getLogger("arah.api")
 STATIC = Path(__file__).parent / "static"
 COOKIE = "arah_session"
-SESSION_DAYS = 30
+# The owner stays signed in on their own devices; each visit pushes the expiry out again.
+SESSION_DAYS = 180
 
 
 def _sign(secret: str, value: str) -> str:
@@ -74,6 +75,8 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
     secret = settings.secret or db.get("secret") or secrets.token_hex(32)
     if not settings.secret and not db.get("secret"):
         db.set("secret", secret)
+    # Sessions are signed with the password mixed in, so changing the password signs every device out.
+    secret = hmac.new(secret.encode(), settings.password.encode(), hashlib.sha256).hexdigest()
     rt = Runtime(db, settings)
     tasks: list[asyncio.Task] = []
     login_fails: dict[str, list[float]] = {}
@@ -109,10 +112,16 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         except ValueError as e:
             raise HTTPException(400, str(e))
 
+    def set_session(request: Request, response: Response) -> None:
+        response.set_cookie(COOKIE, make_token(secret), max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax",
+                            secure=request.url.scheme == "https")
+
     @app.get("/api/session")
-    def session(request: Request):
-        return {"auth_required": bool(settings.password),
-                "authed": not settings.password or valid_token(secret, request.cookies.get(COOKIE)),
+    def session(request: Request, response: Response):
+        authed = not settings.password or valid_token(secret, request.cookies.get(COOKIE))
+        if authed and settings.password:
+            set_session(request, response)
+        return {"auth_required": bool(settings.password), "authed": authed,
                 "lang": db.get("lang", "id"), "version": __version__}
 
     @app.post("/api/login")
@@ -124,8 +133,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         if not settings.password or not hmac.compare_digest(body.password.encode(), settings.password.encode()):
             login_fails[ip] = recent + [time.time()]
             raise HTTPException(401, "wrong password")
-        response.set_cookie(COOKIE, make_token(secret), max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax",
-                            secure=request.url.scheme == "https")
+        set_session(request, response)
         return {"ok": True}
 
     @app.post("/api/logout")

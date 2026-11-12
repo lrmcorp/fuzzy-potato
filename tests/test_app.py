@@ -205,3 +205,16 @@ def test_calc_and_ask_endpoints_validate_input(db):
     assert c.get("/api/calc?amount=5&currency=DROP").status_code == 422
     assert c.post("/api/ask", json={"question": "hi"}).status_code == 422
     assert c.post("/api/ask", json={"question": "Bagus tidak ekspansi?"}).status_code == 409
+
+
+def test_session_slides_and_password_change_signs_out(db):
+    app = create_app(Settings(password="first-password-1", secret="k" * 32), db, background=False)
+    c = TestClient(app)
+    assert c.post("/api/login", json={"password": "first-password-1"}).status_code == 200
+    r = c.get("/api/session")
+    assert r.json()["authed"] and "arah_session" in r.headers.get("set-cookie", "") and "Max-Age=15552000" in r.headers["set-cookie"]
+    cookie = c.cookies.get("arah_session")
+    # Same secret, new password: the old cookie no longer opens the door.
+    c2 = TestClient(create_app(Settings(password="second-password-2", secret="k" * 32), db, background=False))
+    c2.cookies.set("arah_session", cookie)
+    assert c2.get("/api/brief").status_code == 401 and not c2.get("/api/session").json()["authed"]
