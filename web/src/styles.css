@@ -16,7 +16,12 @@ a:hover { color: var(--arah-accent); }
 .top { border-bottom: 1px solid var(--color-border-emphasized); background: var(--color-background-surface); }
 .top-in { max-width: var(--arah-col); margin: 0 auto; padding: 0.5rem 1rem 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 1.5rem; }
 .brand { font-weight: 700; letter-spacing: 0.04em; text-decoration: none; padding: 0.5rem 0; }
-.brand span { color: var(--arah-accent); }
+.brand { display: inline-flex; align-items: center; gap: 0.45rem; }
+.brand-by { font-weight: 400; letter-spacing: 0; color: var(--color-text-secondary); }
+/* The LRM logo is drawn as a mask filled with the text colour, so it reads in light and dark alike. */
+.lrm-mark { display: inline-block; background: currentColor; -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; }
+.lrm-mark.icon { --m: url(/lrm-icon.png); width: 1.05rem; height: 1.45rem; }
+.lrm-mark.full { --m: url(/lrm-logo.png); width: min(100%, 13.5rem); aspect-ratio: 338 / 102; }
 .top nav { flex: 1 1 20rem; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .top nav ul { display: flex; gap: 0.25rem; list-style: none; margin: 0; padding: 0; }
 .top nav a { display: block; padding: 0.75rem 0.6rem; min-height: 44px; white-space: nowrap; text-decoration: none; color: var(--color-text-secondary); border-bottom: 2px solid transparent; }

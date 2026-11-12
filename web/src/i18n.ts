@@ -123,10 +123,10 @@ const S = {
   system: ['Sistem', 'System'], data_at: ['Data pasar terakhir', 'Latest market data'], ai_team: ['Tim analis AI', 'AI analyst team'],
   on: ['aktif', 'on'], off: ['belum aktif', 'off'], budget: ['Biaya AI bulan ini', 'AI cost this month'],
   telegram: ['Telegram', 'Telegram'], schedule: ['Jadwal brief', 'Brief schedule'], data_errors: ['Sumber data bermasalah', 'Data sources with problems'],
-  logout: ['Keluar', 'Sign out'], login_title: ['Masuk ke ARAH', 'Sign in to ARAH'], password: ['Kata sandi', 'Password'],
+  logout: ['Keluar', 'Sign out'], login_title: ['Masuk sebagai pemilik.', 'Sign in as the owner.'], password: ['Kata sandi', 'Password'],
   login: ['Masuk', 'Sign in'], wrong_pw: ['Kata sandi salah.', 'Wrong password.'], too_many: ['Terlalu banyak percobaan. Tunggu sepuluh menit.', 'Too many attempts. Wait ten minutes.'],
-  disclaimer: ['ARAH adalah alat riset pribadi. Semua angka adalah peluang, bukan kepastian, dan bukan saran investasi.',
-    'ARAH is a personal research tool. Every number is a chance, not a certainty, and not investment advice.'],
+  disclaimer: ['ARAH by LRM adalah alat riset pribadi. Semua angka adalah peluang, bukan kepastian, dan bukan saran investasi.',
+    'ARAH by LRM is a personal research tool. Every number is a chance, not a certainty, and not investment advice.'],
   up: ['cenderung naik', 'leans up'], down: ['cenderung turun', 'leans down'], flat: ['belum jelas', 'unclear'],
   thin: ['data per jam tipis', 'thin hourly data'],
 } as const;

@@ -644,7 +644,9 @@ export function Login({onDone}: {onDone: () => void}) {
   return (
     <main className="login">
       <form onSubmit={e => { e.preventDefault(); void submit(); }}>
-        <Heading level={1}>{t('login_title')}</Heading>
+        <span className="lrm-mark full" role="img" aria-label="Liando Reyfort Management" />
+        <Heading level={1}>ARAH <span className="brand-by">by LRM</span></Heading>
+        <p className="note">{t('login_title')}</p>
         <TextInput type="password" label={t('password')} value={pw} onChange={setPw} autoComplete="current-password" hasAutoFocus
           status={err ? {type: 'error', message: err} : undefined} width="100%" />
         <Button type="submit" variant="primary" label={t('login')} isLoading={busy} width="100%" />

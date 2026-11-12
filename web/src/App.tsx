@@ -29,7 +29,9 @@ function Shell({route, children}: {route: string; children: React.ReactNode}) {
       <a className="skip" href="#main">{t('nav_today')}</a>
       <header className="top">
         <div className="top-in">
-          <a className="brand" href="#/" aria-label="ARAH"><span aria-hidden="true">▲</span> ARAH</a>
+          <a className="brand" href="#/" aria-label="ARAH by LRM">
+            <span className="lrm-mark icon" aria-hidden="true" /> ARAH <span className="brand-by">by LRM</span>
+          </a>
           <nav aria-label={t('main_nav')}>
             <ul>{NAV.map(n => (
               <li key={n.to}><a href={`#${n.to}`} aria-current={current === n.to ? 'page' : undefined}>{t(n.key)}</a></li>))}
