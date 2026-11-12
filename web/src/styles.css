@@ -138,3 +138,29 @@ table.grid td { text-align: center; }
 
 .login { min-height: 100dvh; display: grid; place-items: center; padding: 1rem; }
 .login form { display: grid; gap: 1rem; width: min(22rem, 100%); }
+
+/* Summary page: one question per block. Colour means good or not for the owner, and the word is always there. */
+.answer { margin-top: 1.75rem; padding-top: 1rem; border-top: 2px solid var(--color-text-primary); }
+.answer-h { font-size: 1.25rem; font-weight: 700; margin: 0; }
+.answer .note { margin: 0.15rem 0 0.6rem; }
+.answer-line { margin: 0.35rem 0; }
+.pills { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.25rem 0 0.6rem; }
+.pill { display: inline-grid; gap: 0.05rem; padding: 0.45rem 0.75rem; border-radius: 6px; min-width: 8.5rem; border-left: 5px solid transparent; }
+.pill-k { font-size: 0.75rem; }
+.pill-v { font-size: 1.0625rem; font-weight: 700; }
+.pill-good { background: var(--color-success-muted); color: var(--color-on-success-muted); border-left-color: var(--color-success); }
+.pill-bad { background: var(--color-error-muted); color: var(--color-on-error-muted); border-left-color: var(--color-error); }
+.pill-neutral { background: var(--color-background-muted); color: var(--color-text-primary); border-left-color: var(--color-border-emphasized); }
+.pills.small { margin: 0.4rem 0 0; }
+.pills.small .pill { min-width: 7rem; padding: 0.3rem 0.6rem; }
+.pills.small .pill-v { font-size: 0.9375rem; }
+.countries { list-style: none; margin: 0.75rem 0 0; padding: 0; }
+.countries li { padding: 0.75rem 0 0.25rem; border-top: 1px solid var(--color-border); }
+.country-head { display: grid; gap: 0.1rem; }
+.why { margin-top: 0.5rem; }
+.why summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 0.4rem; font-weight: 600; color: var(--arah-accent); }
+.why summary:hover { text-decoration: underline; }
+.why[open] { padding-bottom: 0.5rem; }
+.mode { margin-top: 2rem; }
+.foot nav ul { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; list-style: none; margin: 0 0 0.75rem; padding: 0; }
+.foot nav a { display: inline-block; padding: 0.6rem 0; min-height: 44px; }

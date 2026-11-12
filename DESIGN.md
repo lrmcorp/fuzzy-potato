@@ -5,8 +5,10 @@ in a calm morning-newspaper style, dial ENERGY 1 / RHYTHM 2 / MOTION 1.
 
 ## Who reads it and what they need
 
-One person, usually on a phone, a few times a day. They ask three things in order:
-where is it heading, how sure are we, and why. Every screen answers in that order.
+One person, new to markets, usually on a phone. The first screen answers four questions and nothing else:
+is Indonesia good or not, is abroad good or not, how is the rupiah against the dollar, and against the yuan.
+Each has two answers (now, next month) and one reason. Everything else is at most two taps away:
+"Why?" opens the reasons, and "See the chart" opens the detail page.
 
 ## Decisions and their reasons
 
@@ -17,7 +19,8 @@ where is it heading, how sure are we, and why. Every screen answers in that orde
 | The horizon strip (1 hour to 1 month) repeats on every asset | It is the identity motif: the same seven steps, the same glyphs, everywhere. |
 | Direction uses glyphs in ink colour: ▲ ▼ ◆ | Green and red would be wrong: a rising USD/IDR is bad news for a rupiah holder, a rising IHSG is good. Shape carries direction, text carries meaning. |
 | One accent, deep teal, on the selected horizon and the primary button only | Teal stays clear of the red, amber and green reserved for the watch level, so the accent never reads as a market signal. |
-| Status colours appear only on the watch level (Aman, Waspada, Siaga, Bahaya) | They are the one place where colour means "pay attention", so they are not spent anywhere else. Each carries its word. |
+| Green, grey and red appear on the two answer tags (now, next month) and on the watch level | Here colour means "good or not for you", never "price up or down": a rising USD/IDR is tagged red because the rupiah is weaker. Every tag carries its word, so colour is never the only signal. |
+| The main row has four links; currencies and the track record sit in the footer | A newcomer needs the summary first. Reference pages stay reachable without competing with it. |
 | Rules and whitespace separate sections; cards only for stock picks | A stock pick is a discrete item that can be compared and reordered. Sections of a brief are not. |
 | Light and dark follow the system, with a manual switch in Settings | No brand reason to force either. |
 | Motion: hover and focus states only | Numbers that move on their own distract from reading them. Respects reduced motion by having none to reduce. |

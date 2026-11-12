@@ -2,7 +2,7 @@ import {createContext, useContext} from 'react';
 import type {L, Lang} from './api';
 
 const S = {
-  nav_today: ['Hari ini', 'Today'], nav_fx: ['Kurs', 'Currencies'], nav_stocks: ['Saham', 'Stocks'],
+  nav_today: ['Ringkasan', 'Summary'], nav_fx: ['Kurs', 'Currencies'], nav_stocks: ['Saham', 'Stocks'],
   nav_world: ['Dunia', 'World'], nav_track: ['Rekam jejak', 'Track record'], nav_settings: ['Atur', 'Settings'],
   main_nav: ['Navigasi utama', 'Main navigation'],
   loading: ['Memuat', 'Loading'], retry: ['Coba lagi', 'Try again'],
@@ -13,6 +13,16 @@ const S = {
   no_brief_desc: ['ARAH sedang mengambil data pasar. Biasanya selesai dalam satu menit.',
     'ARAH is fetching market data. This usually takes about a minute.'],
   world_dir: ['Arah dunia', 'World direction'],
+  q_id: ['Indonesia', 'Indonesia'], q_abroad: ['Luar negeri', 'Abroad'],
+  q_usd: ['Rupiah terhadap dolar AS', 'Rupiah against the US dollar'], q_cny: ['Rupiah terhadap yuan (RMB)', 'Rupiah against the yuan (RMB)'],
+  now: ['Sekarang', 'Now'], next_month: ['Bulan depan', 'Next month'], my_view: ['Menurut ARAH', "ARAH's view"],
+  why_q: ['Kenapa?', 'Why?'], open_chart: ['Lihat grafik', 'See the chart'],
+  sub_id: ['Diukur dari IHSG, indeks seluruh saham Indonesia.', 'Measured by the IHSG, the index of all Indonesian stocks.'],
+  sub_abroad: ['Diukur dari bursa AS, Jepang, Singapura dan China.', 'Measured by the US, Japan, Singapore and China stock markets.'],
+  sub_fx: ['Bagus berarti rupiah menguat, jadi biaya ke luar negeri lebih murah.', 'Good means a stronger rupiah, so going abroad costs less.'],
+  c_US: ['Amerika Serikat', 'United States'], c_JP: ['Jepang', 'Japan'], c_SG: ['Singapura', 'Singapore'], c_CN: ['China', 'China'],
+  by_team: ['Alasan dari tim analis AI.', 'Reasons from the AI analyst team.'], by_rules: ['Alasan dari data pasar.', 'Reasons from market data.'],
+  more: ['Lainnya', 'More'], updating: ['Ringkasan lama. Data baru sedang disiapkan.', 'This summary is old. New data is being prepared.'],
   show_numbers: ['Lihat angka pasar dunia', 'See world market numbers'],
   mode_team: ['Disusun tim analis AI dari data pasar dan berita.', 'Written by the AI analyst team from market data and news.'],
   mode_rules: ['Disusun dari data pasar saja. Tim analis AI belum aktif.', 'Built from market data only. The AI analyst team is off.'],

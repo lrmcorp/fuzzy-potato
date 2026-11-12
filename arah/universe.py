@@ -32,6 +32,9 @@ FX = [
     Asset("DXY", "DX-Y.NYB", "Indeks Dolar (DXY)", "fx", "US", decimals=2, name_en="Dollar Index (DXY)"),
     Asset("USDJPY", "JPY=X", "USD/JPY", "fx", "JP", decimals=2),
     Asset("USDSGD", "SGD=X", "USD/SGD", "fx", "SG", decimals=4),
+    Asset("USDCNY", "CNY=X", "USD/CNY", "fx", "CN", decimals=4),
+    # Yahoo's own CNY/IDR series is broken (one daily bar), so this one is built from USD/IDR and USD/CNY.
+    Asset("CNYIDR", "SYN:CNYIDR", "Yuan (RMB)/IDR", "fx", "CN", decimals=0, up_is=-1),
 ]
 
 INDICES = [
@@ -41,6 +44,7 @@ INDICES = [
     Asset("NASDAQ", "^IXIC", "Nasdaq", "index", "US", up_is=1),
     Asset("N225", "^N225", "Nikkei 225", "index", "JP", up_is=1),
     Asset("STI", "^STI", "Straits Times", "index", "SG", up_is=1),
+    Asset("SSE", "000001.SS", "Shanghai Composite", "index", "CN", up_is=1),
 ]
 
 # Coal and nickel have no free futures feed on Yahoo, so they are left out
@@ -95,13 +99,17 @@ ALL = MACRO + GAUGES + STOCKS
 BY_KEY = {a.key: a for a in ALL}
 
 # Assets shown on the home page, in reading order.
-HEADLINE_KEYS = ["USDIDR", "IHSG", "SPX", "GOLD", "BTC"]
+HEADLINE_KEYS = ["IHSG", "USDIDR", "CNYIDR", "SPX", "N225", "STI", "SSE"]
+
+# Synthetic cross rates: key -> (numerator key, denominator key).
+SYNTHETIC = {"CNYIDR": ("USDIDR", "USDCNY")}
 
 COUNTRIES = {
     "ID": {"name_id": "Indonesia", "name_en": "Indonesia", "index": "IHSG", "fx": "USDIDR"},
     "US": {"name_id": "Amerika Serikat", "name_en": "United States", "index": "SPX", "fx": "DXY"},
     "JP": {"name_id": "Jepang", "name_en": "Japan", "index": "N225", "fx": "USDJPY"},
     "SG": {"name_id": "Singapura", "name_en": "Singapore", "index": "STI", "fx": "USDSGD"},
+    "CN": {"name_id": "China", "name_en": "China", "index": "SSE", "fx": "CNYIDR"},
 }
 
 # Benchmark index used for relative strength of a stock.
@@ -120,5 +128,6 @@ def resolve(text: str) -> Asset | None:
     aliases = {"USD": "USDIDR", "DOLAR": "USDIDR", "DOLLAR": "USDIDR", "RUPIAH": "USDIDR", "IDR": "USDIDR",
                "JKSE": "IHSG", "SP500": "SPX", "S&P500": "SPX", "S&P": "SPX", "NIKKEI": "N225",
                "EMAS": "GOLD", "MINYAK": "BRENT", "OIL": "BRENT", "BITCOIN": "BTC", "JPY": "JPYIDR",
-               "YEN": "JPYIDR", "SGD": "SGDIDR", "EUR": "EURIDR"}
+               "YEN": "JPYIDR", "SGD": "SGDIDR", "EUR": "EURIDR", "RMB": "CNYIDR", "YUAN": "CNYIDR",
+               "CNY": "CNYIDR", "CHINA": "SSE", "SHANGHAI": "SSE"}
     return BY_KEY.get(aliases.get(t, ""))

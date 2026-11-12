@@ -34,6 +34,7 @@ TOPICS: dict[str, tuple[str, list[str]]] = {
     "us_politics": ("US", [gnews("\"White House\" OR Congress tariffs OR sanctions OR budget economy")]),
     "jp": ("JP", [gnews("\"Bank of Japan\" OR yen OR Nikkei")]),
     "sg": ("SG", [gnews("\"Monetary Authority of Singapore\" OR \"Singapore dollar\" OR \"Singapore economy\"", "en", "SG")]),
+    "cn": ("CN", [gnews("China economy OR yuan OR PBOC OR \"Chinese stocks\"")]),
     "global": ("GLOBAL", [gnews("geopolitics markets oil OR \"trade war\" OR conflict OR OPEC")]),
 }
 

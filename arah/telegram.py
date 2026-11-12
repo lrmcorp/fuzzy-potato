@@ -68,25 +68,40 @@ def format_view(view: dict, lang: str) -> str:
     return "\n".join(lines)
 
 
+MARK = {"good": "🟢", "neutral": "⚪", "bad": "🔴"}
+
+
 def format_brief(brief: dict, lang: str) -> str:
-    lines = [f"<b>{esc(brief['headline'][lang])}</b>", "",
-             f"<b>{'Arah dunia' if lang == 'id' else 'World direction'}: {esc(brief['world']['name'][lang])}</b>",
-             esc(brief["world"]["summary"][lang])]
-    lines += [f"• {esc(p['text'][lang])}" for p in brief["world"]["points"]]
-    for v in brief["assets"]:
-        d = v["decimals"]
-        lines.append("")
-        lines.append(f"{ARROW[v['direction']]} <b>{esc(v['name_en'] if lang == 'en' else v['name'])}</b> {fmt_num(v['forecast']['s0'], d, lang)}")
-        strip = "  ".join(f"{h['horizon']} {ARROW[h['direction']]}{h['p_up'] * 100:.0f}%" for h in v.get("horizons", []))
-        lines.append(f"<code>{strip}</code>")
-        if v["reasons"]:
-            lines.append(f"• {esc(v['reasons'][0]['text'][lang])}")
-        if v.get("vigilance"):
-            vg = v["vigilance"]
-            lines.append(f"{'Kewaspadaan' if lang == 'id' else 'Watch level'}: <b>{esc(vg['name'][lang])}</b> "
-                         f"({'peluang sentuh' if lang == 'id' else 'chance of touching'} {fmt_num(vg['level'], d, lang)}: {vg['p'] * 100:.0f}%)")
-    foot = ("Angka % adalah peluang naik menurut model. Ini bukan saran investasi." if lang == "id"
-            else "Percentages are the model's chance of a rise. This is not investment advice.")
+    """The same four answers as the dashboard: Indonesia, abroad, dollar, yuan."""
+    s = brief.get("simple") or {}
+    nm = lambda c: c["name_en"] if lang == "en" else c["name"]
+    now_w, next_w = ("Sekarang", "Bulan depan") if lang == "id" else ("Now", "Next month")
+    lines = [f"<b>{esc(brief['headline'][lang])}</b>"]
+    if brief.get("outlook"):
+        lines += ["", esc(brief["outlook"][lang])]
+
+    def block(title: str, c: dict | None) -> None:
+        if not c:
+            return
+        lines.extend(["", f"<b>{esc(title)}</b>",
+                      f"{MARK[c['now']['state']]} {now_w}: <b>{esc(c['now']['name'][lang])}</b>. {esc(c['now']['text'][lang])}",
+                      f"{MARK[c['next']['state']]} {next_w}: <b>{esc(c['next']['name'][lang])}</b>. {esc(c['next']['text'][lang])}"])
+        if c.get("why"):
+            lines.append(f"{'Kenapa' if lang == 'id' else 'Why'}: {esc(c['why'][lang])}")
+
+    block("Indonesia (IHSG)", s.get("indonesia"))
+    ab = s.get("abroad")
+    if ab:
+        lines += ["", f"<b>{'Luar negeri' if lang == 'id' else 'Abroad'}</b>",
+                  f"{MARK[ab['now']['state']]} {now_w}: <b>{esc(ab['now']['name'][lang])}</b>. {esc(ab['now']['text'][lang])}",
+                  f"{MARK[ab['next']['state']]} {next_w}: <b>{esc(ab['next']['name'][lang])}</b>"]
+        for c in ab["countries"]:
+            lines.append(f"  {MARK[c['now']['state']]}{MARK[c['next']['state']]} {esc(nm(c))}: {esc(c['next']['text'][lang].split('. ')[0])}.")
+    block("Rupiah vs Dolar AS" if lang == "id" else "Rupiah vs US dollar", s.get("usd"))
+    block("Rupiah vs Yuan (RMB)", s.get("cny"))
+    foot = ("Lingkaran pertama: sekarang. Kedua: bulan depan. Angka % adalah peluang, bukan kepastian. Bukan saran investasi."
+            if lang == "id" else
+            "First dot: now. Second: next month. Percentages are chances, not certainties. Not investment advice.")
     lines += ["", f"<i>{foot}</i>"]
     return "\n".join(lines)
 

@@ -8,6 +8,7 @@ from .agents import WORLD_KEYS, get_insight, run_team
 from .config import Settings
 from .data.news import headlines
 from .db import DB
+from .outlook import build_simple
 from .service import all_horizons, build_view
 from .signals import both, fmt_num, fmt_pct, snapshot
 from .universe import BY_KEY, COUNTRIES, HEADLINE_KEYS
@@ -109,7 +110,7 @@ async def build_brief(db: DB, settings: Settings, slot: str = "manual", use_llm:
     countries = {}
     for c, info in COUNTRIES.items():
         desk = ((team or {}).get("desks") or {}).get(c)
-        topics = {"ID": ["id_market", "id_politics"], "US": ["us_market", "us_politics"], "JP": ["jp"], "SG": ["sg"]}[c]
+        topics = {"ID": ["id_market", "id_politics"], "US": ["us_market", "us_politics"], "JP": ["jp"], "SG": ["sg"], "CN": ["cn"]}[c]
         countries[c] = {
             "name": {"id": info["name_id"], "en": info["name_en"]},
             "summary": desk["summary"] if desk else None,
@@ -124,6 +125,8 @@ async def build_brief(db: DB, settings: Settings, slot: str = "manual", use_llm:
         "mode": "team" if team and team.get("world") else "rules",
         "model": (team or {}).get("model"),
         "headline": (team or {}).get("headline") or rule_headline(world, usd),
+        "outlook": (team or {}).get("outlook"),
+        "simple": build_simple(db, snaps),
         "world": world, "tiles": tiles, "assets": assets, "countries": countries,
         "recs": {c: [{k: r[k] for k in ("key", "name", "price", "decimals", "strengths", "p_up_1m")} for r in recs.get(c, [])[:3]]
                  for c in ("ID", "US")},

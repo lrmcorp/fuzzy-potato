@@ -25,8 +25,19 @@ export interface Tile {key: string; name: string; name_en: string; decimals: num
 export interface DeskEvent {what: L; effect: L; sources: {title: string; source: string; url: string}[]}
 export interface Country {name: L; summary: L | null; mood: number | null; events: DeskEvent[];
   headlines: {title: string; source: string; url: string; at: number}[]}
+export type State = 'good' | 'neutral' | 'bad';
+export interface SimpleCard {
+  key: string; name: string; name_en: string; decimals: number; klass: string; country?: string; price: number;
+  now: {state: State; name: L; text: L}; next: {state: State; name: L; text: L; p_up: number; range: [number, number]};
+  why: L | null; reasons: Reason[]; watch: L | null; from_team: boolean; grade: Validation['grade'] | null;
+  touch: Record<string, number>;
+}
+export interface Simple {
+  indonesia: SimpleCard | null; usd: SimpleCard | null; cny: SimpleCard | null;
+  abroad?: {now: {state: State; name: L; text: L}; next: {state: State; name: L}; countries: SimpleCard[]};
+}
 export interface Brief {
-  at: number; mode: 'team' | 'rules'; headline: L;
+  at: number; mode: 'team' | 'rules'; headline: L; outlook: L | null; simple?: Simple;
   world: {stance: string; name: L; summary: L; points: {text: L}[]};
   tiles: Tile[]; assets: AssetView[]; countries: Record<string, Country>;
 }

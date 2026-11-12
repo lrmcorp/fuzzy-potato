@@ -20,6 +20,7 @@ def fmt_num(x: float, decimals: int = 2, lang: str = "id") -> str:
 
 
 def fmt_pct(x: float, lang: str = "id", signed: bool = True) -> str:
+    x = 0.0 if abs(x) < 0.05 else x  # no "-0.0%"
     s = f"{x:+.1f}" if signed else f"{x:.1f}"
     if lang == "id":
         s = s.replace(".", ",")
@@ -168,7 +169,8 @@ _CROSS = [("USDIDR", "chg1w", 1, 0.9, ("rupiah melemah terhadap dolar, kurs ini 
                                        "the rupiah is stronger against the dollar, which pulls this rate down"))]
 _BENCH = ("pasar secara umum naik dan ikut mengangkat saham ini", "pasar secara umum turun dan ikut menyeret saham ini",
           "the broad market is rising and lifts this stock", "the broad market is falling and drags this stock")
-DRIVERS: dict[str, list] = {"USDIDR": _USD, "IHSG": _IDX, "LQ45": _IDX, "SPX": _US, "NASDAQ": _US, "GOLD": _GOLD,
+_ASIA = [_IDX[0], _IDX[2]]
+DRIVERS: dict[str, list] = {"N225": _ASIA, "STI": _ASIA, "SSE": _ASIA, "CNYIDR": _CROSS, "USDIDR": _USD, "IHSG": _IDX, "LQ45": _IDX, "SPX": _US, "NASDAQ": _US, "GOLD": _GOLD,
                             "BTC": _CRYPTO, "ETH": _CRYPTO, "JPYIDR": _CROSS, "SGDIDR": _CROSS, "EURIDR": _CROSS}
 
 # How large a weekly (or daily) move in the driver has to be before it counts.
@@ -200,23 +202,24 @@ def build_facts(db: DB, asset: Asset, snaps: dict[str, dict] | None = None) -> l
             f"{name} bergerak {fmt_pct(w1)} dalam seminggu dan {fmt_pct(m1)} dalam sebulan.",
             f"{name_e} moved {fmt_pct(w1, 'en')} over the week and {fmt_pct(m1, 'en')} over the month.")
 
+    pw, pw_e = ("Kurs", "The rate") if asset.klass == "fx" else ("Harga", "Price")
     p, ma20, ma50, ma200 = s["price"], s["ma20"], s["ma50"], s["ma200"]
     if ma20 and ma50:
         if p > ma20 > ma50:
-            add("trend", 1, 0.5, "Harga berada di atas rata-rata 20 dan 50 hari: tren jangka pendek naik.",
-                "Price sits above its 20 and 50-day averages: the short-term trend is up.")
+            add("trend", 1, 0.5, f"{pw} berada di atas rata-rata 20 dan 50 hari: tren jangka pendek naik.",
+                f"{pw_e} sits above its 20 and 50-day averages: the short-term trend is up.")
         elif p < ma20 < ma50:
-            add("trend", -1, 0.5, "Harga berada di bawah rata-rata 20 dan 50 hari: tren jangka pendek turun.",
-                "Price sits below its 20 and 50-day averages: the short-term trend is down.")
+            add("trend", -1, 0.5, f"{pw} berada di bawah rata-rata 20 dan 50 hari: tren jangka pendek turun.",
+                f"{pw_e} sits below its 20 and 50-day averages: the short-term trend is down.")
         else:
-            add("trend", 0, 0.3, "Harga berada di antara rata-rata 20 dan 50 hari: tren belum tegas.",
-                "Price sits between its 20 and 50-day averages: no firm trend.")
+            add("trend", 0, 0.3, f"{pw} berada di antara rata-rata 20 dan 50 hari: tren belum tegas.",
+                f"{pw_e} sits between its 20 and 50-day averages: no firm trend.")
     if ma200:
         gap = (p / ma200 - 1) * 100
         if abs(gap) > 3:
             add("trend", 1 if gap > 0 else -1, 0.3,
-                f"Harga {fmt_pct(gap)} dari rata-rata 200 hari (tren jangka panjang {'naik' if gap > 0 else 'turun'}).",
-                f"Price is {fmt_pct(gap, 'en')} from its 200-day average (long-term trend {'up' if gap > 0 else 'down'}).")
+                f"{pw} {fmt_pct(gap)} dari rata-rata 200 hari (tren jangka panjang {'naik' if gap > 0 else 'turun'}).",
+                f"{pw_e} is {fmt_pct(gap, 'en')} from its 200-day average (long-term trend {'up' if gap > 0 else 'down'}).")
 
     r = s["rsi"]
     if r is not None and (r >= 72 or r <= 28):
@@ -236,11 +239,11 @@ def build_facts(db: DB, asset: Asset, snaps: dict[str, dict] | None = None) -> l
         add("vol", 0, 0.3, "Pergerakan harian sedang lebih tenang dari biasanya.", "Daily swings are calmer than usual.")
 
     if s["from_hi"] > -1.5:
-        add("level", 0, 0.5, f"Harga berada di dekat titik tertinggi setahun ({fmt_num(s['hi52'], asset.decimals)}).",
-            f"Price is near its one-year high ({fmt_num(s['hi52'], asset.decimals, 'en')}).")
+        add("level", 0, 0.5, f"{pw} berada di dekat titik tertinggi setahun ({fmt_num(s['hi52'], asset.decimals)}).",
+            f"{pw_e} is near its one-year high ({fmt_num(s['hi52'], asset.decimals, 'en')}).")
     elif s["from_lo"] < 1.5:
-        add("level", 0, 0.5, f"Harga berada di dekat titik terendah setahun ({fmt_num(s['lo52'], asset.decimals)}).",
-            f"Price is near its one-year low ({fmt_num(s['lo52'], asset.decimals, 'en')}).")
+        add("level", 0, 0.5, f"{pw} berada di dekat titik terendah setahun ({fmt_num(s['lo52'], asset.decimals)}).",
+            f"{pw_e} is near its one-year low ({fmt_num(s['lo52'], asset.decimals, 'en')}).")
 
     drivers = list(DRIVERS.get(asset.key, []))
     if asset.klass == "stock":

@@ -194,7 +194,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
     @app.get("/api/news", dependencies=[Depends(auth)])
     def news(country: str = "ID"):
         topics = {"ID": ["id_market", "id_politics"], "US": ["us_market", "us_politics"], "JP": ["jp"], "SG": ["sg"],
-                  "GLOBAL": ["global"]}.get(country.upper())
+                  "CN": ["cn"], "GLOBAL": ["global"]}.get(country.upper())
         if not topics:
             raise HTTPException(400, "unknown country")
         return {"country": country.upper(), "items": headlines(db, topics, limit=30)}

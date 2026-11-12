@@ -603,6 +603,12 @@ ARAH is a personal research tool. Its outputs are **informational and educationa
 | Telegram bot and scheduled briefs | Written and unit-tested in parts; not run against Telegram itself (no token in the build environment). |
 | CLI, installer, systemd unit, single-user login | Done. |
 
+### Summary page (added after first use)
+The home page was rebuilt around four questions for a newcomer: Indonesia, abroad (US, Japan, Singapore, China),
+rupiah against the dollar, rupiah against the yuan. Each shows "now" and "next month" as good, neutral/unclear or
+not good, with one reason; "Why?" and "See the chart" are the only two further steps. A China desk, the Shanghai
+index and a computed CNY/IDR rate were added for it. The Telegram brief uses the same format.
+
 ### Changes from the PRD, with reasons
 | PRD | Built | Why |
 |---|---|---|

@@ -98,7 +98,8 @@ def forecast(asset: str, horizon: str = typer.Argument("1w"), lang: str = typer.
     if not a:
         typer.echo(f"Unknown asset: {asset}")
         raise typer.Exit(1)
-    asyncio.run(refresh_many(rt.db, [x.symbol for x in MACRO + GAUGES] + [a.symbol]))
+    asyncio.run(rt.refresh_data(stocks=False))
+    asyncio.run(refresh_many(rt.db, [a.symbol]))
     view = build_view(rt.db, a, horizon, insight=get_insight(rt.db, a.key), with_chart=False)
     typer.echo(_plain(format_view(view, lang or rt.db.get("lang", "id"))))
 

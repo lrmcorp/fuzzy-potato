@@ -121,9 +121,34 @@ async def refresh_many(db: DB, symbols: list[str], intervals: tuple[str, ...] = 
                 errors[sym] = str(e)[:160]
                 log.warning("refresh %s %s failed: %s", sym, iv, e)
 
+    real = [s for s in symbols if not s.startswith("SYN:")]
     async with httpx.AsyncClient(http2=False) as client:
-        await asyncio.gather(*(one(client, s, iv) for s in symbols for iv in intervals))
+        await asyncio.gather(*(one(client, s, iv) for s in real for iv in intervals))
     return errors
+
+
+def build_synthetic(db: DB, symbol: str, num_symbol: str, den_symbol: str) -> int:
+    """Rebuild a cross rate as numerator / denominator on the bars both legs share."""
+    total = 0
+    for interval in ("1h", "1d"):
+        a, b = load_bars(db, num_symbol, interval, 6000), load_bars(db, den_symbol, interval, 6000)
+        den = dict(zip(b["ts"].tolist(), b["c"].tolist()))
+        rows = [(symbol, interval, int(t), c / den[t], c / den[t], c / den[t], c / den[t], 0.0)
+                for t, c in zip(a["ts"].tolist(), a["c"].tolist()) if t in den and den[t] > 0]
+        with db.tx() as c:
+            c.execute("DELETE FROM bars WHERE symbol=? AND interval=?", (symbol, interval))
+            c.executemany("INSERT INTO bars (symbol, interval, ts, o, h, l, c, v) VALUES (?,?,?,?,?,?,?,?)", rows)
+        total += len(rows)
+    qa, qb = quote_of(db, num_symbol), quote_of(db, den_symbol)
+    if qa and qb and qa["price"] and qb["price"]:
+        prev = (qa["prev_close"] / qb["prev_close"]) if qa["prev_close"] and qb["prev_close"] else None
+        db.x(
+            "INSERT INTO quotes (symbol, price, prev_close, market_ts, currency, fetched_at) VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT(symbol) DO UPDATE SET price=excluded.price, prev_close=excluded.prev_close, "
+            "market_ts=excluded.market_ts, fetched_at=excluded.fetched_at",
+            (symbol, qa["price"] / qb["price"], prev, min(qa["market_ts"] or 0, qb["market_ts"] or 0), "IDR", int(time.time())),
+        )
+    return total
 
 
 def spike_mask(c: np.ndarray, k: float = 6.0, max_run: int = 5) -> np.ndarray:

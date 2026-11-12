@@ -3,12 +3,15 @@
 *Arah* means "direction". ARAH is a self-hosted web app and Telegram bot that tells one person,
 in plain Bahasa Indonesia or English, where markets are heading and why:
 
-- where the world is heading today (risk-on, risk-off or mixed);
-- USD/IDR and other currencies over the next hour, 4 hours, day, 1 to 3 weeks and month, or any horizon you type;
-- IHSG, Indonesian and US stocks, gold, oil, palm oil, copper, Bitcoin;
-- the reasons behind each conclusion, as a short list of points;
-- stock picks for Indonesia and the US, each with three strengths, why it is still worth entering, risks and a plan;
-- a watch level for the rupiah (Aman, Waspada, Siaga, Bahaya) and the chance of touching levels such as 18,500.
+- **Indonesia:** good or not now, and next month, with the reason;
+- **Abroad:** the same for the US, Japan, Singapore and China, for anyone thinking of expanding;
+- **Rupiah against the US dollar and the yuan (RMB):** good or not now, and next month;
+- one sentence on what is happening in the world and a short view of what is likely next;
+- behind each answer: "Why?" opens three reasons, "See the chart" opens the forecast for any horizon from one hour to months;
+- stock picks for Indonesia and the US, and a rupiah watch level with the chance of touching levels such as 18,500.
+
+"Good" is from the side of someone holding rupiah: rising stocks are good, a weaker rupiah is not.
+"Next month" turns good or at risk only when the chance reaches 55%. Below that it says "unclear".
 
 The product requirements are in [docs/PRD.md](docs/PRD.md). The visual direction is in [DESIGN.md](DESIGN.md).
 
@@ -127,6 +130,7 @@ Briefs go out at 07:30, 12:00, 16:30, 20:00 and 05:00 WIB, plus a weekly outlook
 - Yahoo's currency series contain bad ticks, sometimes for several days. ARAH filters jumps that snap
   straight back. Without that filter the rupiah watch level was badly overstated during testing.
 - Coal and nickel have no free futures feed and are left out.
+- Yahoo's CNY/IDR series is broken, so the yuan rate is computed from USD/IDR and USD/CNY.
 - News comes from CNBC Indonesia and Google News RSS. Forum and social sentiment is not included yet.
 
 ## Not built yet

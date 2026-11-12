@@ -8,9 +8,10 @@ import {LangCtx, useT, type Key} from './i18n';
 import {AssetPage, Login, Markets, SettingsPage, Today, TrackPage, World} from './pages';
 
 const NAV: {to: string; key: Key}[] = [
-  {to: '/', key: 'nav_today'}, {to: '/kurs', key: 'nav_fx'}, {to: '/saham', key: 'nav_stocks'},
-  {to: '/dunia', key: 'nav_world'}, {to: '/rekam', key: 'nav_track'}, {to: '/atur', key: 'nav_settings'},
+  {to: '/', key: 'nav_today'}, {to: '/saham', key: 'nav_stocks'}, {to: '/dunia', key: 'nav_world'}, {to: '/atur', key: 'nav_settings'},
 ];
+// Reference pages: reachable from the footer so the main row stays at four items.
+const MORE: {to: string; key: Key}[] = [{to: '/kurs', key: 'nav_fx'}, {to: '/rekam', key: 'nav_track'}];
 type Mode = 'system' | 'light' | 'dark';
 
 function readMode(): Mode {
@@ -37,7 +38,12 @@ function Shell({route, children}: {route: string; children: React.ReactNode}) {
         </div>
       </header>
       <main id="main" className="page">{children}</main>
-      <footer className="foot"><p>{t('disclaimer')}</p></footer>
+      <footer className="foot">
+        <nav aria-label={t('more')}>
+          <ul>{MORE.map(n => <li key={n.to}><a href={`#${n.to}`}>{t(n.key)}</a></li>)}</ul>
+        </nav>
+        <p>{t('disclaimer')}</p>
+      </footer>
     </>
   );
 }

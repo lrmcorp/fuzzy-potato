@@ -13,13 +13,13 @@ from .agents import get_insight
 from .brief import build_brief
 from .config import BRIEF_SCHEDULE, DEFAULT_HORIZONS, WEEKLY_OUTLOOK, Settings
 from .data.news import refresh_news
-from .data.yahoo import refresh_many
+from .data.yahoo import build_synthetic, refresh_many
 from .db import DB
 from .recommend import build_recs
 from .service import record_forecasts, score_forecasts, validation
 from .signals import fmt_num
 from .telegram import Bot, format_brief
-from .universe import BY_KEY, DEFAULT_LEVELS, GAUGES, MACRO, STOCKS
+from .universe import SYNTHETIC, BY_KEY, DEFAULT_LEVELS, GAUGES, MACRO, STOCKS
 
 log = logging.getLogger("arah.runtime")
 
@@ -39,6 +39,8 @@ class Runtime:
             errors = await refresh_many(self.db, symbols, force=force)
             if stocks:
                 errors |= await refresh_many(self.db, [a.symbol for a in STOCKS], intervals=("1d",), force=force)
+            for key, (num, den) in SYNTHETIC.items():
+                build_synthetic(self.db, BY_KEY[key].symbol, BY_KEY[num].symbol, BY_KEY[den].symbol)
             self.status["data_errors"] = errors
             self.status["last_refresh"] = int(time.time())
             self.db.set("data_status", {"at": self.status["last_refresh"], "errors": errors})

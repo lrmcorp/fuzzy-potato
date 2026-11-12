@@ -9,7 +9,7 @@ import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/Segment
 import {Selector} from '@astryxdesign/core/Selector';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {api, ApiError, type AssetView, type Brief, type Lang, type MarketRow, type RecCard} from './api';
+import {api, ApiError, type Brief, type Lang, type MarketRow, type RecCard, type Simple, type SimpleCard, type State} from './api';
 import {FanChart, Spark} from './charts';
 import {AssetLink, Async, Change, Glyph, GradeNote, HorizonStrip, Reasons, Verdict, VigilanceLine} from './components';
 import {useLoad} from './hooks';
@@ -18,24 +18,47 @@ import {useT} from './i18n';
 interface PageProps {onAuth: () => void}
 const HORIZONS = ['1h', '4h', '1d', '1w', '2w', '3w', '1m'];
 
-function AssetSection({view}: {view: AssetView}) {
-  const {t, l, nm, num} = useT();
+function Pill({label, state, name}: {label: string; state: State; name: string}) {
   return (
-    <section className="asset" aria-labelledby={`a-${view.key}`}>
-      <header className="asset-head">
-        <h3 id={`a-${view.key}`}><AssetLink k={view.key}>{nm(view)}</AssetLink></h3>
-        <span className="price">{num(view.forecast.s0, view.decimals)}</span>
-        <Change value={view.snapshot.chg1d} label={t('today')} />
-        <Change value={view.snapshot.chg1w} label={t('week')} />
-      </header>
-      <Verdict view={view} />
-      {view.horizons && <HorizonStrip rows={view.horizons} />}
-      {view.vigilance && <VigilanceLine v={view.vigilance} decimals={view.decimals} horizonName={l(view.horizon_name)} />}
-      <h4 className="label">{t('why')}</h4>
-      <Reasons items={view.reasons.slice(0, 3)} />
-      {view.watch && <p className="watch"><strong>{t('watch')}:</strong> {l(view.watch)}</p>}
-      <p className="more"><a href={`#/a/${view.key}`}>{t('details')}: {nm(view)}</a></p>
+    <span className={`pill pill-${state}`}>
+      <span className="pill-k">{label}</span>
+      <span className="pill-v">{name}</span>
+    </span>
+  );
+}
+
+/** One question, two answers (now, next month), one reason. "Why?" opens the rest. */
+function Answer({id, title, sub, card}: {id: string; title: string; sub: string; card: SimpleCard}) {
+  const {t, l} = useT();
+  return (
+    <section className="answer" aria-labelledby={id}>
+      <h2 id={id} className="answer-h">{title}</h2>
+      <p className="note">{sub}</p>
+      <div className="pills">
+        <Pill label={t('now')} state={card.now.state} name={l(card.now.name)} />
+        <Pill label={t('next_month')} state={card.next.state} name={l(card.next.name)} />
+      </div>
+      <p className="answer-line">{l(card.now.text)}</p>
+      <p className="answer-line">{l(card.next.text)}</p>
+      <WhyBox card={card} />
     </section>
+  );
+}
+
+function WhyBox({card}: {card: SimpleCard}) {
+  const {t, l, num} = useT();
+  return (
+    <details className="why">
+      <summary>{t('why_q')}</summary>
+      <Reasons items={card.reasons} />
+      {card.watch && <p className="watch"><strong>{t('watch')}:</strong> {l(card.watch)}</p>}
+      {Object.entries(card.touch).length > 0 && (
+        <p className="note">{Object.entries(card.touch).sort((x, y) => Number(x[0]) - Number(y[0])).map(([lv, p]) =>
+          `${t('touch')} ${num(Number(lv), card.decimals)}: ${Math.round(p * 100)}%`).join(' · ')}</p>
+      )}
+      <p className="note">{t(card.from_team ? 'by_team' : 'by_rules')} {card.grade ? t(`g_${card.grade}` as const) : ''}</p>
+      <p className="more"><a href={`#/a/${card.key}`}>{t('open_chart')}</a></p>
+    </details>
   );
 }
 
@@ -44,62 +67,73 @@ export function Today({onAuth}: PageProps) {
   const state = useLoad(api.brief, [], onAuth);
   const [busy, setBusy] = useState(false);
   const building = busy || !!state.data?.building;
+  const ready = !!state.data?.brief?.simple;
   useEffect(() => {
-    if (!building && state.data?.brief) return;
+    if (!building && ready) return;
     const id = window.setInterval(state.reload, 5000);
     return () => window.clearInterval(id);
-  }, [building, state.data?.brief, state.reload]);
+  }, [building, ready, state.reload]);
   useEffect(() => { if (state.data && !state.data.building) setBusy(false); }, [state.data]);
 
   const rebuild = async () => { setBusy(true); try { await api.runBrief(); } finally { state.reload(); } };
 
   return (
     <Async state={state}>
-      {({brief, llm_error}) => !brief ? (
+      {({brief, llm_error}) => !brief || !brief.simple ? (
         <EmptyState title={t('no_brief_title')} description={t('no_brief_desc')} actions={<Spinner size="md" />} />
       ) : (
         <>
           {llm_error && <Banner status="warning" title={t(`llm_${llm_error}` as const)} />}
-          <BriefBody brief={brief} building={building} rebuild={rebuild} />
+          <Summary brief={brief} simple={brief.simple} building={building} rebuild={rebuild} />
         </>
       )}
     </Async>
   );
 }
 
-function BriefBody({brief, building, rebuild}: {brief: Brief; building: boolean; rebuild: () => void}) {
-  const {t, l, nm, num, pct, when} = useT();
+function Summary({brief, simple, building, rebuild}: {brief: Brief; simple: Simple; building: boolean; rebuild: () => void}) {
+  const {t, l, nm, when} = useT();
+  const ab = simple.abroad;
   return (
     <>
       <header className="lede">
         <p className="kicker">{t('updated')} {when(brief.at)}</p>
         <h1 className="headline">{l(brief.headline)}</h1>
-        <p className="note">{t(brief.mode === 'team' ? 'mode_team' : 'mode_rules')}</p>
+        {brief.outlook && <p className="verdict"><strong>{t('my_view')}:</strong> {l(brief.outlook)}</p>}
       </header>
 
-      <section aria-labelledby="world-h">
-        <h2 id="world-h" className="section-h">{t('world_dir')}: {l(brief.world.name)}</h2>
-        <p className="verdict">{l(brief.world.summary)}</p>
-        <ul className="reasons">
-          {brief.world.points.map((p, i) => <li key={i}><span className="mark">•</span><span>{l(p.text)}</span></li>)}
-        </ul>
-        <details className="chart-table">
-          <summary>{t('show_numbers')}</summary>
-          <div className="scroll-x">
-            <table className="tiles">
-              <thead><tr><th>{t('market')}</th><th>{t('price')}</th><th>{t('today')}</th><th>{t('week')}</th></tr></thead>
-              <tbody>
-                {brief.tiles.map(x => (
-                  <tr key={x.key}><th scope="row">{nm(x)}</th><td>{num(x.price, x.decimals)}</td><td>{pct(x.chg1d)}</td><td>{pct(x.chg1w)}</td></tr>
-                ))}
-              </tbody>
-            </table>
+      {simple.indonesia && <Answer id="q-id" title={t('q_id')} sub={t('sub_id')} card={simple.indonesia} />}
+
+      {ab && (
+        <section className="answer" aria-labelledby="q-ab">
+          <h2 id="q-ab" className="answer-h">{t('q_abroad')}</h2>
+          <p className="note">{t('sub_abroad')}</p>
+          <div className="pills">
+            <Pill label={t('now')} state={ab.now.state} name={l(ab.now.name)} />
+            <Pill label={t('next_month')} state={ab.next.state} name={l(ab.next.name)} />
           </div>
-        </details>
-      </section>
+          <p className="answer-line">{l(ab.now.text)}</p>
+          <ul className="countries">
+            {ab.countries.map(c => (
+              <li key={c.key}>
+                <div className="country-head">
+                  <strong>{t(`c_${c.country}` as 'c_US')}</strong> <span className="muted">{nm(c)}</span>
+                  <span className="pills small">
+                    <Pill label={t('now')} state={c.now.state} name={l(c.now.name)} />
+                    <Pill label={t('next_month')} state={c.next.state} name={l(c.next.name)} />
+                  </span>
+                </div>
+                <WhyBox card={c} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
-      {brief.assets.map(v => <AssetSection key={v.key} view={v} />)}
+      {simple.usd && <Answer id="q-usd" title={t('q_usd')} sub={t('sub_fx')} card={simple.usd} />}
+      {simple.cny && <Answer id="q-cny" title={t('q_cny')} sub={t('sub_fx')} card={simple.cny} />}
 
+      <p className="note mode">{t(brief.mode === 'team' ? 'mode_team' : 'mode_rules')}</p>
       <div className="actions">
         <Button label={building ? t('building') : t('refresh_brief')} onClick={rebuild} isLoading={building} />
       </div>

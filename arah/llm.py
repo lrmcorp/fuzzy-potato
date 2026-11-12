@@ -152,7 +152,8 @@ async def _openrouter_json(db: DB, settings: Settings, role: str, system: str, u
     state = budget_state(db, settings)
     if state["over"]:
         raise BudgetExceeded(f"LLM budget reached (${state['month']:.2f} this month, ${state['day']:.2f} today)")
-    model = settings.model_deep if deep and not state["saver"] else settings.model_quick
+    recently_cut = time.time() - (db.get(f"llm_truncated:{role}") or 0) < 86400
+    model = settings.model_deep if deep and not state["saver"] and not recently_cut else settings.model_quick
     headers = {"Authorization": f"Bearer {settings.openrouter_key}", "X-Title": "ARAH"}
     last: Exception | None = None
     async with httpx.AsyncClient(timeout=180) as client:
@@ -197,6 +198,8 @@ async def _openrouter_json(db: DB, settings: Settings, role: str, system: str, u
                 if choice.get("finish_reason") == "length" and model != settings.model_quick:
                     # Still cut off: the quick model answers the same prompt in far fewer tokens.
                     log.warning("%s ran out of tokens on %s; retrying on %s", model, role, settings.model_quick)
+                    # Remember it, so the next day's calls for this role skip the model that cannot finish.
+                    db.set(f"llm_truncated:{role}", int(time.time()))
                     model = settings.model_quick
                     continue
                 if choice.get("finish_reason") == "length":
