@@ -21,7 +21,7 @@ log = logging.getLogger("arah.agents")
 
 LLM_TILT_CAP = 0.06
 INSIGHT_TTL = 18 * 3600
-DESK_TOPICS = {"ID": ["id_market", "id_flow", "id_politics"], "US": ["us_market", "us_politics"], "JP": ["jp"],
+DESK_TOPICS = {"ID": ["id_market", "id_politics"], "US": ["us_market", "us_politics"], "JP": ["jp"],
                "SG": ["sg"], "CN": ["cn"], "GLOBAL": ["global"]}
 WORLD_KEYS = ["SPX", "NASDAQ", "N225", "STI", "SSE", "IHSG", "USDIDR", "CNYIDR", "DXY", "US10Y", "VIX", "GOLD", "BRENT", "CPO", "BTC"]
 
@@ -72,6 +72,14 @@ async def run_desk(db: DB, settings: Settings, country: str, wlines: list[str]) 
     if not news:
         return None
     nmap = {f"N{i}": n for i, n in enumerate(news, 1)}
+    # Foreign-flow reports get their own block with publish times, so the newest one can be told apart.
+    flow = headlines(db, ["id_flow"], limit=12, max_age_h=36) if country == "ID" else []
+    fmap = {f"N{len(nmap) + i}": n for i, n in enumerate(flow, 1)}
+    wib = lambda ts: time.strftime("%Y-%m-%d %H:%M WIB", time.gmtime(ts + 7 * 3600))
+    flow_block = ("\n\nForeign-flow reports, newest first (now is " + wib(time.time()) + "):\n"
+                  + "\n".join(f"{k} | published {wib(n['published_at'])} | {n['source']} | {n['title']}" for k, n in fmap.items())
+                  ) if fmap else ""
+    nmap |= fmap
     name = COUNTRIES.get(country, {}).get("name_en", "Global / geopolitics")
     system = (
         f"You run the {name} desk at a research firm: you follow politics, policy, the central bank and markets "
@@ -79,16 +87,20 @@ async def run_desk(db: DB, settings: Settings, country: str, wlines: list[str]) 
     )
     user = (
         "Market figures:\n" + "\n".join(wlines) + "\n\nHeadlines from the last two days:\n"
-        + "\n".join(f"{k} | {n['source']} | {n['title']}" for k, n in nmap.items())
+        + "\n".join(f"{k} | {n['source']} | {n['title']}" for k, n in nmap.items() if k not in fmap)
+        + flow_block
         + "\n\nReturn JSON: {\"summary\": {\"id\": str, \"en\": str} (two sentences on what matters most), "
         "\"mood\": integer -2..2 for local stocks and currency (-2 clearly negative, 2 clearly positive), "
         "\"events\": [up to 4 of {\"refs\": [headline ids], \"what\": {id,en}, \"effect\": {id,en} "
         "(one sentence: which asset it moves and which way)}], "
         "\"ahead\": [up to 2 of {\"refs\": [headline ids], \"date\": \"YYYY-MM-DD\", \"what\": {id,en}} for scheduled "
         "events in the next 30 days whose date a headline states outright; leave empty when no headline gives a date]"
-        + (", \"foreign\": {\"side\": \"buy\"|\"sell\"|\"none\", \"refs\": [headline ids], \"text\": {id,en}} "
-           "(whether foreign investors were net buyers or net sellers of Indonesian stocks in the latest session a "
-           "headline reports, with the amount if stated; \"none\" when no headline says)" if country == "ID" else "")
+        + (", \"foreign\": {\"side\": \"buy\"|\"sell\"|\"none\", \"date\": \"YYYY-MM-DD\", \"refs\": [headline ids], "
+           "\"text\": {id,en}} (from the foreign-flow reports only: were foreign investors net buyers or net sellers of "
+           "Indonesian stocks in the LATEST trading day reported? Prefer the newest full-day, whole-market figure over "
+           "first-session or regular-market-only figures. One sentence that states the date, the amount and its scope "
+           "exactly as the headline gives them; if two reports for that same day disagree, give both and say so. "
+           "\"none\" when no report gives a figure)" if country == "ID" else "")
         + "}. Skip headlines with no market relevance."
     )
     try:
@@ -120,7 +132,9 @@ async def run_desk(db: DB, settings: Settings, country: str, wlines: list[str]) 
     foreign = None
     fr = raw.get("foreign") if isinstance(raw.get("foreign"), dict) else {}
     if fr.get("side") in ("buy", "sell") and _refs(fr.get("refs"), set(nmap)) and _text(fr.get("text")):
-        foreign = {"side": fr["side"], "text": _text(fr["text"]), "sources": src(_refs(fr["refs"], set(nmap)))}
+        frefs = _refs(fr["refs"], set(nmap))
+        foreign = {"side": fr["side"], "text": _text(fr["text"]), "sources": src(frefs),
+                   "date": str(fr.get("date") or "")[:10], "reported_at": max(nmap[r]["published_at"] for r in frefs)}
     mood = raw.get("mood")
     return {"country": country, "summary": summary, "mood": int(mood) if isinstance(mood, (int, float)) else 0,
             "events": events, "ahead": ahead, "foreign": foreign, "headlines": len(news)}

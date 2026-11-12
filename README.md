@@ -128,12 +128,10 @@ Briefs go out at 07:30, 12:00, 16:30, 20:00 and 05:00 WIB, plus a weekly outlook
 - Currency rates shown on the summary and used by the calculator are BCA's e-Rate from bca.co.id. The direction and
   range are still computed from market history and re-based onto the BCA rate.
 - The event calendar covers the current week only. Indonesian events appear only when a headline states the date.
-- Foreign flow is read from news headlines by the Indonesia desk, with the source linked. The exchange's own
-  pages refuse automated access.
-- Hourly USD/IDR quotes from this source often stand still outside Jakarta hours. ARAH flags hour-level
-  rupiah forecasts as less reliable.
-- Yahoo's currency series contain bad ticks, sometimes for several days. ARAH filters jumps that snap
-  straight back. Without that filter the rupiah watch level was badly overstated during testing.
+- Foreign flow comes from market-wrap headlines, refreshed with every brief. The Indonesia desk picks the newest
+  full-day figure, states its date, links the source, and says so when two reports for the same day disagree
+  (outlets differ on regular market versus all markets). No free machine-readable source was found: idx.co.id
+  refuses automated access, and Sectors (sectors.app) offers a per-stock foreign-flow API that needs an API key.
 - Coal and nickel have no free futures feed and are left out.
 - Yahoo's CNY/IDR series is broken, so the yuan rate is computed from USD/IDR and USD/CNY.
 - News comes from CNBC Indonesia and Google News RSS. Forum and social sentiment is not included yet.

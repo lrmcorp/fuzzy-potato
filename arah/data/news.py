@@ -27,7 +27,9 @@ TOPICS: dict[str, tuple[str, list[str]]] = {
         "https://www.cnbcindonesia.com/market/rss",
         gnews("IHSG OR rupiah OR \"Bank Indonesia\"", "id", "ID"),
     ]),
-    "id_flow": ("ID", [gnews("\"net buy\" OR \"net sell\" asing saham OR \"beli bersih asing\" OR \"jual bersih asing\"", "id", "ID")]),
+    # Market-wrap headlines carry the day's foreign net buy or sell figure in the title itself.
+    "id_flow": ("ID", [gnews('asing "beli bersih" OR "jual bersih" saham IHSG', "id", "ID"),
+                       gnews('asing "net buy" OR "net sell" IHSG', "id", "ID")]),
     "id_politics": ("ID", [
         gnews("pemerintah kebijakan ekonomi OR APBN OR DPR OR menteri keuangan", "id", "ID"),
     ]),

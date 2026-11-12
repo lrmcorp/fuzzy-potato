@@ -111,7 +111,7 @@ async def build_brief(db: DB, settings: Settings, slot: str = "manual", use_llm:
     countries = {}
     for c, info in COUNTRIES.items():
         desk = ((team or {}).get("desks") or {}).get(c)
-        topics = {"ID": ["id_market", "id_politics"], "US": ["us_market", "us_politics"], "JP": ["jp"], "SG": ["sg"], "CN": ["cn"]}[c]
+        topics = {"ID": ["id_market", "id_flow", "id_politics"], "US": ["us_market", "us_politics"], "JP": ["jp"], "SG": ["sg"], "CN": ["cn"]}[c]
         countries[c] = {
             "name": {"id": info["name_id"], "en": info["name_en"]},
             "summary": desk["summary"] if desk else None,
