@@ -4,10 +4,10 @@
 |---|---|
 | **Document** | Product Requirements Document (PRD) |
 | **Product (working name)** | **ARAH** — *"arah"* = "direction" in Bahasa Indonesia |
-| **Version** | 0.3 (owner decisions resolved — see §16) |
+| **Version** | 0.4 (v0.1 of the app built; see §19 for what is done and what is not) |
 | **Date** | 2026-11-12 |
 | **Owner** | Single owner / single user |
-| **Status** | Decisions resolved — ready for M0 |
+| **Status** | App v0.1 implemented and tested; remaining scope listed in §19 |
 | **Language** | PRD in English; the application is bilingual (Bahasa Indonesia / English) |
 
 ---
@@ -585,3 +585,36 @@ Remaining input needed for M0: the owner's laptop/PC OS and RAM (to choose stand
 ## 18. Disclaimer
 
 ARAH is a personal research tool. Its outputs are **informational and educational, not financial, investment or trading advice**. All forecasts are probabilistic and can be wrong. Past performance, including the system's own track record, does not guarantee future results. The owner is solely responsible for any investment decision.
+
+---
+
+## 19. Implementation status (app v0.1, 2026-11-12)
+
+### Built and tested
+| Area | Status |
+|---|---|
+| Daily brief: world direction, headline assets, reasons | Done. Rule-based always; AI team when an OpenRouter key with credit is present. |
+| Forecasts for 1h, 4h, 1d, 1w, 2w, 3w, 1m and custom horizons | Done: filtered historical simulation, level-touch probabilities, fan chart. |
+| FX watch level (Aman / Waspada / Siaga / Bahaya) and level alerts | Done. |
+| Stock picks for Indonesia (30 stocks) and US (25 stocks) with 3 strengths, why enter, risks, plan | Done. Lists stay empty when nothing passes. |
+| AI analyst team: desks for ID, US, JP, SG and global, bull, bear, chief strategist | Done, with citation checks and a 6-point cap on probability nudges. One desk call was verified live; the full chain could not be run live because the OpenRouter balance was too low. |
+| Forecast ledger, scoring, track record page, walk-forward validation | Done. 133 asset and horizon pairs tested. |
+| Web dashboard (Astryx), bilingual, light and dark | Done. 26 browser checks pass on a phone-sized screen. |
+| Telegram bot and scheduled briefs | Written and unit-tested in parts; not run against Telegram itself (no token in the build environment). |
+| CLI, installer, systemd unit, single-user login | Done. |
+
+### Changes from the PRD, with reasons
+| PRD | Built | Why |
+|---|---|---|
+| Kronos as the core forecaster | Statistical simulation | It runs on a small VPS with no GPU or model download and could be validated on real data here. Kronos stays the next upgrade and must beat this baseline in the same test before it replaces it. |
+| Postgres, Redis, Next.js, Docker | SQLite, in-process scheduler, Vite + React, plain venv | One user on a small VPS. Fewer moving parts to install and keep alive. |
+| `idx` binary for IDX data | Yahoo Finance | One data path for every market in v0.1. `idx` adds foreign flow and bandarmology and is the next data upgrade. |
+| USD/IDR alert levels 17,500 / 18,000 / 18,500 | 18,000 / 18,500 / 19,000 | USD/IDR was already at 18,228 when the app was built. Editable in Settings. |
+
+### Findings from testing
+- The 90% range held the outcome 83% to 99% of the time (median 90%). Ranges are trustworthy; for rupiah crosses they are slightly too wide.
+- Price-only direction is near a coin flip. Only 3 of 133 pairs passed the strict direction test, which is about what chance alone would give. The app therefore says "unclear" often, on purpose.
+- Yahoo served four wrong daily USD/IDR closes in a row (about 3.5% off). Before a filter for this was added, the app showed a 53% chance of touching 18,500 within a week and a "Siaga" level; after it, 12% and "Aman".
+
+### Not built yet
+Kronos, `idx` integration (foreign flow, broker summary, bandarmology), paper trading, forum and social sentiment, coal and nickel prices, Japan and Singapore stock lists, weekly agent self-review, TOTP login, backups command.

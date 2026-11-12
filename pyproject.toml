@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "arah"
+version = "0.1.0"
+description = "ARAH: daily market direction briefings for FX, Indonesian and US stocks"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "httpx>=0.27",
+  "numpy>=1.26",
+  "apscheduler>=3.10,<4",
+  "typer>=0.12",
+  "defusedxml>=0.7",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+arah = "arah.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["arah"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

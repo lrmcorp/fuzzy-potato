@@ -1,0 +1,121 @@
+import {createContext, useContext} from 'react';
+import type {L, Lang} from './api';
+
+const S = {
+  nav_today: ['Hari ini', 'Today'], nav_fx: ['Kurs', 'Currencies'], nav_stocks: ['Saham', 'Stocks'],
+  nav_world: ['Dunia', 'World'], nav_track: ['Rekam jejak', 'Track record'], nav_settings: ['Atur', 'Settings'],
+  main_nav: ['Navigasi utama', 'Main navigation'],
+  loading: ['Memuat', 'Loading'], retry: ['Coba lagi', 'Try again'],
+  load_failed: ['Data gagal dimuat.', 'The data failed to load.'],
+  updated: ['Diperbarui', 'Updated'], refresh_brief: ['Susun ulang brief', 'Rebuild the brief'],
+  building: ['Sedang menyusun brief...', 'Building the brief...'],
+  no_brief_title: ['Brief pertama sedang disiapkan', 'The first brief is being prepared'],
+  no_brief_desc: ['ARAH sedang mengambil data pasar. Biasanya selesai dalam satu menit.',
+    'ARAH is fetching market data. This usually takes about a minute.'],
+  world_dir: ['Arah dunia', 'World direction'],
+  show_numbers: ['Lihat angka pasar dunia', 'See world market numbers'],
+  mode_team: ['Disusun tim analis AI dari data pasar dan berita.', 'Written by the AI analyst team from market data and news.'],
+  mode_rules: ['Disusun dari data pasar saja. Tim analis AI belum aktif.', 'Built from market data only. The AI analyst team is off.'],
+  llm_credit: ['Saldo OpenRouter tidak cukup, jadi brief ini disusun tanpa tim analis AI. Isi saldo di openrouter.ai lalu susun ulang.',
+    'The OpenRouter balance is too low, so this brief was built without the AI analyst team. Top up at openrouter.ai and rebuild.'],
+  llm_auth: ['Kunci OpenRouter ditolak. Periksa OPENROUTER_API_KEY di file .env.', 'The OpenRouter key was refused. Check OPENROUTER_API_KEY in the .env file.'],
+  why: ['Kenapa', 'Why'], watch: ['Yang perlu diawasi', 'What to watch'],
+  horizon: ['Rentang waktu', 'Horizon'], pick_horizon: ['Pilih rentang waktu', 'Choose a horizon'],
+  chance_up: ['peluang naik', 'chance of a rise'], range90: ['Kisaran wajar', 'Reasonable range'],
+  watch_level: ['Tingkat kewaspadaan', 'Watch level'],
+  touch: ['Peluang menyentuh', 'Chance of touching'], within: ['dalam', 'within'],
+  details: ['Lihat rinci', 'See details'], back: ['Kembali', 'Back'],
+  today: ['hari ini', 'today'], week: ['seminggu', 'this week'], month: ['sebulan', 'this month'],
+  g_validated: ['Arah dan rentang lolos uji historis.', 'Direction and range passed the historical test.'],
+  g_range_only: ['Rentang lolos uji historis. Arah belum terbukti lebih baik dari tebakan.',
+    'The range passed the historical test. Direction is not proven better than a guess.'],
+  g_experimental: ['Masih eksperimental untuk aset dan rentang waktu ini.', 'Still experimental for this asset and horizon.'],
+  g_insufficient: ['Riwayat data belum cukup untuk diuji.', 'Not enough history to test.'],
+  g_pending: ['Uji historis sedang berjalan.', 'The historical test is still running.'],
+  custom_h: ['Rentang lain', 'Other horizon'], custom_h_hint: ['Contoh: 6h, 3d, 5w, 2m', 'Examples: 6h, 3d, 5w, 2m'],
+  apply: ['Terapkan', 'Apply'], bad_horizon: ['Format tidak dikenali.', 'That format is not recognised.'],
+  ask_team: ['Minta analisa tim AI', 'Ask the AI team'], asking: ['Tim sedang menganalisa...', 'The team is analysing...'],
+  team_off: ['Tim analis AI belum aktif. Isi OPENROUTER_API_KEY di file .env lalu jalankan ulang.',
+    'The AI analyst team is off. Add OPENROUTER_API_KEY to the .env file and restart.'],
+  team_failed: ['Analisa tidak tersedia saat ini (anggaran habis atau jawaban model tidak valid).',
+    'Analysis is unavailable right now (budget reached or the model answer was invalid).'],
+  bull: ['Alasan naik', 'The case for a rise'], bear: ['Alasan turun', 'The case for a fall'],
+  sources: ['Sumber berita', 'News sources'],
+  chart_title: ['Harga dan kisaran prakiraan', 'Price and forecast range'],
+  chart_hist: ['Harga', 'Price'], chart_mid: ['Titik tengah', 'Midpoint'], chart_90: ['Kisaran 90%', '90% range'],
+  chart_50: ['Kisaran 50%', '50% range'], show_table: ['Tampilkan sebagai tabel', 'Show as a table'],
+  step: ['Langkah', 'Step'],
+  fx_title: ['Kurs', 'Currencies'], fx_lead: ['Ke mana rupiah dan mata uang utama bergerak.', 'Where the rupiah and major currencies are moving.'],
+  stocks_title: ['Saham', 'Stocks'], recs: ['Rekomendasi', 'Recommendations'], indices: ['Indeks', 'Indices'],
+  all_id: ['Semua saham Indonesia', 'All Indonesian stocks'], all_us: ['Semua saham AS', 'All US stocks'],
+  commodities: ['Komoditas dan kripto', 'Commodities and crypto'],
+  market_id: ['Indonesia', 'Indonesia'], market_us: ['Amerika Serikat', 'United States'],
+  tab_recs: ['Pilihan', 'Picks'], tab_id: ['Saham ID', 'ID stocks'], tab_us: ['Saham AS', 'US stocks'], tab_comm: ['Komoditas', 'Commodities'], market: ['Pasar', 'Market'],
+  strengths: ['3 keunggulan', '3 strengths'], why_enter: ['Kenapa masih layak masuk', 'Why it is still worth entering'],
+  risks: ['Risiko', 'Risks'], plan: ['Rencana', 'Plan'], entry: ['Masuk', 'Entry'], target: ['Target', 'Target'],
+  stop: ['Batas rugi', 'Stop'], rr: ['Imbal banding risiko', 'Reward to risk'],
+  no_recs_title: ['Tidak ada saham yang lolos saringan hari ini', 'No stock passed the screen today'],
+  no_recs_desc: ['Saringan memeriksa {n} saham. Tidak ada yang punya tiga keunggulan sekaligus tren naik. Menunggu lebih baik daripada memaksa.',
+    'The screen checked {n} stocks. None has three strengths together with an uptrend. Waiting beats forcing a pick.'],
+  recs_note: ['Saringan otomatis dari harga dan laporan keuangan. Bukan saran investasi.',
+    'An automatic screen of prices and financial statements. Not investment advice.'],
+  name: ['Nama', 'Name'], price: ['Harga', 'Price'], dir: ['Arah', 'Direction'],
+  world_title: ['Dunia dan politik', 'World and politics'],
+  world_lead: ['Peristiwa yang menggerakkan pasar, per negara.', 'Events moving markets, by country.'],
+  country: ['Negara', 'Country'], desk_off: ['Ringkasan meja negara muncul setelah tim analis AI aktif. Berikut berita terbarunya.',
+    'Desk summaries appear once the AI analyst team is on. Here are the latest headlines.'],
+  headlines: ['Berita terbaru', 'Latest headlines'], no_news: ['Belum ada berita yang terambil.', 'No headlines fetched yet.'],
+  effect: ['Dampak', 'Effect'],
+  track_title: ['Rekam jejak', 'Track record'],
+  track_lead: ['Seberapa sering prakiraan ARAH benar. Angka ini tidak dipoles.', 'How often ARAH forecasts were right. These numbers are not polished.'],
+  live: ['Prakiraan yang sudah jatuh tempo', 'Forecasts that have come due'],
+  live_empty: ['Belum ada prakiraan yang jatuh tempo. Prakiraan 1 jam mulai dinilai sekitar dua jam setelah ARAH berjalan.',
+    'No forecast has come due yet. One-hour forecasts start being scored about two hours after ARAH starts.'],
+  pending_n: ['{n} prakiraan menunggu jatuh tempo.', '{n} forecasts are waiting to come due.'],
+  scored: ['Dinilai', 'Scored'], calls: ['Tebakan arah benar', 'Direction calls right'], in_range: ['Jatuh di kisaran 90%', 'Landed in the 90% range'],
+  hist: ['Uji historis model', 'Historical test of the model'],
+  hist_lead: ['Model dijalankan mundur pada data lama, hanya dengan data yang tersedia saat itu.',
+    'The model was run on past data, using only what was available at the time.'],
+  hist_running: ['Uji historis sedang berjalan. Muat ulang halaman beberapa menit lagi.', 'The historical test is running. Reload in a few minutes.'],
+  legend_ok: ['arah dan rentang teruji', 'direction and range tested'], legend_range: ['hanya rentang teruji', 'range tested only'],
+  legend_exp: ['eksperimental', 'experimental'], asset: ['Aset', 'Asset'],
+  settings_title: ['Pengaturan', 'Settings'], language: ['Bahasa', 'Language'], theme: ['Tampilan', 'Appearance'],
+  theme_system: ['Ikuti perangkat', 'Follow device'], theme_light: ['Terang', 'Light'], theme_dark: ['Gelap', 'Dark'],
+  levels: ['Level kurs yang dipantau', 'Currency levels to watch'],
+  levels_desc: ['Pisahkan dengan koma. ARAH menghitung peluang menyentuh tiap level dan mengirim peringatan saat terlewati.',
+    'Separate with commas. ARAH works out the chance of touching each level and alerts you when one is crossed.'],
+  save: ['Simpan', 'Save'], saved: ['Tersimpan.', 'Saved.'],
+  alerts: ['Peringatan harga', 'Price alerts'], add_alert: ['Tambah peringatan', 'Add alert'], above: ['di atas', 'above'], below: ['di bawah', 'below'],
+  level: ['Level', 'Level'], remove: ['Hapus', 'Remove'], triggered: ['sudah terpicu', 'triggered'], no_alerts: ['Belum ada peringatan.', 'No alerts yet.'],
+  system: ['Sistem', 'System'], data_at: ['Data pasar terakhir', 'Latest market data'], ai_team: ['Tim analis AI', 'AI analyst team'],
+  on: ['aktif', 'on'], off: ['belum aktif', 'off'], budget: ['Biaya AI bulan ini', 'AI cost this month'],
+  telegram: ['Telegram', 'Telegram'], schedule: ['Jadwal brief', 'Brief schedule'], data_errors: ['Sumber data bermasalah', 'Data sources with problems'],
+  logout: ['Keluar', 'Sign out'], login_title: ['Masuk ke ARAH', 'Sign in to ARAH'], password: ['Kata sandi', 'Password'],
+  login: ['Masuk', 'Sign in'], wrong_pw: ['Kata sandi salah.', 'Wrong password.'], too_many: ['Terlalu banyak percobaan. Tunggu sepuluh menit.', 'Too many attempts. Wait ten minutes.'],
+  disclaimer: ['ARAH adalah alat riset pribadi. Semua angka adalah peluang, bukan kepastian, dan bukan saran investasi.',
+    'ARAH is a personal research tool. Every number is a chance, not a certainty, and not investment advice.'],
+  up: ['cenderung naik', 'leans up'], down: ['cenderung turun', 'leans down'], flat: ['belum jelas', 'unclear'],
+  thin: ['data per jam tipis', 'thin hourly data'],
+} as const;
+
+export type Key = keyof typeof S;
+export const LangCtx = createContext<Lang>('id');
+
+export function useT() {
+  const lang = useContext(LangCtx);
+  const t = (key: Key, vars?: Record<string, string | number>) => {
+    let s: string = S[key][lang === 'id' ? 0 : 1];
+    for (const [k, v] of Object.entries(vars ?? {})) s = s.replace(`{${k}}`, String(v));
+    return s;
+  };
+  const l = (text: L | null | undefined) => (text ? text[lang] : '');
+  const nm = (x: {name: string; name_en?: string}) => (lang === 'en' && x.name_en ? x.name_en : x.name);
+  const locale = lang === 'id' ? 'id-ID' : 'en-US';
+  const num = (x: number, decimals = 2) =>
+    new Intl.NumberFormat(locale, {minimumFractionDigits: decimals, maximumFractionDigits: decimals}).format(x);
+  const pct = (x: number | null | undefined, digits = 1) =>
+    x == null ? '' : `${x > 0 ? '+' : ''}${new Intl.NumberFormat(locale, {minimumFractionDigits: digits, maximumFractionDigits: digits}).format(x)}%`;
+  const when = (ts: number | null | undefined) =>
+    ts ? new Intl.DateTimeFormat(locale, {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}).format(ts * 1000) : '';
+  return {t, l, nm, num, pct, when, lang};
+}
