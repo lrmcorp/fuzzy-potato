@@ -2,7 +2,7 @@
 __pycache__/
 *.pyc
 .env
-data/
+/data/
 node_modules/
 web/dist/
 .pytest_cache/

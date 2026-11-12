@@ -1,0 +1,216 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+from urllib.parse import quote
+
+import httpx
+import numpy as np
+
+from ..db import DB
+
+log = logging.getLogger("arah.yahoo")
+
+BASE = "https://query1.finance.yahoo.com"
+# Yahoo answers 429 to detailed browser user agents but serves a bare one.
+HEADERS = {"User-Agent": "Mozilla/5.0"}
+FIRST_RANGE = {"1h": "730d", "1d": "10y"}
+# Yahoo rejects hourly requests that reach back more than 730 days.
+REFRESH_RANGE = {"1h": "5d", "1d": "1mo"}
+MIN_REFRESH_GAP = {"1h": 600, "1d": 1800}
+
+
+class YahooError(Exception):
+    pass
+
+
+async def _get_json(client: httpx.AsyncClient, url: str, params: dict) -> dict:
+    last: Exception | None = None
+    for attempt in range(3):
+        try:
+            r = await client.get(url, params=params, headers=HEADERS, timeout=25)
+            if r.status_code == 404:
+                raise YahooError(f"not found: {url}")
+            if r.status_code == 429 or r.status_code >= 500:
+                raise httpx.HTTPStatusError("retryable", request=r.request, response=r)
+            r.raise_for_status()
+            return r.json()
+        except YahooError:
+            raise
+        except (httpx.HTTPError, ValueError) as e:
+            last = e
+            await asyncio.sleep(1.5 * (attempt + 1))
+    raise YahooError(f"request failed: {last}")
+
+
+async def fetch_chart(client: httpx.AsyncClient, symbol: str, interval: str, rng: str) -> tuple[dict, list[tuple]]:
+    data = await _get_json(
+        client, f"{BASE}/v8/finance/chart/{quote(symbol)}", {"range": rng, "interval": interval}
+    )
+    try:
+        res = data["chart"]["result"][0]
+    except (KeyError, IndexError, TypeError):
+        raise YahooError(f"empty chart for {symbol}")
+    ts = res.get("timestamp") or []
+    q = (res.get("indicators", {}).get("quote") or [{}])[0]
+    rows = []
+    for i, t in enumerate(ts):
+        c = (q.get("close") or [None])[i]
+        if c is None or c <= 0:
+            continue
+        o = (q.get("open") or [None])[i]
+        h = (q.get("high") or [None])[i]
+        l = (q.get("low") or [None])[i]
+        v = (q.get("volume") or [None])[i]
+        rows.append((int(t), o or c, h or c, l or c, float(c), v or 0))
+    return res.get("meta", {}), rows
+
+
+def _bucket(ts: int, interval: str, gmtoffset: int = 0) -> int:
+    # The live bar carries the timestamp of the last trade; snap it to the
+    # bar start so a refresh overwrites it instead of adding a duplicate.
+    if interval == "1h":
+        return ts - ts % 3600
+    # Daily bars are keyed by the exchange's local calendar date.
+    return (ts + gmtoffset) // 86400 * 86400
+
+
+async def refresh_symbol(db: DB, client: httpx.AsyncClient, symbol: str, interval: str, force: bool = False) -> int:
+    stamp_key = f"fetched:{symbol}:{interval}"
+    last_fetch = db.get(stamp_key, 0)
+    if not force and time.time() - last_fetch < MIN_REFRESH_GAP[interval]:
+        return 0
+    have = db.one("SELECT COUNT(*) n, MAX(ts) m FROM bars WHERE symbol=? AND interval=?", (symbol, interval))
+    stale = have["m"] is None or time.time() - have["m"] > 20 * 86400
+    rng = FIRST_RANGE[interval] if have["n"] < 200 or stale else REFRESH_RANGE[interval]
+    meta, rows = await fetch_chart(client, symbol, interval, rng)
+    gmt = int(meta.get("gmtoffset") or 0)
+    if rows:
+        with db.tx() as c:
+            c.executemany(
+                "INSERT INTO bars (symbol, interval, ts, o, h, l, c, v) VALUES (?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(symbol, interval, ts) DO UPDATE SET o=excluded.o, h=excluded.h, "
+                "l=excluded.l, c=excluded.c, v=excluded.v",
+                [(symbol, interval, _bucket(r[0], interval, gmt), *r[1:]) for r in rows],
+            )
+    price = meta.get("regularMarketPrice")
+    if price:
+        db.x(
+            "INSERT INTO quotes (symbol, price, prev_close, market_ts, currency, fetched_at) VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT(symbol) DO UPDATE SET price=excluded.price, prev_close=excluded.prev_close, "
+            "market_ts=excluded.market_ts, currency=excluded.currency, fetched_at=excluded.fetched_at",
+            (symbol, price, meta.get("previousClose") or meta.get("chartPreviousClose"),
+             meta.get("regularMarketTime"), meta.get("currency"), int(time.time())),
+        )
+    db.set(stamp_key, int(time.time()))
+    return len(rows)
+
+
+async def refresh_many(db: DB, symbols: list[str], intervals: tuple[str, ...] = ("1h", "1d"),
+                       force: bool = False) -> dict[str, str]:
+    """Refresh bars for many symbols. Returns {symbol: error} for the ones that failed."""
+    errors: dict[str, str] = {}
+    sem = asyncio.Semaphore(4)
+
+    async def one(client: httpx.AsyncClient, sym: str, iv: str) -> None:
+        async with sem:
+            try:
+                await refresh_symbol(db, client, sym, iv, force)
+            except Exception as e:  # one bad symbol must not stop the batch
+                errors[sym] = str(e)[:160]
+                log.warning("refresh %s %s failed: %s", sym, iv, e)
+
+    async with httpx.AsyncClient(http2=False) as client:
+        await asyncio.gather(*(one(client, s, iv) for s in symbols for iv in intervals))
+    return errors
+
+
+def spike_mask(c: np.ndarray, k: float = 6.0, max_run: int = 5) -> np.ndarray:
+    """True for bad ticks: a jump far outside normal moves that is undone by an equal jump back.
+
+    Covers single bars and short flat runs (Yahoo sometimes serves several wrong
+    daily closes in a row). A real shock is kept: prices keep moving after it
+    instead of sitting still and then snapping back.
+    """
+    bad = np.zeros(len(c), dtype=bool)
+    if len(c) < 30:
+        return bad
+    r = np.diff(np.log(c))
+    nz = r[r != 0]
+    if len(nz) < 20:
+        return bad
+    sigma = 1.4826 * np.median(np.abs(nz - np.median(nz))) or nz.std()
+    i = 0
+    while i < len(r) - 1:
+        if abs(r[i]) > k * sigma:
+            for run in range(1, max_run + 1):
+                j = i + run
+                if j >= len(r):
+                    break
+                calm = np.all(np.abs(r[i + 1:j]) < 2.5 * sigma)
+                if calm and abs(r[j]) > k * sigma and abs(r[i:j + 1].sum()) < 0.35 * abs(r[i]):
+                    bad[i + 1:j + 1] = True
+                    i = j
+                    break
+        i += 1
+    return bad
+
+
+def load_bars(db: DB, symbol: str, interval: str, limit: int = 3000, clean: bool = True) -> dict[str, np.ndarray]:
+    rows = db.q(
+        "SELECT ts, o, h, l, c, v FROM bars WHERE symbol=? AND interval=? ORDER BY ts DESC LIMIT ?",
+        (symbol, interval, limit),
+    )
+    rows = rows[::-1]
+    out = {
+        "ts": np.array([r["ts"] for r in rows], dtype=np.int64),
+        "o": np.array([r["o"] for r in rows], dtype=float),
+        "h": np.array([r["h"] for r in rows], dtype=float),
+        "l": np.array([r["l"] for r in rows], dtype=float),
+        "c": np.array([r["c"] for r in rows], dtype=float),
+        "v": np.array([r["v"] or 0 for r in rows], dtype=float),
+    }
+    if clean and len(rows):
+        # Yahoo's FX series carry bad ticks, sometimes for days. Exchange-traded prices are
+        # cleaner, and their sharp reversals are usually real, so they get a much higher bar.
+        fx = symbol.endswith("=X")
+        keep = ~spike_mask(out["c"], k=6.0 if fx else 14.0, max_run=5 if fx else 1)
+        out = {k: v[keep] for k, v in out.items()}
+    return out
+
+
+def quote_of(db: DB, symbol: str) -> dict | None:
+    row = db.one("SELECT * FROM quotes WHERE symbol=?", (symbol,))
+    return dict(row) if row else None
+
+
+FUND_TYPES = "trailingPeRatio,trailingPbRatio,trailingMarketCap,annualTotalRevenue,annualNetIncome,annualDilutedEPS"
+
+
+async def fetch_fundamentals(db: DB, symbol: str, max_age: int = 86400) -> dict:
+    """Valuation and growth figures from Yahoo's timeseries endpoint, cached for a day."""
+    key = f"fund:{symbol}"
+    cached = db.get(key)
+    if cached and time.time() - cached.get("_at", 0) < max_age:
+        return cached
+    now = int(time.time())
+    out: dict = {"_at": now}
+    try:
+        async with httpx.AsyncClient() as client:
+            data = await _get_json(
+                client,
+                f"{BASE}/ws/fundamentals-timeseries/v1/finance/timeseries/{quote(symbol)}",
+                {"type": FUND_TYPES, "period1": now - 6 * 365 * 86400, "period2": now},
+            )
+        for series in data.get("timeseries", {}).get("result", []):
+            name = (series.get("meta", {}).get("type") or [None])[0]
+            points = [p for p in series.get(name, []) if p and p.get("reportedValue")]
+            if name and points:
+                out[name] = [
+                    {"date": p["asOfDate"], "value": p["reportedValue"]["raw"]} for p in points
+                ]
+    except YahooError as e:
+        log.info("no fundamentals for %s: %s", symbol, e)
+    db.set(key, out)
+    return out
