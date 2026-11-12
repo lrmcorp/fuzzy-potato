@@ -68,7 +68,7 @@ def format_view(view: dict, lang: str) -> str:
     return "\n".join(lines)
 
 
-MARK = {"good": "🟢", "neutral": "⚪", "bad": "🔴"}
+MARK = {"good": "🟢", "bad": "🔴"}
 
 
 def format_brief(brief: dict, lang: str) -> str:

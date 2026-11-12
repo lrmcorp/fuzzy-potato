@@ -11,7 +11,8 @@ in plain Bahasa Indonesia or English, where markets are heading and why:
 - stock picks for Indonesia and the US, and a rupiah watch level with the chance of touching levels such as 18,500.
 
 "Good" is from the side of someone holding rupiah: rising stocks are good, a weaker rupiah is not.
-"Next month" turns good or at risk only when the chance reaches 55%. Below that it says "unclear".
+Every answer is a yes or a no. "Next month" takes the likelier side even when the edge is thin, and states
+the chance and how strong it is (thin under 55%, fair to 59%, strong from 60%).
 
 The product requirements are in [docs/PRD.md](docs/PRD.md). The visual direction is in [DESIGN.md](DESIGN.md).
 

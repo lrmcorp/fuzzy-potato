@@ -150,7 +150,6 @@ table.grid td { text-align: center; }
 .pill-v { font-size: 1.0625rem; font-weight: 700; }
 .pill-good { background: var(--color-success-muted); color: var(--color-on-success-muted); border-left-color: var(--color-success); }
 .pill-bad { background: var(--color-error-muted); color: var(--color-on-error-muted); border-left-color: var(--color-error); }
-.pill-neutral { background: var(--color-background-muted); color: var(--color-text-primary); border-left-color: var(--color-border-emphasized); }
 .pills.small { margin: 0.4rem 0 0; }
 .pills.small .pill { min-width: 7rem; padding: 0.3rem 0.6rem; }
 .pills.small .pill-v { font-size: 0.9375rem; }
