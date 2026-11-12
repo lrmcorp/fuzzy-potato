@@ -4,10 +4,10 @@
 |---|---|
 | **Document** | Product Requirements Document (PRD) |
 | **Product (working name)** | **ARAH** — *"arah"* = "direction" in Bahasa Indonesia |
-| **Version** | 0.2 (draft for review — LLM decision: DeepSeek via OpenRouter) |
+| **Version** | 0.3 (owner decisions resolved — see §16) |
 | **Date** | 2026-11-12 |
 | **Owner** | Single owner / single user |
-| **Status** | Draft — awaiting owner approval before implementation |
+| **Status** | Decisions resolved — ready for M0 |
 | **Language** | PRD in English; the application is bilingual (Bahasa Indonesia / English) |
 
 ---
@@ -536,14 +536,18 @@ Total to v1: **about 14–16 weeks** of focused development (estimate).
 
 ---
 
-## 16. Open Questions (for owner, before or during M0)
+## 16. Owner Decisions (resolved 2026-11-12 — all defaults accepted)
 
-1. **Product name:** keep "ARAH" or choose another?
-2. **Default watchlists:** which IDX and US tickers and FX levels (e.g. USD/IDR 18,000 / 18,500) should be preconfigured?
-3. **Brief schedule:** are the proposed WIB times OK?
-4. **Monthly budget ceiling** for LLM + data (e.g. US$150?), used to set the cost guard.
-5. **Stockbit opt-in:** will you provide your own session for real-time IDX and forum data, accepting the ToS risk?
-6. **VPS region:** Singapore (cheaper, good latency) or a Jakarta provider (closest, pricier)?
+| # | Topic | Decision |
+|---|---|---|
+| 1 | Product name | **ARAH** |
+| 2 | Default watchlists | **IDX:** BBCA, BBRI, BMRI, TLKM, ASII, ADRO, ANTM, GOTO + IHSG, LQ45. **US:** NVDA, AAPL, MSFT, GOOGL, AMZN + S&P 500, NASDAQ. **FX:** USD/IDR (alerts at 17,500 / 18,000 / 18,500), JPY/IDR, SGD/IDR, DXY. **Commodities:** coal, CPO, nickel, gold, oil. **Crypto:** BTC, ETH. All editable in Settings. |
+| 3 | Brief schedule (WIB) | 07:30 pre-IDX · 12:00 midday · 16:30 post-close · 20:00 pre-US · 05:00 US recap · Sunday 19:00 weekly outlook |
+| 4 | Monthly budget ceiling | **US$30** (LLM + data). On reaching it: downgrade to Quick depth / quick-tier model and notify via Telegram. |
+| 5 | Stockbit opt-in | **No** at launch. Free data only; Stockbit adapter stays disabled (can be enabled later by the owner). |
+| 6 | VPS region (production, after laptop phase) | **Singapore** |
+
+Remaining input needed for M0: the owner's laptop/PC OS and RAM (to choose standard vs `--lite` install).
 
 ---
 
