@@ -537,3 +537,38 @@ def test_one_price_source_per_asset(db):
          (a.symbol, 1.0, 1.0, 0, "IDR", 0, int(time.time()) - 900))
     assert quote_info(db, a)["price"] == 9000.0
     assert quote_info(db, BY_KEY["N225"])["delay_min"] == 15 and quote_info(db, BY_KEY["USDIDR"])["delay_min"] == 0
+
+
+def test_picks_show_market_columns_and_held_status(db, monkeypatch):
+    import asyncio
+
+    from arah import recommend
+    from arah import verdict_rules as rules
+    from arah.recommend import build_recs, evaluate
+    from arah.universe import BY_KEY
+
+    async def no_fund(db_, symbol):
+        return {}
+
+    monkeypatch.setattr(recommend, "fetch_fundamentals", no_fund)
+    c = evaluate(db, BY_KEY["BBCA"], {}, None)
+    assert c["currency"] == "IDR" and c["sector"] == "Bank" and c["lot_size"] == 100
+    assert c["min_capital"] == c["price"] * 100 and c["horizon_days"] == 31
+    # Liquidity is the 20-day average of close × volume from the bars.
+    bars = db.q("SELECT c, v FROM bars WHERE symbol='BBCA.JK' AND interval='1d' ORDER BY ts DESC LIMIT 20")
+    assert abs(c["liquidity"] - sum(b["c"] * b["v"] for b in bars) / 20) < 1e-3 * c["liquidity"]
+    u = evaluate(db, BY_KEY["AAPL"], {}, None)
+    assert u["currency"] == "USD" and u["min_capital"] == u["price"]
+
+    # A stock picked earlier that dropped off the list stays visible and is not logged twice.
+    db.x("INSERT INTO picks_ledger (asset, made_at, price, stop, t1, t2, horizon_days) VALUES ('BBCA',?,1,0.5,2,3,31)", (int(time.time()),))
+    out = asyncio.run(build_recs(db, top=0))
+    held = [x for x in out["ID"] if x.get("held")]
+    assert [x["key"] for x in held] == ["BBCA"]
+    assert db.one("SELECT COUNT(*) n FROM picks_ledger")["n"] == 1
+
+    # Hindari on a held stock reads "Kurangi"; a new pick keeps its verdict.
+    assert rules.pick_status({"held": True}, "hindari") == "kurangi"
+    assert rules.pick_status({"held": True}, "tunggu") == "tunggu"
+    assert rules.pick_status({}, "hindari") == "hindari"
+    assert rules.tag("kurangi")["label"] == "Kurangi"

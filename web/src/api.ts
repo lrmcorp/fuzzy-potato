@@ -85,6 +85,8 @@ export interface RecCard {
   key: string; name: string; country: string; decimals: number; unit?: string; price: number; chg1d: number | null;
   strengths: L[]; risks: L[]; why: L; p_up_1m: number; pe: number | null; tag?: TagInfo | null; score?: number | null;
   plan: {entry: [number, number]; stop: number; targets: [number, number]; rr: number}; spark: number[];
+  currency?: 'IDR' | 'USD'; sector?: string | null; liquidity?: number | null; lot_size?: number; min_capital?: number;
+  horizon_days?: number; held?: boolean;
 }
 export interface RecordInfo {horizon: string; n: number; hits: number; pct: number | null; pending: number; enough: boolean}
 export interface PicksRecord {closed: number; open: number; target: number; stop: number; expired: number;

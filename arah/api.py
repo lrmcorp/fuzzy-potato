@@ -298,7 +298,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         for m in ("ID", "US"):
             for c in r.get(m, []):
                 v = vs.get(c["key"]) or {}
-                c["tag"] = rules.tag(v["verdict"]) if v.get("verdict") in rules.ACTIONS else None
+                c["tag"] = rules.tag(rules.pick_status(c, v["verdict"])) if v.get("verdict") in rules.ACTIONS else None
                 c["score"] = v.get("score")
         return r
 

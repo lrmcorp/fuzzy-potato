@@ -23,6 +23,8 @@ ACTIONS = {
     "bertahap": ("Masuk bertahap", "half", "green"),
     "tunggu": ("Tunggu", "square", "grey"),
     "hindari": ("Hindari", "down", "orange"),
+    # Only for a stock ARAH picked earlier and still tracks: the case has weakened, so take some off the table.
+    "kurangi": ("Kurangi", "down", "orange"),
 }
 DIRECTIONS = {"naik": ("Naik", "up", "green"), "datar": ("Datar", "square", "grey"), "turun": ("Turun", "down", "orange"),
               "belum_jelas": ("Belum jelas arahnya", "square", "grey")}
@@ -71,6 +73,14 @@ def sentence(key: str, score: float | None, p_up: float | None) -> str:
     if score is None or p_up is None:
         return "Data belum cukup untuk memutuskan."
     return "Sinyal campur, tunggu arah lebih jelas."
+
+
+def pick_status(card: dict, verdict: str | None) -> str | None:
+    """Status of a stock on the Pilihan list. A stock the owner may already hold from an earlier pick reads
+    "Kurangi" when its verdict has fallen to Hindari; everything else shows its verdict as is."""
+    if card.get("held") and verdict == "hindari":
+        return "kurangi"
+    return verdict
 
 
 def tag(key: str) -> dict:

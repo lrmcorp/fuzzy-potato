@@ -389,3 +389,11 @@ a:hover { text-decoration: underline; }
 @media (max-width: 760px) { .mcard .spark-lbl, .mcard .src-line { display: none; } .chg-pair { flex-direction: column; } }
 .src-short { font-size: 11px; font-weight: 400; }
 @media (max-width: 760px) { .wl-chg { grid-area: chg; justify-content: flex-end; } .src-short { display: none; } }
+
+/* Fase 3: Pilihan ARAH columns */
+.pick-sector { display: block; margin-top: 2px; }
+.picks-head { display: flex; align-items: baseline; gap: var(--s2); margin: var(--s4) 0 0; font-size: 18px; font-weight: 600; }
+.pick-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); margin: 0; }
+.pick-facts div { min-width: 0; }
+.pick-facts dt { font-size: 12px; color: var(--muted); }
+.pick-facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }

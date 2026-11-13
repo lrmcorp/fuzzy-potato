@@ -12,6 +12,27 @@ const SEGS = [
 ];
 const GROUP: Record<string, string> = {indeks: 'index', kurs: 'fx', komoditas: 'commodity'};
 
+/** Rp 1,2 T / Rp 85 M per day, or $1,2 mlr / $350 jt; "—" when unknown. */
+export function compact(x: number | null | undefined, cur: 'IDR' | 'USD' = 'IDR') {
+  if (x == null || !isFinite(x) || x <= 0) return '—';
+  const f = (v: number) => v.toLocaleString('id-ID', {maximumFractionDigits: v < 10 ? 1 : 0, minimumFractionDigits: 0});
+  const [n, u]: [number, string] = cur === 'IDR'
+    ? x >= 1e12 ? [x / 1e12, 'T'] : x >= 1e9 ? [x / 1e9, 'M'] : x >= 1e6 ? [x / 1e6, 'jt'] : [x, '']
+    : x >= 1e9 ? [x / 1e9, 'mlr'] : x >= 1e6 ? [x / 1e6, 'jt'] : [x, ''];
+  const body = `${f(n)}${u ? ' ' + u : ''}`;
+  return cur === 'IDR' ? `Rp ${body}` : `$${body}`;
+}
+
+/** Smallest buy: 1 lot (100 shares) on IDX, 1 share in the US. */
+function minCap(c: RecCard) {
+  const cur = c.currency ?? (c.country === 'ID' ? 'IDR' : 'USD');
+  const v = c.min_capital ?? c.price * (c.country === 'ID' ? 100 : 1);
+  return cur === 'IDR' ? `Rp ${v.toLocaleString('id-ID', {maximumFractionDigits: 0})}`
+    : `$${v.toLocaleString('id-ID', {maximumFractionDigits: 2, minimumFractionDigits: 2})}`;
+}
+const horizon = (c: RecCard) => `~${Math.max(1, Math.round((c.horizon_days ?? 31) / 30))} bln`;
+const rrText = (c: RecCard, num: (x: number, d?: number) => string) => c.plan?.rr != null ? `1 : ${num(c.plan.rr, 1)}` : '—';
+
 /** One line from the market's condition: how big a position the moment allows. */
 function ContextChip({s}: {s: Simple | null | undefined}) {
   const {pct} = useT();
@@ -105,11 +126,16 @@ function PickRow({c, paused}: {c: RecCard; paused: boolean}) {
   return (
     <>
       <tr>
-        <td><a href={`#/a/${encodeURIComponent(c.key)}`} style={{color: 'var(--ink)'}}><b className="row-title">{c.key}</b> <span className="muted">{c.name}</span></a></td>
+        <td>
+          <a href={`#/a/${encodeURIComponent(c.key)}`} style={{color: 'var(--ink)'}}><b className="row-title">{c.key}</b> <span className="muted">{c.name}</span></a>
+          <span className="caption pick-sector">{c.sector ?? '—'}{c.held ? ' · pilihan sebelumnya' : ''}</span>
+        </td>
         <td><VerdictTag tag={c.tag} paused={paused} /></td>
         <td className="num">{num(c.price, c.decimals)}</td>
-        {has ? <><td className="num chg-up" style={{fontWeight: 600}}>{pct(t1, 1)}</td><td className="num chg-down" style={{fontWeight: 600}}>{pct(loss, 1)}</td></>
-          : <td className="num muted" colSpan={2}>Rencana belum tersedia</td>}
+        {has ? <><td className="num chg-up" style={{fontWeight: 600}}>{pct(t1, 1)}</td><td className="num chg-down" style={{fontWeight: 600}}>{pct(loss, 1)}</td><td className="num">{rrText(c, num)}</td></>
+          : <td className="num muted" colSpan={3}>Rencana belum tersedia</td>}
+        <td className="num">{minCap(c)}</td>
+        <td className="num">{compact(c.liquidity, c.currency)}</td>
         <td style={{width: 48}}>
           <button type="button" className="icon-btn" aria-expanded={open} aria-label={`${open ? 'Tutup' : 'Buka'} rencana ${c.key}`} onClick={() => setOpen(!open)}>
             <Icon name="chevron" className="chev" />
@@ -118,7 +144,7 @@ function PickRow({c, paused}: {c: RecCard; paused: boolean}) {
       </tr>
       {open && (
         <tr className="expanded-row">
-          <td colSpan={6}>
+          <td colSpan={9}>
             {has ? (
               <div className="pick-expand">
                 <div className="stack">
@@ -147,9 +173,15 @@ function PickCard({c, paused}: {c: RecCard; paused: boolean}) {
         <a href={`#/a/${encodeURIComponent(c.key)}`} style={{color: 'var(--ink)'}}><b className="row-title">{c.key}</b> <span className="muted">{num(c.price, c.decimals)}</span></a>
         <VerdictTag tag={c.tag} paused={paused} />
       </div>
+      <span className="caption">{c.sector ?? '—'}{c.held ? ' · pilihan sebelumnya' : ''}</span>
       {has ? (
         <>
-          <p className="body" style={{margin: 0}}>Target <b className="chg-up">{pct((c.plan.targets[0] / c.price - 1) * 100, 1)}</b> · Rugi maks <b className="chg-down">{pct((c.plan.stop / c.price - 1) * 100, 1)}</b></p>
+          <p className="body" style={{margin: 0}}>Target 1 · {horizon(c)} <b className="chg-up">{pct((c.plan.targets[0] / c.price - 1) * 100, 1)}</b> · Rugi maks <b className="chg-down">{pct((c.plan.stop / c.price - 1) * 100, 1)}</b></p>
+          <dl className="pick-facts">
+            <div><dt>Modal 1 {c.country === 'ID' ? 'lot' : 'lembar'}</dt><dd>{minCap(c)}</dd></div>
+            <div><dt>Risiko : hasil</dt><dd>{rrText(c, num)}</dd></div>
+            <div><dt>Transaksi/hari</dt><dd>{compact(c.liquidity, c.currency)}</dd></div>
+          </dl>
           <Ruler c={c} mini />
           <button type="button" className="btn btn-primary btn-block" onClick={() => openAlertSheet(c.key, {allPlan: true})}>Pasang 3 peringatan</button>
           <div className="chips">
@@ -177,20 +209,43 @@ function PicksRecordLine({onAuth}: {onAuth: () => void}) {
   );
 }
 
+const MARKETS = [
+  {key: 'ID' as const, title: 'Saham Indonesia', cur: 'IDR'},
+  {key: 'US' as const, title: 'Saham Amerika', cur: 'USD'},
+];
+
 function Picks({onAuth, paused}: {onAuth: () => void; paused: boolean}) {
   const recs = useLoad(api.recs, [], onAuth);
   if (!recs.data) return <div className="card"><Skeleton lines={4} /></div>;
-  const all = [...recs.data.ID, ...recs.data.US];
-  if (all.length === 0) return <div className="card"><p className="body" style={{margin: 0}}>Hari ini belum ada saham yang lolos. ARAH menunggu.</p></div>;
+  const d = recs.data;
+  if (d.ID.length + d.US.length === 0) return <div className="card"><p className="body" style={{margin: 0}}>Hari ini belum ada saham yang lolos. ARAH menunggu.</p></div>;
   return (
     <>
-      <div className="card only-desk" style={{padding: 0, overflowX: 'auto'}}>
-        <table className="ptable">
-          <thead><tr><th style={{paddingLeft: 'var(--s5)'}}>Saham</th><th>Keputusan</th><th className="num">Harga</th><th className="num">Target 1</th><th className="num">Rugi maks</th><th /></tr></thead>
-          <tbody>{all.map(c => <PickRow key={c.key} c={c} paused={paused} />)}</tbody>
-        </table>
-      </div>
-      <div className="pcards only-phone" style={{flexDirection: 'column'}}>{all.map(c => <PickCard key={c.key} c={c} paused={paused} />)}</div>
+      {MARKETS.map(m => {
+        const list = d[m.key];
+        const h = list[0] ? horizon(list[0]) : '~1 bln';
+        return (
+          <section key={m.key} className="stack" aria-labelledby={`picks-${m.key}`}>
+            <h2 id={`picks-${m.key}`} className="picks-head">{m.title} <span className="caption">harga dalam {m.cur}</span></h2>
+            {list.length === 0 ? <div className="card"><p className="body" style={{margin: 0}}>Belum ada saham {m.key === 'ID' ? 'Indonesia' : 'Amerika'} yang lolos hari ini.</p></div> : (
+              <>
+                <div className="card only-desk" style={{padding: 0, overflowX: 'auto'}}>
+                  <table className="ptable">
+                    <thead><tr>
+                      <th>Saham</th><th>Status</th><th className="num">Harga ({m.cur})</th>
+                      <th className="num">Target 1 · {h}</th><th className="num">Rugi maks</th><th className="num">Risiko : hasil</th>
+                      <th className="num">Modal 1 {m.key === 'ID' ? 'lot' : 'lembar'}</th><th className="num">Transaksi/hari</th><th />
+                    </tr></thead>
+                    <tbody>{list.map(c => <PickRow key={c.key} c={c} paused={paused} />)}</tbody>
+                  </table>
+                </div>
+                <div className="pcards only-phone" style={{flexDirection: 'column'}}>{list.map(c => <PickCard key={c.key} c={c} paused={paused} />)}</div>
+              </>
+            )}
+          </section>
+        );
+      })}
+      <p className="caption">Transaksi/hari: rata-rata nilai transaksi 20 hari bursa terakhir. Risiko : hasil membandingkan jarak ke batas rugi dengan jarak ke target 1.</p>
     </>
   );
 }

@@ -17,11 +17,11 @@ from .data.yahoo import fetch_fundamentals
 from .db import DB
 from .service import forecast_asset
 from .signals import both, fmt_num, fmt_pct, fmt_price, snapshot
-from .universe import BENCHMARK, BY_KEY, STOCKS, Asset
+from .universe import BENCHMARK, BY_KEY, SECTOR, STOCKS, Asset
 
 log = logging.getLogger("arah.recommend")
 # Bumped when the verdict's words or shape change, so stored verdicts are recomputed on the next start.
-VERDICTS_V = 2
+VERDICTS_V = 3
 
 # Minimum average daily value traded, in the stock's own currency.
 MIN_VALUE = {"ID": 20e9, "US": 50e6}
@@ -172,6 +172,11 @@ def evaluate(db: DB, asset: Asset, fund: dict, bench: dict | None, sbt: dict | N
         "why": why, "plan": {"entry": [entry_lo, entry_hi], "stop": stop, "targets": [target1, target2],
                              "rr": round((target1 - entry_hi) / risk_per, 1)},
         "pe": pe, "pb": pb, "spark": s["spark"],
+        "currency": "IDR" if asset.country == "ID" else "USD", "sector": SECTOR.get(asset.key),
+        # Average value traded per day over the last 20 sessions, and what the smallest buy costs (1 lot = 100 shares
+        # on IDX, 1 share in the US).
+        "liquidity": s["avg_value"] or None, "lot_size": 100 if asset.country == "ID" else 1,
+        "min_capital": p * (100 if asset.country == "ID" else 1), "horizon_days": PICK_DAYS,
     }
 
 
@@ -200,6 +205,7 @@ async def build_recs(db: DB, top: int = 5) -> dict:
             fetched += 1
         else:
             sbts[a.key] = {k: c.get("v") for k, c in cached.items()}
+    cards: dict[str, dict] = {}
     out: dict = {"at": int(time.time()), "ID": [], "US": [], "screened": {"ID": 0, "US": 0}, "missing": {"ID": 0, "US": 0}}
     for a, fd in zip(STOCKS, funds):
         try:
@@ -211,6 +217,7 @@ async def build_recs(db: DB, top: int = 5) -> dict:
             out["missing"][a.country] += 1
             continue
         out["screened"][a.country] += 1
+        cards[a.key] = card
         if card["ok"]:
             out[a.country].append(card)
     # A verdict for every stock, kept with the screen so lists can show it without recomputing.
@@ -226,6 +233,15 @@ async def build_recs(db: DB, top: int = 5) -> dict:
     db.set("verdicts", {"at": int(time.time()), "v": VERDICTS_V, "items": verdicts})
     for c in ("ID", "US"):
         out[c] = sorted(out[c], key=lambda x: -x["score"])[:top]
+    # Earlier picks still being tracked that dropped off today's list stay visible, so the owner hears when to
+    # hold off or take some off the table instead of the stock silently disappearing.
+    shown = {c["key"] for m in ("ID", "US") for c in out[m]}
+    for row in db.q("SELECT asset FROM picks_ledger WHERE status='open'"):
+        k = row["asset"]
+        if k in shown or k not in cards:
+            continue
+        out[cards[k]["country"]].append({**cards[k], "held": True})
+        shown.add(k)
     if not sum(out["screened"].values()):
         # No price history to screen (a download failed): keep the last real screen instead of an empty one.
         prev = db.latest_report("recs")
@@ -246,7 +262,7 @@ def log_picks(db: DB, out: dict) -> int:
     for m in ("ID", "US"):
         for c in out.get(m, []):
             p = c.get("plan")
-            if not p or db.one("SELECT 1 FROM picks_ledger WHERE asset=? AND status='open'", (c["key"],)):
+            if not p or c.get("held") or db.one("SELECT 1 FROM picks_ledger WHERE asset=? AND status='open'", (c["key"],)):
                 continue
             db.x("INSERT INTO picks_ledger (asset, made_at, price, stop, t1, t2, horizon_days) VALUES (?,?,?,?,?,?,?)",
                  (c["key"], int(time.time()), c["price"], p["stop"], p["targets"][0], p["targets"][1], PICK_DAYS))
