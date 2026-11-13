@@ -24,6 +24,27 @@ def _float(name: str, default: float) -> float:
         return default
 
 
+# News sources ARAH shows, by tier. A story is shown only when at least one tiered outlet ran it; headlines with
+# no named source are hidden. Each entry is matched as a lower-case substring of the outlet's name or domain.
+# Override with ARAH_NEWS_TIER1 / ARAH_NEWS_TIER2 (comma-separated) without changing code.
+NEWS_TIERS_DEFAULT = {
+    1: ["kontan", "bisnis.com", "bisnis indonesia", "cnbc indonesia", "cnbcindonesia", "bloomberg technoz",
+        "bloombergtechnoz", "antara", "kompas", "idx channel", "idxchannel"],
+    2: ["reuters", "bloomberg", "cnbc", "wall street journal", "wsj", "financial times", "associated press", "ap news",
+        "marketwatch", "barron", "nikkei", "straits times", "south china morning post", "scmp", "caixin",
+        "federal reserve", "european central bank", "bank indonesia", "investor.id", "katadata"],
+}
+
+
+def news_tiers() -> dict[int, list[str]]:
+    tiers = {k: list(v) for k, v in NEWS_TIERS_DEFAULT.items()}
+    for k in (1, 2):
+        raw = os.environ.get(f"ARAH_NEWS_TIER{k}", "").strip()
+        if raw:
+            tiers[k] = [x.strip().lower() for x in raw.split(",") if x.strip()]
+    return tiers
+
+
 @dataclass(frozen=True)
 class Settings:
     data_dir: Path = field(default_factory=lambda: Path(os.environ.get("ARAH_DATA_DIR", "data")))

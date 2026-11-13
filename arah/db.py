@@ -45,6 +45,13 @@ CREATE TABLE IF NOT EXISTS reports (
 );
 CREATE INDEX IF NOT EXISTS reports_kind ON reports (kind, key, created_at DESC);
 
+-- Every stock ARAH picked, with its plan, and how it ended: target 1, stop, or the horizon ran out.
+CREATE TABLE IF NOT EXISTS picks_ledger (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, asset TEXT NOT NULL, made_at INTEGER NOT NULL, price REAL NOT NULL,
+  stop REAL NOT NULL, t1 REAL NOT NULL, t2 REAL NOT NULL, horizon_days INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open', closed_at INTEGER, close_price REAL
+);
+
 CREATE TABLE IF NOT EXISTS alerts (
   id INTEGER PRIMARY KEY AUTOINCREMENT, asset TEXT NOT NULL, op TEXT NOT NULL,
   level REAL NOT NULL, created_at INTEGER NOT NULL, triggered_at INTEGER, last_price REAL

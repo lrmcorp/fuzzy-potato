@@ -25,7 +25,7 @@ from .extras import flips
 from .data.yahoo import GATE, build_synthetic, refresh_many
 from .db import DB
 from .outlook import SIMPLE_V, build_simple
-from .recommend import VERDICTS_V, build_recs, recs_ok
+from .recommend import VERDICTS_V, build_recs, recs_ok, score_picks
 from .service import record_forecasts, score_forecasts, validation
 from .signals import fmt_price
 from .telegram import Bot, format_brief, format_report
@@ -114,6 +114,7 @@ class Runtime:
             except Exception:
                 log.exception("ledger write failed for %s", a.key)
         score_forecasts(self.db)
+        score_picks(self.db)
         await self.check_alerts()
         await self.ensure_recs()
 

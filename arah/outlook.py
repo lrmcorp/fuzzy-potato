@@ -26,7 +26,7 @@ NEXT_NAMES = STATE_NAMES
 # 40% to be "Menekan". Anything between is a coin toss with a slight lean, shown as "Seimbang".
 GOOD_AT, BAD_AT = 0.60, 0.40
 # Bumped when the summary's shape or rules change, so a stored one is rebuilt on the next start.
-SIMPLE_V = 4
+SIMPLE_V = 5
 
 
 def price_now(snap: dict, asset: Asset) -> int:
@@ -150,7 +150,9 @@ def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
         "now": {"state": now_state, "name": dict(zip(("id", "en"), STATE_NAMES[now_state])), "text": both(now_text)},
         "next": {"state": nxt, "name": dict(zip(("id", "en"), NEXT_NAMES[nxt])), "text": both(next_text),
                  "p_up": f["p_up"], "p_good": favorable(f["p_up"], asset), "range": [lo_px, hi_px], "strength": st,
-                 "dir": rules.direction(f["p_up"])},
+                 "dir": rules.direction_range(f["p_up"], lo_px, hi_px, shown),
+                 # The range is the model's 5th to 95th percentile: 9 in 10 of its simulated paths end inside it.
+                 "odds": {"n": 9, "of": 10}},
         # Positions on the gauge from Menekan (0) to Mendukung (1), from the owner's side.
         "gauge": {"now": gauge_now(snap, asset), "next": round(favorable(f["p_up"], asset), 3)},
         "why": reasons[0]["text"] if reasons else None,
@@ -186,7 +188,10 @@ def headline(card_id: dict | None, horizon: str = "1m", subject: str = "Pasar") 
     g = card_id["gauge"]["now"]
     now = f"{subject} tertekan." if g < 0.4 else f"{subject} menguat." if g > 0.6 else f"{subject} tenang."
     months = {"1m": "1 bulan", "2m": "2 bulan", "3m": "3 bulan"}.get(horizon, "1 bulan")
-    return f"{now} ARAH memperkirakan {card_id['next']['dir']} dalam {months}."
+    d = card_id["next"]["dir"]
+    if d == "belum_jelas":
+        return f"{now} ARAH belum melihat arah yang jelas untuk {months} ke depan."
+    return f"{now} ARAH memperkirakan {d} dalam {months}."
 
 
 def build_simple(db: DB, snaps: dict, horizon: str = "1m") -> dict:

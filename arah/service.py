@@ -276,6 +276,33 @@ def score_forecasts(db: DB) -> int:
     return done
 
 
+def forecast_hit(row) -> bool:
+    """One recorded forecast was right when the price ended inside its 9-in-10 range and, when it named a
+    direction (chance of a rise at least 60% or at most 40%), moved that way."""
+    if row["s_t"] is None or row["q05"] is None or row["q95"] is None:
+        return False
+    inside = row["q05"] <= row["s_t"] <= row["q95"]
+    p = round(row["p_up"], 2)
+    if p >= 0.60:
+        return inside and row["s_t"] > row["s0"]
+    if p <= 0.40:
+        return inside and row["s_t"] < row["s0"]
+    return inside
+
+
+def record_summary(db: DB, horizon: str = "1m", keys: list[str] | None = None, last: int = 30, min_n: int = 10) -> dict:
+    """"Prediksi 1 bln tepat X% (N prediksi terakhir)" from the ledger; "enough" is false below min_n."""
+    marks = ",".join("?" * len(keys)) if keys else ""
+    rows = db.q("SELECT s0, s_t, p_up, q05, q95 FROM forecasts WHERE horizon=? AND scored_at IS NOT NULL"
+                + (f" AND asset IN ({marks})" if keys else "") + " ORDER BY base_ts DESC LIMIT ?",
+                (horizon, *(keys or []), last))
+    pending = db.one("SELECT COUNT(*) n FROM forecasts WHERE horizon=? AND scored_at IS NULL"
+                     + (f" AND asset IN ({marks})" if keys else ""), (horizon, *(keys or [])))["n"]
+    hits = sum(1 for r in rows if forecast_hit(r))
+    return {"horizon": horizon, "n": len(rows), "hits": hits, "pct": round(100 * hits / len(rows)) if rows else None,
+            "pending": pending, "enough": len(rows) >= min_n}
+
+
 def track_record(db: DB) -> dict:
     """Live scorecard from the ledger, grouped by horizon."""
     rows = db.q("SELECT horizon, p_up, p_up_quant, direction, q05, q95, q25, q75, s_t, went_up FROM forecasts "

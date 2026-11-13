@@ -165,6 +165,18 @@ function PickCard({c, paused}: {c: RecCard; paused: boolean}) {
   );
 }
 
+/** How past picks ended: target 1, stop, or the month ran out. */
+function PicksRecordLine({onAuth}: {onAuth: () => void}) {
+  const r = useLoad(api.recs, [], onAuth).data?.record;
+  if (!r) return null;
+  if (r.closed < 5) return <span className="caption">Rekam jejak Pilihan ARAH belum cukup ({r.closed} selesai, {r.open} masih berjalan)</span>;
+  return (
+    <span className="caption">
+      Rekam jejak Pilihan ARAH ({r.closed} terakhir): {r.target} kena target 1 · {r.stop} kena batas rugi · {r.expired} habis waktu
+    </span>
+  );
+}
+
 function Picks({onAuth, paused}: {onAuth: () => void; paused: boolean}) {
   const recs = useLoad(api.recs, [], onAuth);
   if (!recs.data) return <div className="card"><Skeleton lines={4} /></div>;
@@ -223,6 +235,7 @@ export function MarketPage({onAuth, seg, paused}: {onAuth: () => void; seg: stri
         </div>
       </div>
       {current === 'pilihan' && <ContextChip s={b.data?.brief?.simple} />}
+      {current === 'pilihan' && <PicksRecordLine onAuth={onAuth} />}
       {current === 'saham' && <Seg label="Bursa" value={mkt} onChange={v => setMkt(v as 'ID' | 'US')} options={[{key: 'ID', text: 'Indonesia'}, {key: 'US', text: 'Amerika'}]} />}
       {current === 'pilihan' ? <Picks onAuth={onAuth} paused={paused} />
         : current === 'saham' ? <Quotes key={mkt} group={mkt === 'ID' ? 'stock_id' : 'stock_us'} onAuth={onAuth} paused={paused} />

@@ -29,11 +29,11 @@ from .techniques import techniques
 from .db import DB
 from .llm import budget_state, claude_calls_today
 from .runtime import Runtime
-from .service import all_horizons, build_view, forecast_asset, horizon_name, track_record, validation
+from .service import all_horizons, build_view, forecast_asset, horizon_name, record_summary, track_record, validation
 from .signals import snapshot
 from . import verdict_rules as rules
-from .recommend import VERDICTS_V
-from .universe import BY_KEY, COUNTRIES, CRYPTO, COMMODITIES, DEFAULT_LEVELS, FX, INDICES, STOCKS, resolve
+from .recommend import VERDICTS_V, picks_summary
+from .universe import HEADLINE_KEYS, BY_KEY, COUNTRIES, CRYPTO, COMMODITIES, DEFAULT_LEVELS, FX, INDICES, STOCKS, resolve
 
 log = logging.getLogger("arah.api")
 STATIC = Path(__file__).parent / "static"
@@ -181,7 +181,9 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         b = db.latest_report("brief")
         err = db.get("llm_error") if settings.llm_enabled else None
         return {"brief": b, "building": rt._brief_lock.locked(), "llm_error": (err or {}).get("kind"),
-                "llm_enabled": settings.llm_enabled}
+                "llm_enabled": settings.llm_enabled,
+                # The 1-month forecasts for the headline markets, judged after the month has passed.
+                "record": record_summary(db, "1m", HEADLINE_KEYS)}
 
     @app.post("/api/brief/run", dependencies=[Depends(auth)])
     async def brief_run():
@@ -210,7 +212,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
                          "q95": v["forecast"]["q95"], "vigilance": v["vigilance"], "spark": s.get("spark", [])[-40:],
                          "klass": a.klass, "score": (verdicts.get(a.key) or {}).get("score"),
                          "tag": (rules.tag(verdicts[a.key]["verdict"]) if a.key in verdicts and verdicts[a.key].get("verdict") in rules.ACTIONS else None)
-                         if a.klass == "stock" else rules.tag(rules.direction(v["forecast"]["p_up"]))})
+                         if a.klass == "stock" else rules.tag(rules.direction_range(v["forecast"]["p_up"], v["forecast"]["q05"], v["forecast"]["q95"], v["forecast"]["s0"]))})
         return {"group": group, "horizon": horizon, "rows": rows}
 
     @app.get("/api/live/{key}", dependencies=[Depends(auth)])
@@ -291,6 +293,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
     @app.get("/api/recs", dependencies=[Depends(auth)])
     def recs():
         r = db.latest_report("recs") or {"ID": [], "US": [], "screened": {"ID": 0, "US": 0}, "at": None}
+        r["record"] = picks_summary(db)
         vs = verdict_items()
         for m in ("ID", "US"):
             for c in r.get(m, []):
@@ -360,7 +363,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         elif s:
             try:
                 _, f1, _ = forecast_asset(db, a, "1m")
-                row["tag"] = rules.tag(rules.direction(f1.p_up))
+                row["tag"] = rules.tag(rules.direction_range(f1.p_up, f1.q05, f1.q95, f1.s0))
             except ValueError:
                 pass
         return row

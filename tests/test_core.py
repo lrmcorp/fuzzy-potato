@@ -235,7 +235,8 @@ def test_top_stories_merges_one_story_and_ranks_by_outlets(tmp_path):
     ])
     _store(db, "id_market", "ID", [{"title": "Video: lomba lari pagi di Jakarta", "source": "", "url": "u4", "published_at": now}])
     top = top_stories(db, ["id_insider", "id_market"], limit=5)
-    assert top[0]["outlets"] == 3 and "MSCI" in top[0]["title"] and len(top) == 2
+    # The unnamed source is hidden; the three listed outlets make one story.
+    assert top[0]["outlets"] == 3 and "MSCI" in top[0]["title"] and len(top) == 1 and top[0]["tier"] == 1
 
 
 def test_verdict_rules_follow_the_approved_thresholds():
@@ -246,3 +247,23 @@ def test_verdict_rules_follow_the_approved_thresholds():
     assert action(39, 0.70) == "hindari" and action(90, 0.40) == "hindari"
     assert direction(0.61) == "naik" and direction(0.5) == "datar" and direction(0.38) == "turun"
     assert text_tag("bertahap") == "◐ Masuk bertahap"
+
+
+def test_news_tiers_hide_unlisted_sources_and_can_be_configured(tmp_path, monkeypatch):
+    import time as _t
+
+    from arah.data.news import _store, top_stories
+    from arah.db import DB
+
+    db = DB(tmp_path / "n.db")
+    now = int(_t.time())
+    _store(db, "id_market", "ID", [
+        {"title": "IHSG ditutup menguat tajam sore ini", "source": "Kontan", "url": "a", "published_at": now},
+        {"title": "Saham teknologi dunia bergerak liar hari ini", "source": "Blog Saham Acak", "url": "b", "published_at": now},
+        {"title": "Rupiah melemah terhadap dolar Amerika Serikat", "source": "Reuters", "url": "c", "published_at": now},
+    ])
+    got = {s["source"]: s["tier"] for s in top_stories(db, ["id_market"])}
+    assert got == {"Kontan": 1, "Reuters": 2}
+    monkeypatch.setenv("ARAH_NEWS_TIER2", "blog saham acak")
+    got = {s["source"]: s["tier"] for s in top_stories(db, ["id_market"])}
+    assert got == {"Kontan": 1, "Blog Saham Acak": 2}

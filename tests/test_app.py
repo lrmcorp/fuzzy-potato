@@ -451,7 +451,7 @@ def test_search_watch_grouped_alerts_plan_and_pulse(db):
     c = TestClient(create_app(Settings(password="", secret="k" * 32, openrouter_key="", claude_bin="/nonexistent"), db, background=False))
     r = c.get("/api/search?q=bukit").json()["items"]
     assert r and r[0]["key"] == "PTBA" and r[0]["price"]
-    assert c.get("/api/search?q=USD/IDR").json()["items"][0]["tag"]["key"] in ("naik", "datar", "turun")
+    assert c.get("/api/search?q=USD/IDR").json()["items"][0]["tag"]["key"] in ("naik", "datar", "turun", "belum_jelas")
 
     # Watching a stock also turns on "tell me when ARAH's decision changes".
     assert c.post("/api/watchlist", json={"key": "PTBA", "on": True}).json()["items"] == ["PTBA"]
@@ -489,3 +489,31 @@ def test_refused_stockbit_session_stops_all_calls_until_reconnected(db):
         raise AssertionError("a refused session must not reach Stockbit")
     except StockbitError as e:
         assert "reconnect" in str(e)
+
+
+def test_record_summary_and_pick_ledger(db):
+    from arah.recommend import log_picks, picks_summary, score_picks
+    from arah.service import forecast_hit, record_summary
+
+    # A flat call is right when the price ends inside the range; a named direction must also move that way.
+    row = lambda p, s0, st: {"p_up": p, "s0": s0, "s_t": st, "q05": 90.0, "q95": 110.0}
+    assert forecast_hit(row(0.5, 100, 105)) and not forecast_hit(row(0.5, 100, 111))
+    assert forecast_hit(row(0.65, 100, 104)) and not forecast_hit(row(0.65, 100, 98))
+    assert forecast_hit(row(0.35, 100, 97)) and not forecast_hit(row(0.35, 100, 89))
+
+    assert record_summary(db, "1m")["enough"] is False
+    for i in range(12):
+        db.x("INSERT INTO forecasts (asset, horizon, interval, steps, base_ts, made_at, s0, p_up_quant, p_up, direction, "
+             "q05, q95, source, scored_at, s_t) VALUES ('IHSG','1m','1d',21,?,?,100,0.5,0.5,'flat',90,110,'t',?,?)",
+             (i, i, i + 1, 105 if i < 9 else 120))
+    r = record_summary(db, "1m", ["IHSG"])
+    assert r["n"] == 12 and r["hits"] == 9 and r["pct"] == 75 and r["enough"]
+
+    # Picks: recorded once, then closed by the stop, a target or the end of the horizon.
+    a_price = db.one("SELECT c FROM bars WHERE symbol='BBCA.JK' AND interval='1d' ORDER BY ts DESC LIMIT 1")["c"]
+    out = {"ID": [{"key": "BBCA", "price": a_price, "plan": {"stop": a_price * 0.5, "targets": [a_price * 3, a_price * 4]}}], "US": []}
+    assert log_picks(db, out) == 1 and log_picks(db, out) == 0
+    db.x("UPDATE picks_ledger SET made_at=made_at-40*86400")
+    assert score_picks(db) == 1
+    s = picks_summary(db)
+    assert s["closed"] == 1 and s["expired"] + s["target"] + s["stop"] == 1 and s["open"] == 0

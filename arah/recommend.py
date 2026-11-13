@@ -233,7 +233,62 @@ async def build_recs(db: DB, top: int = 5) -> dict:
             log.warning("stock screen had no data; keeping the previous picks")
             return prev
     db.save_report("recs", out)
+    log_picks(db, out)
     return out
+
+
+PICK_DAYS = 31  # a pick's plan is judged over about one month, the forecast horizon behind its targets
+
+
+def log_picks(db: DB, out: dict) -> int:
+    """Record each new pick with its plan; a stock already open in the ledger is not recorded twice."""
+    n = 0
+    for m in ("ID", "US"):
+        for c in out.get(m, []):
+            p = c.get("plan")
+            if not p or db.one("SELECT 1 FROM picks_ledger WHERE asset=? AND status='open'", (c["key"],)):
+                continue
+            db.x("INSERT INTO picks_ledger (asset, made_at, price, stop, t1, t2, horizon_days) VALUES (?,?,?,?,?,?,?)",
+                 (c["key"], int(time.time()), c["price"], p["stop"], p["targets"][0], p["targets"][1], PICK_DAYS))
+            n += 1
+    return n
+
+
+def score_picks(db: DB) -> int:
+    """Close open picks from daily bars after the pick: the stop or target 1, whichever the price reached first
+    (a day that touched both counts as the stop, the cautious reading), else the close when the horizon ends."""
+    done = 0
+    for row in db.q("SELECT * FROM picks_ledger WHERE status='open'"):
+        a = BY_KEY.get(row["asset"])
+        if not a:
+            continue
+        bars = db.q("SELECT ts, h, l, c FROM bars WHERE symbol=? AND interval='1d' AND ts>? ORDER BY ts",
+                    (a.symbol, row["made_at"] - 86400))
+        bars = [b for b in bars if b["ts"] >= row["made_at"] - row["made_at"] % 86400 + 86400]
+        status, at, px = None, None, None
+        for b in bars:
+            if b["l"] <= row["stop"]:
+                status, at, px = "stop", b["ts"], row["stop"]
+                break
+            if b["h"] >= row["t1"]:
+                status, at, px = "target", b["ts"], row["t1"]
+                break
+        if not status and time.time() - row["made_at"] > row["horizon_days"] * 86400 and bars:
+            status, at, px = "expired", bars[-1]["ts"], bars[-1]["c"]
+        if status:
+            db.x("UPDATE picks_ledger SET status=?, closed_at=?, close_price=? WHERE id=?", (status, at, px, row["id"]))
+            done += 1
+    return done
+
+
+def picks_summary(db: DB, last: int = 30) -> dict:
+    closed = db.q("SELECT asset, made_at, price, status, close_price, closed_at FROM picks_ledger WHERE status!='open' "
+                  "ORDER BY closed_at DESC LIMIT ?", (last,))
+    open_n = db.one("SELECT COUNT(*) n FROM picks_ledger WHERE status='open'")["n"]
+    count = {s: sum(1 for r in closed if r["status"] == s) for s in ("target", "stop", "expired")}
+    return {"closed": len(closed), "open": open_n, **count,
+            "items": [{"asset": r["asset"], "status": r["status"], "made_at": r["made_at"], "closed_at": r["closed_at"],
+                       "ret": (r["close_price"] / r["price"] - 1) * 100 if r["close_price"] else None} for r in closed[:10]]}
 
 
 def recs_ok(db: DB, max_age: int = 20 * 3600) -> bool:
