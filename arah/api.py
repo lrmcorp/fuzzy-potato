@@ -20,7 +20,7 @@ from . import __version__
 from .agents import analyze_asset, ask, get_insight
 from .extras import ask_context, calc, weekly_report
 from .config import BRIEF_SCHEDULE, DEFAULT_HORIZONS, Settings, get_settings, parse_horizon
-from .data.news import headlines
+from .data.news import COUNTRY_TOPICS, top_stories
 from .data.yahoo import fetch_fundamentals, refresh_many
 from .live import Live
 from .outlook import build_simple
@@ -262,11 +262,10 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
 
     @app.get("/api/news", dependencies=[Depends(auth)])
     def news(country: str = "ID"):
-        topics = {"ID": ["id_market", "id_politics"], "US": ["us_market", "us_politics"], "JP": ["jp"], "SG": ["sg"],
-                  "CN": ["cn"], "GLOBAL": ["global"]}.get(country.upper())
+        topics = COUNTRY_TOPICS.get(country.upper())
         if not topics:
             raise HTTPException(400, "unknown country")
-        return {"country": country.upper(), "items": headlines(db, topics, limit=30)}
+        return {"country": country.upper(), "items": top_stories(db, topics, limit=30)}
 
     @app.get("/api/track", dependencies=[Depends(auth)])
     def track():

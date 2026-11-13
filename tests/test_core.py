@@ -216,3 +216,23 @@ def test_relay_is_used_only_when_fully_set(monkeypatch):
     from arah.data import stockbit, yahoo
     assert yahoo.BASE == "https://query1.finance.yahoo.com" and "x-relay-key" not in yahoo.HEADERS
     assert stockbit.EXODUS == "https://exodus.stockbit.com"
+
+
+def test_top_stories_merges_one_story_and_ranks_by_outlets(tmp_path):
+    import time as _t
+
+    from arah.data.news import _store, top_stories
+    from arah.db import DB
+
+    db = DB(tmp_path / "n.db")
+    now = int(_t.time())
+    same = "Asing borong saham bank besar usai rebalancing MSCI"
+    _store(db, "id_insider", "ID", [
+        {"title": same, "source": "Kontan", "url": "u1", "published_at": now - 3600},
+        {"title": same + " pekan ini", "source": "Bisnis.com", "url": "u2", "published_at": now - 1800},
+        {"title": "Asing borong saham bank besar setelah rebalancing MSCI", "source": "CNBC Indonesia", "url": "u3",
+         "published_at": now - 600},
+    ])
+    _store(db, "id_market", "ID", [{"title": "Video: lomba lari pagi di Jakarta", "source": "", "url": "u4", "published_at": now}])
+    top = top_stories(db, ["id_insider", "id_market"], limit=5)
+    assert top[0]["outlets"] == 3 and "MSCI" in top[0]["title"] and len(top) == 2

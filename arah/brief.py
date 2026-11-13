@@ -6,7 +6,7 @@ import time
 
 from .agents import WORLD_KEYS, get_insight, run_team
 from .config import Settings
-from .data.news import headlines
+from .data.news import COUNTRY_TOPICS, top_stories
 from .db import DB
 from .extras import events_for_brief, weekly_report
 from .outlook import build_simple
@@ -111,14 +111,14 @@ async def build_brief(db: DB, settings: Settings, slot: str = "manual", use_llm:
     countries = {}
     for c, info in COUNTRIES.items():
         desk = ((team or {}).get("desks") or {}).get(c)
-        topics = {"ID": ["id_market", "id_flow", "id_politics"], "US": ["us_market", "us_politics"], "JP": ["jp"], "SG": ["sg"], "CN": ["cn"]}[c]
+        topics = COUNTRY_TOPICS[c] + (["id_flow"] if c == "ID" else [])
         countries[c] = {
             "name": {"id": info["name_id"], "en": info["name_en"]},
             "summary": desk["summary"] if desk else None,
             "mood": desk["mood"] if desk else None,
             "events": desk["events"] if desk else [],
             "headlines": [{"title": h["title"], "source": h["source"], "url": h["url"], "at": h["published_at"]}
-                          for h in headlines(db, topics, limit=6)],
+                          for h in top_stories(db, topics, limit=8)],
         }
     recs = db.latest_report("recs") or {"ID": [], "US": [], "screened": {"ID": 0, "US": 0}}
     brief = {
