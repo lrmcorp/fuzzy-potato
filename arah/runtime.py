@@ -6,6 +6,7 @@ import html
 import re
 import logging
 import time
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -16,7 +17,9 @@ from .brief import build_brief
 from .config import BRIEF_SCHEDULE, DEFAULT_HORIZONS, WEEKLY_OUTLOOK, Settings
 from .data.bca import refresh_bca
 from .data.calendar import refresh_calendar
-from . import panel, push
+from . import notif, panel, push
+from .data import agenda_id
+from .data.calendar import upcoming
 from . import verdict_rules as rules
 from .data import sbterm
 from .data.frankfurter import fill as fill_fx
@@ -27,7 +30,7 @@ from .db import DB
 from .outlook import SIMPLE_V, build_simple
 from .recommend import VERDICTS_V, build_recs, recs_ok, score_picks
 from .service import record_forecasts, score_forecasts, validation
-from .signals import fmt_price, save_quote
+from .signals import fmt_num, fmt_pct, fmt_price, quote_info, save_quote
 from .telegram import Bot, format_brief, format_report
 from .universe import INDICES, SYNTHETIC, BY_KEY, DEFAULT_LEVELS, GAUGES, MACRO, STOCKS
 
@@ -116,6 +119,11 @@ class Runtime:
         score_forecasts(self.db)
         score_picks(self.db)
         await self.check_alerts()
+        for job in (self.pick_levels_push, self.moves_push):
+            try:
+                await job()
+            except Exception:
+                log.exception("push job failed")
         await self.ensure_recs()
 
     async def ensure_recs(self) -> None:
@@ -170,7 +178,8 @@ class Runtime:
             await self.bot.send(head + "\n" + "\n".join(changed))
             plain = [re.sub(r"<[^>]+>", "", c) for c in changed]
             await push.notify(self.db, "Jawaban ARAH berubah" if lang == "id" else "ARAH's answers changed",
-                              "; ".join(plain)[:240], "/#/", "flips")
+                              "; ".join(plain)[:240], "/#/", "flips", kind="pasar")
+        await self.market_push(slot, brief)
         return brief
 
     async def check_alerts(self) -> None:
@@ -191,7 +200,7 @@ class Runtime:
                     body += f" Keputusan ARAH: {v}."
                 if self.stale():
                     body += " Data tertunda."
-                await self.announce(asset, title, body, row["id"])
+                await self.announce(asset, title, body, row["id"], kind="harga")
 
     def verdict_line(self, asset) -> str | None:
         item = ((self.db.get("verdicts") or {}).get("items") or {}).get(asset.key)
@@ -202,10 +211,10 @@ class Runtime:
         sb = self.live.stockbit.status()
         return not sb.get("usable") or bool(sb.get("error"))
 
-    async def announce(self, asset, title: str, body: str, alert_id: int | None = None) -> None:
+    async def announce(self, asset, title: str, body: str, alert_id: int | None = None, kind: str = "harga") -> None:
         """The same words on the phone (push) and in Telegram, each with a way back to the asset."""
         url = f"/#/a/{asset.key}"
-        await push.notify(self.db, title, body, url, f"alert-{alert_id or asset.key}")
+        await push.notify(self.db, title, body, url, f"alert-{alert_id or asset.key}", kind=kind)
         buttons = []
         if self.settings.public_url:
             buttons.append({"text": "Buka di ARAH", "url": self.settings.public_url + url})
@@ -225,16 +234,124 @@ class Runtime:
             if asset and old in rules.ACTIONS and new in rules.ACTIONS and old != new:
                 changes.append(f"{asset.key} {rules.text_tag(old)} menjadi {rules.text_tag(new)}")
                 await self.announce(asset, f"Keputusan ARAH untuk {asset.key} berubah",
-                                    f"{rules.text_tag(old)} menjadi {rules.text_tag(new)}. {after[row['asset']].get('sentence', '')}", row["id"])
+                                    f"{rules.text_tag(old)} menjadi {rules.text_tag(new)}. {after[row['asset']].get('sentence', '')}", row["id"],
+                                    kind="pantauan")
         if changes:
             self.db.set("watch_changes", {"at": int(time.time()), "items": changes})
+        await self.picks_push(before, after, out)
         return out
+
+    async def picks_push(self, before: dict, after: dict, out: dict) -> None:
+        """New picks today, and earlier picks whose decision fell to Hindari (shown as "Kurangi")."""
+        prev = set(self.db.get("picks_seen") or [])
+        now = [c["key"] for m in ("ID", "US") for c in out.get(m, []) if not c.get("held")]
+        self.db.set("picks_seen", now)
+        new = [k for k in now if k not in prev]
+        if prev and new and notif.once(self.db, "picks:" + ",".join(sorted(new))):
+            await push.notify(self.db, f"Pilihan ARAH baru: {', '.join(new[:4])}",
+                              "Buka Pilihan ARAH untuk harga masuk, batas rugi, dan target.", "/#/pasar/pilihan", "picks-new", kind="pilihan")
+        for r in self.db.q("SELECT asset FROM picks_ledger WHERE status='open'"):
+            k = r["asset"]
+            if (before.get(k) or {}).get("verdict") != "hindari" and (after.get(k) or {}).get("verdict") == "hindari":
+                await push.notify(self.db, f"Kurangi {k}", f"Keputusan ARAH untuk {k} turun ke Hindari. Pertimbangkan mengurangi posisi.",
+                                  f"/#/a/{k}", f"kurangi-{k}", kind="pilihan")
+
+    async def pick_levels_push(self) -> None:
+        """An open pick at or past its stop or target 1, once each, from the freshest price there is."""
+        rows = self.db.q("SELECT id, asset, price, stop, t1 FROM picks_ledger WHERE status='open'")
+
+        def price_of(key):
+            a = BY_KEY.get(key)
+            q = quote_info(self.db, a) if a else None
+            return q["price"] if q else None
+
+        for r, what, p in notif.pick_hits(rows, price_of):
+            if not notif.once(self.db, f"pick:{r['id']}:{what}", ttl=40 * 86400):
+                continue
+            a = BY_KEY[r["asset"]]
+            chg = fmt_pct((p / r["price"] - 1) * 100)
+            if what == "stop":
+                title, body = f"{a.key} menyentuh batas rugi", f"Harga {fmt_price(a, p)} ({chg} dari harga pilihan). Rencananya: jual untuk membatasi rugi."
+            else:
+                title, body = f"{a.key} mencapai target 1", f"Harga {fmt_price(a, p)} ({chg} dari harga pilihan). Pertimbangkan ambil sebagian untung."
+            await self.announce(a, title, body, None, kind="pilihan")
+
+    async def market_push(self, slot: str, brief: dict) -> None:
+        """Morning outlook before the open and the close summary, on IDX trading days."""
+        if slot not in ("pre_idx", "post_idx") or not panel.idx_session()["day"]:
+            return
+        s = brief.get("simple") or {}
+        head = s.get("headline") or ((brief.get("headline") or {}).get("id"))
+        if not head:
+            return
+        ihsg = (s.get("indonesia") or {})
+        if slot == "pre_idx":
+            await push.notify(self.db, "Pagi ini di bursa", head, "/#/", "pasar-pagi", kind="pasar")
+            return
+        parts = []
+        if ihsg.get("chg1d") is not None:
+            parts.append(f"IHSG {fmt_pct(ihsg['chg1d'])} hari ini")
+        day = panel.foreign_flow(self.db).get("day") or {}
+        if day.get("net_foreign"):
+            nf = day["net_foreign"]
+            parts.append(f"asing {'beli' if nf > 0 else 'jual'} bersih Rp {fmt_num(abs(nf) / 1e9, 0)} M")
+        body = (", ".join(parts) + ". " if parts else "") + head
+        await push.notify(self.db, "Bursa tutup", body, "/#/", "pasar-tutup", kind="pasar")
+
+    async def moves_push(self) -> None:
+        """IHSG moving 2% or the rupiah 1% in a day: once per day and direction."""
+        day = datetime.now(panel.WIB).strftime("%Y-%m-%d")
+        chg = {}
+        for k in notif.BIG_MOVE:
+            q = quote_info(self.db, BY_KEY[k])
+            chg[k] = q["chg1d"] if q else None
+        for k, v in notif.big_moves(chg, day):
+            if not notif.once(self.db, f"move:{k}:{day}:{'up' if v > 0 else 'down'}"):
+                continue
+            if k == "USDIDR":
+                title = f"Rupiah {'melemah' if v > 0 else 'menguat'} {fmt_pct(abs(v)).lstrip('+')} hari ini"
+            else:
+                title = f"IHSG {'naik' if v > 0 else 'turun'} {fmt_pct(abs(v)).lstrip('+')} hari ini"
+            q = quote_info(self.db, BY_KEY[k])
+            await push.notify(self.db, title, f"Sekarang {fmt_price(BY_KEY[k], q['price'])}. Lihat penyebabnya di Ringkasan.",
+                              f"/#/a/{k}", f"move-{k}", kind="pasar")
+
+    async def agenda_push(self) -> None:
+        """19.00 WIB: tomorrow's important dates, in one message."""
+        tomorrow = (datetime.now(panel.WIB) + timedelta(days=1)).date()
+        items = [e for e in agenda_id.upcoming(days=3) if datetime.fromtimestamp(e["at"], panel.WIB).date() == tomorrow]
+        items += [e for e in upcoming(self.db) if e.get("impact") == "High" and e.get("country") in ("US", "ID")
+                  and datetime.fromtimestamp(e["at"], panel.WIB).date() == tomorrow]
+        if not items or not notif.once(self.db, f"agenda:{tomorrow}"):
+            return
+        names = list(dict.fromkeys(e["title"] for e in items))
+        await push.notify(self.db, "Agenda besok", ", ".join(names[:4]) + ". Ketuk untuk tahu kenapa penting.", "/#/", "agenda", kind="agenda")
+
+    async def stockbit_push(self) -> None:
+        """Once per disconnect: prices are delayed until the owner reconnects Stockbit."""
+        st = self.live.stockbit.status()
+        if not st.get("configured"):
+            return
+        err = st.get("error") or {}
+        if st.get("usable") and not err:
+            self.db.set("sb_down_notified", None)
+            return
+        since = err.get("at") or 0
+        if self.db.get("sb_down_notified") == since:
+            return
+        self.db.set("sb_down_notified", since)
+        await push.notify(self.db, "Stockbit terputus", "Harga Indonesia sekarang tertunda 15 menit. Ketuk chip Tertunda untuk menyambungkan lagi.",
+                          "/#/", "stockbit", kind="sistem")
 
     async def idx_quotes(self) -> None:
         """Every two minutes while Stockbit is connected: realtime prices for the Indonesian assets the owner sees
         most (IHSG, LQ45, the watchlist, open picks), at most twelve and paced, so every page shows the same
         Stockbit price for them."""
         sb = self.live.stockbit
+        try:
+            await self.stockbit_push()
+        except Exception:
+            log.exception("stockbit push failed")
         if not sb.status().get("usable"):
             return
         keys = ["IHSG", "LQ45"] + [k for k in self.db.get("watchlist", []) if k in BY_KEY and BY_KEY[k].country == "ID"]
@@ -252,6 +369,11 @@ class Runtime:
                 break
             if book.get("last"):
                 save_quote(self.db, asset, book["last"], book.get("prev"), "Stockbit")
+        try:
+            await self.pick_levels_push()
+            await self.moves_push()
+        except Exception:
+            log.exception("push after quotes failed")
 
     async def watch_alerts(self) -> None:
         """Every two minutes: fresh prices for the assets that have an open alert, then the alert check.
@@ -341,6 +463,7 @@ class Runtime:
                                args=["weekly"], id="brief:weekly", misfire_grace_time=3600)
         self.scheduler.add_job(self.daily, CronTrigger(hour=6, minute=40, timezone=tz), id="daily", misfire_grace_time=3600)
         self.scheduler.add_job(self.daily, CronTrigger(hour=17, minute=10, timezone=tz), id="daily_pm", misfire_grace_time=3600)
+        self.scheduler.add_job(self.agenda_push, CronTrigger(hour=19, minute=0, timezone=tz), id="agenda_push", misfire_grace_time=1800)
         self.scheduler.add_job(self.validate_all, CronTrigger(day_of_week="sat", hour=3, timezone=tz), id="validate")
         self.scheduler.start()
 

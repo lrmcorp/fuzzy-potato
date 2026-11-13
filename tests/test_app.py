@@ -681,3 +681,33 @@ def test_capital_simulation_splits_lots_and_shows_rupiah_ranges(db):
     small = c.get("/api/simulate?capital=1000&market=ID").json()
     assert small["items"] == [] and small["need"]["key"] == "BBCA"
     assert c.get("/api/simulate?capital=0").status_code == 422
+
+
+def test_push_kinds_quiet_hours_and_one_message_per_event(db):
+    import asyncio
+    from datetime import datetime
+
+    from arah import notif, push
+
+    at = lambda h: datetime(2026, 11, 13, h, tzinfo=notif.WIB).timestamp()
+    assert notif.allowed(db, "pasar", at(10)) and not notif.allowed(db, "pasar", at(22)) and not notif.allowed(db, "agenda", at(5))
+    # Price alerts and picks still arrive at night.
+    assert notif.allowed(db, "harga", at(23)) and notif.allowed(db, "pilihan", at(2))
+    notif.set_prefs(db, {"pasar": False, "quiet": False, "nonsense": True})
+    assert not notif.allowed(db, "pasar", at(10)) and notif.allowed(db, "agenda", at(23)) and "nonsense" not in notif.prefs(db)
+    assert notif.once(db, "x") and not notif.once(db, "x")
+
+    rows = [{"id": 1, "asset": "A", "stop": 90, "t1": 110}, {"id": 2, "asset": "B", "stop": 90, "t1": 110},
+            {"id": 3, "asset": "C", "stop": 90, "t1": 110}]
+    hits = notif.pick_hits(rows, {"A": 89.0, "B": 111.0, "C": 100.0}.get)
+    assert [(r["asset"], w) for r, w, _ in hits] == [("A", "stop"), ("B", "target")]
+    assert notif.big_moves({"IHSG": -2.3, "USDIDR": 0.4}, "d") == [("IHSG", -2.3)]
+
+    # A switched-off kind never reaches the devices (none are subscribed here, so the count is 0 either way;
+    # what matters is that the gate answers before any sending).
+    assert asyncio.run(push.notify(db, "t", "b", kind="pasar")) == 0
+
+    c = TestClient(create_app(Settings(password="", secret="k" * 32, openrouter_key="", claude_bin="/nonexistent"), db, background=False))
+    p = c.get("/api/push/prefs").json()
+    assert p["prefs"]["pasar"] is False and {k["key"] for k in p["kinds"]} == set(notif.KINDS)
+    assert c.post("/api/push/prefs", json={"pasar": True}).json()["prefs"]["pasar"] is True

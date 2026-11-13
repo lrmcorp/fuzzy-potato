@@ -562,3 +562,44 @@ th .term-pop, .num .term-pop { left: auto; right: 0; }
 }
 @media (max-width: 1060px) { .hdr-in .hsearch { display: none; } }
 @media (max-width: 960px) { .hdr-in .sess { display: none; } .nav a { padding: 10px 8px; } .nav { gap: 0; } }
+
+/* Phone: safe areas for the iOS web app (viewport-fit=cover) */
+@media (max-width: 760px) {
+  .phone-top { padding-top: max(var(--s2), env(safe-area-inset-top)); }
+  .tabbar { padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+  .tabbar a { height: 54px; font-size: 11px; white-space: nowrap; }
+  .main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .actionbar { padding-bottom: max(var(--s2), env(safe-area-inset-bottom)); }
+}
+
+/* Ringkasan, shorter on the phone */
+.tile-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.tile { min-height: 0; gap: 4px; }
+@media (max-width: 760px) {
+  .hero2 { gap: var(--s3); }
+  .region { gap: var(--s3); }
+  .hero-h { font-size: 20px; line-height: 26px; }
+  .tile { padding: 10px 12px; }
+  .tile-val { font-size: 18px; line-height: 24px; }
+  .tile .tag { padding: 2px 6px; }
+  .hero-ctl { gap: var(--s2); }
+  .hero-acc .acc-btn { min-height: 40px; }
+  /* Context cards become one swipeable row instead of four stacked cards. */
+  .ctx-cards { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: var(--s3); margin: 0 calc(-1 * var(--s4)); padding: 0 var(--s4);
+    scrollbar-width: none; }
+  .ctx-cards > .mcard { flex: 0 0 82%; scroll-snap-align: start; }
+  .agenda .ag-item:nth-child(n+4) { display: none; }
+}
+.hero-news.small .news-row { border-top: 1px solid var(--divider); }
+.push-kinds { margin-top: var(--s4); }
+.push-kinds ul { list-style: none; margin: var(--s2) 0 0; padding: 0; }
+.switch-row { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); min-height: 56px; padding: var(--s2) 0;
+  border-top: 1px solid var(--divider); cursor: pointer; }
+.switch-row > span { display: flex; flex-direction: column; gap: 2px; }
+.switch-row input[type="checkbox"] { appearance: none; flex: 0 0 48px; width: 48px; height: 28px; border-radius: 14px; background: var(--track);
+  position: relative; cursor: pointer; transition: background .15s; margin: 0; }
+.switch-row input[type="checkbox"]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 11px;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s; }
+.switch-row input[type="checkbox"]:checked { background: var(--up); }
+.switch-row input[type="checkbox"]:checked::after { transform: translateX(20px); }
+.switch-row input[type="checkbox"]:focus-visible { outline: 2px solid var(--focus, #2563eb); outline-offset: 2px; }
