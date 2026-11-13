@@ -57,6 +57,8 @@ else
 fi
 grep -q "^OPENROUTER_API_KEY='.\+'" .env.vps && ok "OpenRouter key set" || warn "no OpenRouter key: the AI analyst team runs on the Claude fallback only, or not at all  [T3]"
 grep -q "^CLAUDE_CODE_OAUTH_TOKEN='.\+'" .env.vps && ok "Claude Code fallback token set" || echo "No Claude Code token: no fallback when OpenRouter fails (optional)."
+grep -q "^ARAH_RELAY_URL='https://.\+'" .env.vps && grep -q "^ARAH_RELAY_KEY='.\{24,\}'" .env.vps \
+  && ok "Cloudflare relay set for Yahoo and Stockbit" || echo "No Cloudflare relay (optional; see deploy/cloudflare/README.md)."
 grep -q "^STOCKBIT_SESSION='.\+'" .env.vps && ok "Stockbit session set (realtime IDX prices)" || echo "No Stockbit session: IDX prices are about 15 minutes delayed (optional)."
 grep -q "^TELEGRAM_BOT_TOKEN='.\+'" .env.vps && grep -q "^TELEGRAM_CHAT_ID='.\+'" .env.vps \
   && ok "Telegram bot configured" || echo "Telegram not configured (optional)."

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import time
 from urllib.parse import quote
 
@@ -10,14 +9,16 @@ import httpx
 import numpy as np
 
 from ..db import DB
+from . import relay
 
 log = logging.getLogger("arah.yahoo")
 
-BASE = os.environ.get("ARAH_YAHOO_BASE", "https://query1.finance.yahoo.com").rstrip("/")
-# Yahoo serves the same API from a second host; a 429 on one is tried once on the other.
-ALT_BASE = "https://query2.finance.yahoo.com" if "query1.finance.yahoo.com" in BASE else BASE
+BASE = relay.base("yahoo", "https://query1.finance.yahoo.com")
+# Yahoo serves the same API from a second host; a 429 on one is tried once on the other
+# (the relay does that itself).
+ALT_BASE = "https://query2.finance.yahoo.com" if not relay.ON else BASE
 # Yahoo answers 429 to detailed browser user agents but serves a bare one.
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {"User-Agent": "Mozilla/5.0", **relay.headers()}
 FIRST_RANGE = {"1h": "730d", "1d": "10y"}
 # Yahoo rejects hourly requests that reach back more than 730 days.
 REFRESH_RANGE = {"1h": "5d", "1d": "1mo"}

@@ -191,3 +191,28 @@ def test_frankfurter_parse_keeps_valid_days():
     rows = parse(data, "IDR")
     assert [v for _, v in rows] == [18190.0, 18210.5]
     assert rows[1][0] - rows[0][0] == 86400 and rows[0][0] % 86400 == 0
+
+
+def test_relay_is_used_only_when_fully_set(monkeypatch):
+    import importlib
+
+    from arah.data import relay
+
+    try:
+        monkeypatch.setenv("ARAH_RELAY_URL", "https://arah-relay.example.workers.dev/")
+        monkeypatch.setenv("ARAH_RELAY_KEY", "k" * 32)
+        importlib.reload(relay)
+        assert relay.base("yahoo", "https://query1.finance.yahoo.com") == "https://arah-relay.example.workers.dev/yahoo"
+        assert relay.headers() == {"x-relay-key": "k" * 32}
+        monkeypatch.setenv("ARAH_RELAY_KEY", "short")  # a weak key leaves the relay off
+        importlib.reload(relay)
+        assert not relay.ON and relay.headers() == {}
+        assert relay.base("stockbit", "https://exodus.stockbit.com") == "https://exodus.stockbit.com"
+    finally:
+        monkeypatch.delenv("ARAH_RELAY_URL", raising=False)
+        monkeypatch.delenv("ARAH_RELAY_KEY", raising=False)
+        importlib.reload(relay)
+    # Without the relay, both clients talk to the sites directly and never send a relay key.
+    from arah.data import stockbit, yahoo
+    assert yahoo.BASE == "https://query1.finance.yahoo.com" and "x-relay-key" not in yahoo.HEADERS
+    assert stockbit.EXODUS == "https://exodus.stockbit.com"

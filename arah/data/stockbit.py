@@ -20,9 +20,10 @@ from urllib.parse import unquote
 import httpx
 
 from ..db import DB
+from . import relay
 
 log = logging.getLogger("arah.stockbit")
-EXODUS = "https://exodus.stockbit.com"
+EXODUS = relay.base("stockbit", "https://exodus.stockbit.com")
 READ_PREFIXES = ("/charts/", "/company-price-feed/")
 PACE = 1.0
 TTL = 5.0
@@ -149,7 +150,7 @@ class Stockbit:
     def _headers(bearer: str) -> dict:
         return {"authorization": f"Bearer {bearer}", "accept": "application/json",
                 "origin": "https://stockbit.com", "referer": "https://stockbit.com/",
-                "content-type": "application/json", "user-agent": "Mozilla/5.0"}
+                "content-type": "application/json", "user-agent": "Mozilla/5.0", **relay.headers()}
 
     async def get(self, path: str) -> dict:
         if not is_read_path(path):
@@ -175,8 +176,11 @@ class Stockbit:
                     s = await self._refresh(client, s)
                     r = await client.get(EXODUS + path, headers=self._headers(s["access"]))
                 self._last = time.monotonic()
+            if r.status_code == 403 and relay.ON and r.text.strip() == "forbidden":
+                raise StockbitError("the relay refused ARAH's key: ARAH_RELAY_KEY must equal the Worker's RELAY_KEY")
             if r.status_code == 403:
-                raise StockbitError("Stockbit's CDN refused this server (HTTP 403); not retried")
+                raise StockbitError("Stockbit's CDN refused this server (HTTP 403); not retried"
+                                    + ("" if relay.ON else ". Setting up the Cloudflare relay usually fixes this"))
             if r.status_code != 200:
                 raise StockbitError(f"HTTP {r.status_code} for {path.split('?')[0]}")
             data = r.json().get("data") or {}
