@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import logging
 import mimetypes
+import os
 import secrets
 import time
 from contextlib import asynccontextmanager
@@ -285,7 +286,10 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
     @app.get("/api/status", dependencies=[Depends(auth)])
     def status():
         ds = db.get("data_status") or {}
-        return {"version": __version__, "data_at": ds.get("at"), "data_errors": ds.get("errors", {}),
+        rec = db.latest_report("recs") or {}
+        return {"version": __version__, "revision": os.environ.get("ARAH_REVISION", ""),
+                "recs": {"at": rec.get("at"), "screened": rec.get("screened"), "missing": rec.get("missing")},
+                "data_at": ds.get("at"), "data_errors": ds.get("errors", {}),
                 "news_at": db.get("news_at"), "llm_enabled": settings.llm_enabled, "llm_error": db.get("llm_error"),
                 "models": settings.llm_names, "llm_last": db.get("llm_last"), "claude_calls_today": claude_calls_today(db),
                 "budget": budget_state(db, settings), "telegram_enabled": settings.telegram_enabled,

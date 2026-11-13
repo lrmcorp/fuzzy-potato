@@ -5,7 +5,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo -n"
-compose() { $SUDO docker compose -f deploy/compose.yaml "$@"; }
+# The running commit, shown on the Settings page so anyone can see which version is live.
+REV="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+compose() { $SUDO env ARAH_REVISION="$REV" docker compose -f deploy/compose.yaml "$@"; }
 
 [ -s .env.vps ] || { echo "Missing .env.vps. Create it with deploy/write-vps-env.sh first." >&2; exit 1; }
 $SUDO docker network inspect lnint-edge >/dev/null 2>&1 || $SUDO docker network create lnint-edge

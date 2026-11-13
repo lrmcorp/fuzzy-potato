@@ -796,7 +796,10 @@ export function SettingsPage({onAuth, onLang, authRequired}: PageProps & {onLang
             <div><dt>{t('telegram')}</dt><dd>{s.telegram_enabled ? t('on') : t('off')}</dd></div>
             <div><dt>{t('schedule')} ({s.timezone})</dt><dd>{s.schedule.map(x => x.time).join(' · ')}</dd></div>
             {Object.keys(s.data_errors).length > 0 && <div><dt>{t('data_errors')}</dt><dd>{Object.keys(s.data_errors).join(', ')}</dd></div>}
-            <div><dt>ARAH</dt><dd>{s.version}</dd></div>
+            <div><dt>{t('recs_status')}</dt><dd>{s.recs?.at
+              ? t('recs_status_v', {id: s.recs.screened?.ID ?? 0, us: s.recs.screened?.US ?? 0, at: when(s.recs.at)})
+              : t('recs_status_none')}</dd></div>
+            <div><dt>ARAH</dt><dd>{s.version}{s.revision && s.revision !== 'unknown' ? ` · ${s.revision}` : ''}</dd></div>
           </dl>
         )}
       </Async>
