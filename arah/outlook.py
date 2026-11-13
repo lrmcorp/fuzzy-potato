@@ -26,7 +26,7 @@ NEXT_NAMES = STATE_NAMES
 # 40% to be "Menekan". Anything between is a coin toss with a slight lean, shown as "Seimbang".
 GOOD_AT, BAD_AT = 0.60, 0.40
 # Bumped when the summary's shape or rules change, so a stored one is rebuilt on the next start.
-SIMPLE_V = 6
+SIMPLE_V = 7
 
 
 def price_now(snap: dict, asset: Asset) -> int:
@@ -191,11 +191,12 @@ def headline(card_id: dict | None, horizon: str = "1m", subject: str = "Pasar") 
     g = card_id["gauge"]["now"]
     now = (f"{subject} tertekan sebulan terakhir." if g < 0.4 else f"{subject} menguat sebulan terakhir." if g > 0.6
            else f"{subject} tenang sebulan terakhir.")
-    months = {"1d": "1 hari bursa", "1w": "1 minggu", "1m": "1 bulan", "2m": "2 bulan", "3m": "3 bulan"}.get(horizon, "1 bulan")
+    ahead = {"1d": "besok", "1w": "sepekan ke depan", "1m": "sebulan ke depan", "2m": "2 bulan ke depan",
+             "3m": "3 bulan ke depan"}.get(horizon, "sebulan ke depan")
     d = card_id["next"]["dir"]
     if d == "belum_jelas":
-        return f"{now} ARAH belum melihat arah yang jelas untuk {months} ke depan."
-    return f"{now} ARAH memperkirakan {d} dalam {months}."
+        return f"{now} Arah {ahead} belum jelas."
+    return f"{now} {ahead[0].upper() + ahead[1:]} diperkirakan {d}."
 
 
 def build_simple(db: DB, snaps: dict, horizon: str = "1m") -> dict:

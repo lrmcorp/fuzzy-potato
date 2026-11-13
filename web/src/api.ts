@@ -146,9 +146,10 @@ export interface PanelInfo {
     buy: FlowRow[]; sell: FlowRow[]; covered: number; at: number | null; source: string | null};
   commodities: PanelRow[]; macro: PanelRow[];
   factors: Record<'ID' | 'US', Factor[]>; profile: RiskProfile | null;
+  news: Record<'ID' | 'US', {count: number; href: string; top: {text: string; direction: string; url: string} | null}>;
 }
 export type RiskProfile = 'hati-hati' | 'sedang' | 'berani';
-export interface Factor {label: string; side: number | null; value: number | null; kind: 'pct' | 'idr'}
+export interface Factor {label: string; side: number | null; value: number | null; kind: 'pct' | 'idr'; href?: string}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }

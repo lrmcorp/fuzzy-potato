@@ -633,9 +633,9 @@ def test_risk_profile_orders_picks_and_gauge_lists_its_factors(db):
 
 def test_short_horizons_and_indonesian_numbers_in_stored_brief(db):
     c = TestClient(create_app(Settings(password="", secret="k" * 32, openrouter_key="", claude_bin="/nonexistent"), db, background=False))
-    for h, words in (("1d", "1 hari bursa"), ("1w", "1 minggu"), ("3m", "3 bulan")):
+    for h, words in (("1d", "besok"), ("1w", "sepekan ke depan"), ("3m", "3 bulan ke depan")):
         s = c.get(f"/api/simple?h={h}").json()
-        assert s["horizon"] == h and words in s["headline"] and s["indonesia"]["next"]["range"]
+        assert s["horizon"] == h and words in s["headline"].lower() and s["indonesia"]["next"]["range"]
     assert c.get("/api/simple?h=5y").status_code == 422
     f = c.get("/api/forecast/IHSG?h=1d").json()
     assert f["horizon"] == "1d" and f["conclusion"]["band"][-1]["step"] == 1
