@@ -5,11 +5,17 @@ pushes the asset's own price (+1 up, -1 down, 0 context only).
 """
 from __future__ import annotations
 
+import logging
+import re
+import time
+
 import numpy as np
 
 from .db import DB
 from .data.yahoo import load_bars
 from .universe import BENCHMARK, BY_KEY, Asset
+
+log = logging.getLogger("arah.signals")
 
 
 MINUS = "\u2212"
@@ -19,6 +25,28 @@ def fmt_num(x: float, decimals: int = 2, lang: str = "id") -> str:
     """Indonesian style in both languages, as the owner chose: 5.311,36 and \u22121.234."""
     s = f"{abs(x):,.{decimals}f}".replace(",", "\x00").replace(".", ",").replace("\x00", ".")
     return (MINUS + s) if x < 0 and s.strip("0,.") else s
+
+
+_EN_THOUSANDS = re.compile(r"(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\d,])")
+_EN_DECIMAL = re.compile(r"(?<![\d.,])(\d+)\.(\d{1,2}|\d{4,})(?![\d.,])")
+
+
+def id_numbers(text: str) -> str:
+    """English-style numbers in model-written text to Indonesian style: 18,250.5 -> 18.250,5 and 4.4% -> 4,4%.
+    A dot followed by exactly three digits is left alone, because in Indonesian that is already a thousands
+    mark (Rp18.250). Clock times followed by WIB (20.30 WIB) are left alone too."""
+    if not text:
+        return text
+    text = _EN_THOUSANDS.sub(lambda m: m.group(0).replace(",", "\x00").replace(".", ",").replace("\x00", "."), text)
+
+    def dec(m: re.Match) -> str:
+        whole, frac = m.group(1), m.group(2)
+        tail = text[m.end():m.end() + 2]
+        # Leave clock times (14.30 WIB, 09.00) as they are.
+        if len(frac) == 2 and len(whole) <= 2 and ("WIB" in text[m.end():m.end() + 5] or tail.strip().startswith(("WIB", "pagi", "sore"))):
+            return m.group(0)
+        return f"{whole},{frac}"
+    return _EN_DECIMAL.sub(dec, text)
 
 
 def fmt_price(asset, x: float, lang: str = "id") -> str:
@@ -100,11 +128,54 @@ def snapshot(db: DB, asset: Asset) -> dict | None:
     weekly_sd = (vol250 or vol20 or 0.01) * np.sqrt(w) * 100
     z = (out["chg1w"] or 0.0) / (weekly_sd or 1.0)
     out["trend"] = "strong_up" if z > 1.5 else "up" if z > 0.5 else "strong_down" if z < -1.5 else "down" if z < -0.5 else "flat"
-    q = db.one("SELECT price, market_ts FROM quotes WHERE symbol=?", (asset.symbol,))
-    if q and q["price"]:
-        out["live"] = float(q["price"])
-        out["live_ts"] = q["market_ts"]
+    q = quote_info(db, asset)
+    if q:
+        out["live"] = q["price"]
+        out["live_ts"] = q["at"]
+        out["src"] = q
+        # One price per asset everywhere: the latest quote is the price, and today's change is measured from
+        # the previous close of the same source.
+        if time.time() - (q["at"] or 0) < 4 * 86400:
+            # Changes over a week and a month are measured to the same quote as "today", so the card's two
+            # numbers and the headline all start from one price. A large gap to the daily-close figure is logged.
+            for key, n in (("chg1w", w), ("chg1m", 30 if w == 7 else 21)):
+                if len(c) > n and c[-1 - n] > 0:
+                    by_quote = (q["price"] / float(c[-1 - n]) - 1) * 100
+                    if out[key] is not None and abs(by_quote - out[key]) > 3:
+                        log.info("%s %s: quote gives %.1f%%, daily closes %.1f%%", asset.key, key, by_quote, out[key])
+                    out[key] = by_quote
+            out["price"] = q["price"]
+            if q["chg1d"] is not None:
+                out["chg1d"] = q["chg1d"]
     return out
+
+
+def quote_info(db: DB, asset: Asset) -> dict | None:
+    """The asset's current price with where it came from, when, and how late it may be."""
+    q = db.one("SELECT price, prev_close, market_ts, fetched_at, source FROM quotes WHERE symbol=?", (asset.symbol,))
+    if not q or not q["price"]:
+        return None
+    src = q["source"] or "Yahoo"
+    if src == "Stockbit":
+        delay = 0
+    elif asset.klass == "crypto" or asset.klass == "fx" or (asset.country == "US" and asset.klass in ("stock", "index")):
+        delay = 0  # Yahoo carries these at or near real time
+    elif asset.klass == "commodity":
+        delay = 10
+    else:
+        delay = 15  # IDX and Asian exchanges through Yahoo
+    prev = q["prev_close"]
+    return {"price": float(q["price"]), "prev": float(prev) if prev else None,
+            "chg1d": (float(q["price"]) / float(prev) - 1) * 100 if prev else None,
+            "source": src, "at": int(q["market_ts"] or q["fetched_at"] or 0), "delay_min": delay}
+
+
+def save_quote(db: DB, asset: Asset, price: float, prev: float | None, source: str) -> None:
+    now = int(time.time())
+    db.x("INSERT INTO quotes (symbol, price, prev_close, market_ts, currency, fetched_at, source) VALUES (?,?,?,?,?,?,?) "
+         "ON CONFLICT(symbol) DO UPDATE SET price=excluded.price, prev_close=COALESCE(excluded.prev_close, quotes.prev_close), "
+         "market_ts=excluded.market_ts, fetched_at=excluded.fetched_at, source=excluded.source",
+         (asset.symbol, price, prev, now, "IDR" if asset.country == "ID" else None, now, source))
 
 
 # Cross-asset drivers: (driver key, change field, sign, weight, texts).

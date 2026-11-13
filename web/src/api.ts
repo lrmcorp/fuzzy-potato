@@ -1,3 +1,4 @@
+import type {SrcInfo} from './ui';
 export type L = {id: string; en: string};
 export type Lang = 'id' | 'en';
 export type Direction = 'up' | 'down' | 'flat';
@@ -30,7 +31,7 @@ export interface SimpleCard {
   key: string; name: string; name_en: string; decimals: number; unit?: string; klass: string; country?: string; price: number;
   chg1d?: number | null; chg1m?: number | null; spark?: number[];
   now: {state: State; name: L; text: L}; next: {state: State; name: L; text: L; p_up: number; p_good?: number; range: [number, number]; dir?: 'naik' | 'datar' | 'turun' | 'belum_jelas'; odds?: {n: number; of: number}};
-  gauge?: {now: number; next: number}; up_is?: number;
+  gauge?: {now: number; next: number}; up_is?: number; src?: SrcInfo | null;
   why: L | null; reasons: Reason[]; watch: L | null; from_team: boolean; grade: Validation['grade'] | null;
   votes?: {up: number; down: number; none: number} | null; horizon?: string;
   touch: Record<string, number>; bca: {currency: string; buy: number; sell: number; at: number} | null;
@@ -92,7 +93,7 @@ export interface Recs {at: number | null; ID: RecCard[]; US: RecCard[]; screened
 export interface MarketRow {
   key: string; name: string; name_en: string; decimals: number; unit?: string; price: number; chg1d: number | null; chg1w: number | null;
   direction: Direction; p_up: number; q05: number; q95: number; vigilance: Vigilance | null; spark: number[];
-  klass?: string; tag?: TagInfo | null; score?: number | null; up_is?: number;
+  klass?: string; tag?: TagInfo | null; score?: number | null; up_is?: number; src?: SrcInfo | null; chg1m?: number | null;
 }
 export interface TrackRow {horizon: string; name: L; n: number; calls: number; call_hits: number; brier: number | null;
   brier_quant: number | null; cover90: number | null}
@@ -128,7 +129,7 @@ export interface History {key: string; range: string; decimals: number; unit: st
 export interface PushInfo {key: string; devices: number; last: {at: number; title: string; sent: number} | null}
 
 export interface QuickRow {key: string; name: string; name_en: string; klass: string; country: string; unit: string; decimals: number;
-  up_is: number; price: number | null; chg1d: number | null; spark: number[]; tag: TagInfo | null; alerts?: number}
+  up_is: number; price: number | null; chg1d: number | null; chg1m?: number | null; spark: number[]; tag: TagInfo | null; alerts?: number; src?: SrcInfo | null}
 export interface PlanLevel {level: number; label: string; kind: 'stop' | 'target' | 'band'}
 export interface PlanInfo {key: string; name: string; klass: string; price: number | null; decimals: number; unit: string; from_plan: boolean;
   plan: {entry: [number, number]; stop: number; targets: [number, number]; rr: number} | null; levels: PlanLevel[]}

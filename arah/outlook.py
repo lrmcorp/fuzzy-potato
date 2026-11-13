@@ -26,7 +26,7 @@ NEXT_NAMES = STATE_NAMES
 # 40% to be "Menekan". Anything between is a coin toss with a slight lean, shown as "Seimbang".
 GOOD_AT, BAD_AT = 0.60, 0.40
 # Bumped when the summary's shape or rules change, so a stored one is rebuilt on the next start.
-SIMPLE_V = 5
+SIMPLE_V = 6
 
 
 def price_now(snap: dict, asset: Asset) -> int:
@@ -99,7 +99,8 @@ def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
     # For currencies the number on screen is the bank's rate, the one the owner actually pays. The
     # forecast keeps its shape and is re-based onto it: Yahoo's rupiah quote jumps about 1% between hours.
     bca = bca_rate(db, key)
-    shown = bca["mid"] if bca else snap["price"]
+    # One price per asset across the app: the quote. The bank's buy and sell rates stay available for the calculator.
+    shown = snap["price"]
     scale = shown / f["s0"] if f["s0"] else 1.0
     lo_px, hi_px = f["q05"] * scale, f["q95"] * scale
     now_dir = price_now(snap, asset)
@@ -158,7 +159,8 @@ def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
         "why": reasons[0]["text"] if reasons else None,
         "reasons": reasons, "watch": view.get("watch"),
         "from_team": bool(ins), "grade": (view.get("validation") or {}).get("grade"),
-        "touch": f["touch"] if key == "USDIDR" and not bca else {},
+        "touch": f["touch"] if key == "USDIDR" else {},
+        "src": snap.get("src"), "chg1m_src": "tutup harian",
         "horizon": horizon,
         "votes": tech["votes"] if tech else None,
         "techniques": [{"key": t["key"], "name": t["name"], "vote": t["vote"]} for t in tech["techniques"]] if tech else [],
@@ -186,7 +188,8 @@ def headline(card_id: dict | None, horizon: str = "1m", subject: str = "Pasar") 
     if not card_id:
         return None
     g = card_id["gauge"]["now"]
-    now = f"{subject} tertekan." if g < 0.4 else f"{subject} menguat." if g > 0.6 else f"{subject} tenang."
+    now = (f"{subject} tertekan sebulan terakhir." if g < 0.4 else f"{subject} menguat sebulan terakhir." if g > 0.6
+           else f"{subject} tenang sebulan terakhir.")
     months = {"1m": "1 bulan", "2m": "2 bulan", "3m": "3 bulan"}.get(horizon, "1 bulan")
     d = card_id["next"]["dir"]
     if d == "belum_jelas":

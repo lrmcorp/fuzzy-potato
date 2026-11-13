@@ -7,7 +7,7 @@ import {useLoad} from './hooks';
 import {useT} from './i18n';
 import {StoryList} from './news';
 import {FlowPanel, HistoryPanel, LivePanel, TickerNews} from './pages';
-import {ChangeText, Icon, Seg, Sheet, Skeleton, StaleChip, toast} from './ui';
+import {ChangeText, Icon, Seg, Sheet, Skeleton, SourceLine, StaleChip, toast} from './ui';
 
 const H = [{key: '1m', text: '+1 bln'}, {key: '2m', text: '+2 bln'}, {key: '3m', text: '+3 bln'}];
 
@@ -358,6 +358,8 @@ export function AssetView({onAuth, k, pulse, onPulse}: {onAuth: () => void; k: s
             <span className="only-desk"><DayChange abs={chgAbs} pct={chgPct} d={d} upIsGood={(f?.up_is ?? 1) >= 0} /></span>
             <span className="only-phone"><ChangeText value={chgPct} upIsGood={(f?.up_is ?? 1) >= 0} digits={2} /></span>
           </div>
+          <SourceLine src={live.data ? {source: live.data.source === 'stockbit' ? 'Stockbit' : live.data.source === 'binance' ? 'Binance' : live.data.source === 'daily' ? 'Penutupan harian' : 'Yahoo',
+            at: live.data.at, delay_min: live.data.realtime ? 0 : (live.data.delay_min ?? 15)} : null} />
         </div>
         <div className="a-actions only-desk">
           <button type="button" className={`btn${watched ? ' star-on' : ''}`} aria-pressed={watched} onClick={toggleWatch}><Icon name="star" />{watched ? 'Dipantau' : 'Pantau'}</button>

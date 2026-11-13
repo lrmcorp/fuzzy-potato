@@ -22,7 +22,7 @@ def seed(db: DB, days: int = 700) -> None:
             for i, px in enumerate(closes):
                 ts = today - (days - 1 - i) * 86400
                 c.execute("INSERT INTO bars VALUES (?,?,?,?,?,?,?,?)", (a.symbol, "1d", ts, px, px * 1.01, px * 0.99, px, 1e6))
-            c.execute("INSERT INTO quotes VALUES (?,?,?,?,?,?)", (a.symbol, float(closes[-1]), float(closes[-2]), now, "X", now))
+            c.execute("INSERT INTO quotes (symbol, price, prev_close, market_ts, currency, fetched_at) VALUES (?,?,?,?,?,?)", (a.symbol, float(closes[-1]), float(closes[-2]), now, "X", now))
         c.execute("INSERT INTO news VALUES ('n1','id_market','ID','Bank Indonesia tahan suku bunga','Kontan','https://x.test/1',?,?)", (now, now))
     db.set("data_status", {"at": now, "errors": {}})
 
@@ -183,9 +183,11 @@ def test_answers_have_three_states_and_calculator_uses_bank_rate(db):
     assert s["usd"]["unit"] == "Rp" and s["indonesia"]["unit"] == ""
     assert "Rp " in s["usd"]["next"]["text"]["id"]
     usd = s["usd"]
-    assert usd["price"] == 1000.0 and usd["bca"]["sell"] == 1010.0
+    # One price source per asset: the card shows the market quote; the bank's rates stay for the calculator.
+    q = db.one("SELECT price FROM quotes WHERE symbol='IDR=X'")["price"]
+    assert abs(usd["price"] - q) < 1e-9 and usd["bca"]["sell"] == 1010.0 and usd["src"]["source"] == "Yahoo"
     lo, hi = usd["next"]["range"]
-    assert lo < 1000.0 < hi
+    assert lo < usd["price"] < hi
     # The percentage in the sentence is the chance of the side the label picked.
     shown = int(usd["next"]["text"]["en"].split(": ")[1].split("%")[0])
     assert shown >= 50
@@ -517,3 +519,21 @@ def test_record_summary_and_pick_ledger(db):
     assert score_picks(db) == 1
     s = picks_summary(db)
     assert s["closed"] == 1 and s["expired"] + s["target"] + s["stop"] == 1 and s["open"] == 0
+
+
+def test_one_price_source_per_asset(db):
+    from arah.signals import quote_info, save_quote, snapshot
+    from arah.universe import BY_KEY
+
+    a = BY_KEY["BBCA"]
+    save_quote(db, a, 9000.0, 8800.0, "Stockbit")
+    q = quote_info(db, a)
+    assert q["source"] == "Stockbit" and q["delay_min"] == 0 and abs(q["chg1d"] - (9000 / 8800 - 1) * 100) < 1e-9
+    s = snapshot(db, a)
+    assert s["price"] == 9000.0 and s["src"]["source"] == "Stockbit"
+    # A Yahoo refresh does not overwrite a fresh Stockbit price.
+    db.x("INSERT INTO quotes (symbol, price, prev_close, market_ts, currency, fetched_at, source) VALUES (?,?,?,?,?,?,'Yahoo') "
+         "ON CONFLICT(symbol) DO UPDATE SET price=excluded.price, source='Yahoo' WHERE quotes.source != 'Stockbit' OR quotes.fetched_at < ?",
+         (a.symbol, 1.0, 1.0, 0, "IDR", 0, int(time.time()) - 900))
+    assert quote_info(db, a)["price"] == 9000.0
+    assert quote_info(db, BY_KEY["N225"])["delay_min"] == 15 and quote_info(db, BY_KEY["USDIDR"])["delay_min"] == 0
