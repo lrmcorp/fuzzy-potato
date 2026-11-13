@@ -511,3 +511,54 @@ th .term-pop, .num .term-pop { left: auto; right: 0; }
 @media (min-width: 761px) { .region.off { display: flex; } .m-only { display: none !important; } }
 @media (max-width: 760px) { .d-only { display: none !important; } }
 .news-txt { font-size: var(--fs-body); line-height: 1.4; }
+
+/* Simulasi modal */
+.sim-input { display: flex; flex-direction: column; gap: var(--s3); }
+.sim-field input { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; min-height: 52px; }
+.sim-opts { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; justify-content: space-between; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.sim-sum { display: flex; flex-direction: column; gap: var(--s4); transition: opacity .2s; }
+.sim-sum.busy { opacity: .6; }
+.sim-sum-head { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.sim-big { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--s4); }
+.sim-big > div { display: flex; flex-direction: column; gap: 4px; }
+.sim-val { font-size: 32px; line-height: 40px; font-variant-numeric: tabular-nums; }
+.sim-range { font-size: 20px; line-height: 28px; font-variant-numeric: tabular-nums; }
+.sim-chart { display: block; max-width: 100%; }
+.sim-base { stroke: var(--muted); stroke-dasharray: 4 4; stroke-width: 1; }
+.sim-tick { stroke: var(--divider); stroke-width: 1; }
+.sim-sel { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.fc-axis.strong { font-weight: 700; fill: var(--ink); }
+.sim-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--s3); margin: 0; }
+.sim-facts dt { font-size: var(--fs-caption); color: var(--muted); }
+.sim-facts dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sim-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.sim-row { display: grid; gap: 6px; padding: var(--s3) 0; border-top: 1px solid var(--divider); }
+.sim-row-top { display: flex; justify-content: space-between; align-items: center; gap: var(--s2); }
+.sim-name { color: var(--ink); min-height: 44px; display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.sim-alloc-bar { height: 6px; background: var(--track); border-radius: 3px; }
+.sim-alloc-bar span { display: block; height: 100%; border-radius: 3px; background: var(--ink-2, var(--ink)); }
+.sim-row-facts, .sim-row-out { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s2) var(--s4); font-variant-numeric: tabular-nums; }
+.phone-chips .icon-btn { width: 44px; height: 44px; display: inline-grid; place-items: center; color: var(--ink); }
+
+.logo { flex-shrink: 0; }
+.logo img { flex-shrink: 0; min-width: 100px; object-fit: contain; }
+@media (max-width: 1100px) { .hdr-in .search, .hdr-in form { min-width: 0; flex: 1 1 160px; } }
+@media (max-width: 760px) {
+  .phone-top .logo img { min-width: 84px; height: 40px; }
+  .phone-chips { gap: 6px; }
+  .phone-chips .sess-pre { display: none; }
+  .phone-chips .stale-chip { padding-left: 8px; padding-right: 8px; }
+}
+/* Six menu items: the search gives way first, then spacing, so the header never overflows. */
+.hsearch { flex: 1 1 160px; min-width: 120px; }
+.hdr-in > * { flex-shrink: 0; }
+.hdr-in > .hsearch { flex-shrink: 1; }
+@media (max-width: 1300px) {
+  .hdr-in { gap: var(--s3); }
+  .nav a { padding: 10px 10px; }
+  .hsearch kbd { display: none; }
+  .hdr-in .sess-pre { display: none; }
+}
+@media (max-width: 1060px) { .hdr-in .hsearch { display: none; } }
+@media (max-width: 960px) { .hdr-in .sess { display: none; } .nav a { padding: 10px 8px; } .nav { gap: 0; } }

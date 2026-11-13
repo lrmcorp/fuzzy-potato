@@ -35,6 +35,7 @@ from . import panel
 from .data import agenda_id
 from . import verdict_rules as rules
 from .signals import id_numbers
+from .simulate import simulate_capital
 from .recommend import PROFILES, VERDICTS_V, order_picks, picks_summary
 from .universe import HEADLINE_KEYS, BY_KEY, COUNTRIES, CRYPTO, COMMODITIES, DEFAULT_LEVELS, FX, INDICES, STOCKS, resolve
 
@@ -334,6 +335,12 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
             # New picks in the order the owner's risk profile asks for; earlier picks still tracked stay last.
             r[m] = order_picks([c for c in r.get(m, []) if not c.get("held")], r["profile"]) + [c for c in r.get(m, []) if c.get("held")]
         return r
+
+    @app.get("/api/simulate", dependencies=[Depends(auth)])
+    def simulate(capital: float = Query(..., gt=0, le=1e13), market: str = Query("ID", pattern="^(ID|US)$")):
+        """Simulasi modal: today's picks for this capital and the model's ranges in rupiah."""
+        r = recs()
+        return simulate_capital(db, r, capital, market, r.get("profile"))
 
     @app.get("/api/profile", dependencies=[Depends(auth)])
     def profile_get():

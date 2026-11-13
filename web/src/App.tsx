@@ -12,13 +12,16 @@ import {LangCtx} from './i18n';
 import {MarketPage} from './market';
 import {NewsPage} from './news';
 import {Login, SettingsPage, TrackPage} from './pages';
+import {SimPage} from './simulasi';
 import {Icon, Skeleton, StaleChip, ToastHost} from './ui';
 
-// Desktop: Ringkasan · Pasar · Berita · Peringatan · Atur. Phone: Ringkasan · Pasar · Cari · Peringatan · Atur
+// Desktop: Ringkasan · Pasar · Simulasi · Berita · Peringatan · Atur. Phone: Ringkasan · Pasar · Simulasi · Cari ·
+// Peringatan, with Atur as the gear at the top right
 // (Berita is reached from the home "Kenapa?" link and the asset tab).
 const DESK = [
   {to: '/', label: 'Ringkasan', match: (r: string) => r === '/'},
   {to: '/pasar', label: 'Pasar', match: (r: string) => r.startsWith('/pasar') || r.startsWith('/a/')},
+  {to: '/simulasi', label: 'Simulasi', match: (r: string) => r.startsWith('/simulasi')},
   {to: '/berita', label: 'Berita', match: (r: string) => r.startsWith('/berita')},
   {to: '/peringatan', label: 'Peringatan', match: (r: string) => r.startsWith('/peringatan')},
   {to: '/atur', label: 'Atur', match: (r: string) => r.startsWith('/atur') || r.startsWith('/rekam')},
@@ -26,9 +29,9 @@ const DESK = [
 const PHONE = [
   {to: '/', label: 'Ringkasan', icon: 'home', match: (r: string) => r === '/'},
   {to: '/pasar', label: 'Pasar', icon: 'market', match: (r: string) => r.startsWith('/pasar')},
+  {to: '/simulasi', label: 'Simulasi', icon: 'calc', match: (r: string) => r.startsWith('/simulasi')},
   {to: '/cari', label: 'Cari', icon: 'search', match: (r: string) => r.startsWith('/cari')},
   {to: '/peringatan', label: 'Peringatan', icon: 'bell', match: (r: string) => r.startsWith('/peringatan')},
-  {to: '/atur', label: 'Atur', icon: 'settings', match: (r: string) => r.startsWith('/atur') || r.startsWith('/rekam')},
 ];
 // Old addresses keep working: bookmarks and Telegram links point at them.
 const MOVED: Record<string, string> = {'/saham': '/pasar/saham', '/kurs': '/pasar/kurs', '/hitung': '/pasar', '/dunia': '/berita'};
@@ -99,7 +102,8 @@ function Shell({route, pulse, reloadPulse, children}: {route: string; pulse: Pul
       {!asset && (
         <div className="phone-top">
           <Logo />
-          <span className="phone-chips"><SessionChip pulse={pulse} /><StaleChip pulse={pulse} onChanged={reloadPulse} /></span>
+          <span className="phone-chips"><SessionChip pulse={pulse} /><StaleChip pulse={pulse} onChanged={reloadPulse} />
+            <a className="icon-btn" href="#/atur" aria-label="Atur" aria-current={route.startsWith('/atur') ? 'page' : undefined}><Icon name="settings" size={22} /></a></span>
         </div>
       )}
       <main id="main" className="main">{children}</main>
@@ -119,7 +123,7 @@ function Shell({route, pulse, reloadPulse, children}: {route: string; pulse: Pul
 function SessionChip({pulse}: {pulse: PulseInfo | null}) {
   const s = pulse?.idx;
   if (!s) return null;
-  return <span className={`sess${s.open ? ' sess-open' : ''}`} aria-label={`Bursa Efek Indonesia: ${s.label}`}><span className="sess-dot" />BEI · {s.label}</span>;
+  return <span className={`sess${s.open ? ' sess-open' : ''}`} aria-label={`Bursa Efek Indonesia: ${s.label}`}><span className="sess-dot" /><span className="sess-pre">BEI · </span>{s.label}</span>;
 }
 
 function usePulse(enabled: boolean): [PulseInfo | null, () => void] {
@@ -157,6 +161,7 @@ export default function App() {
     const page = r === '/' ? <HomePage {...p} pulse={pulse} />
       : r.startsWith('/pasar') ? <MarketPage {...p} seg={r.split('/')[2] ?? 'pilihan'} paused={paused} />
       : r === '/cari' ? <CariPage />
+      : r === '/simulasi' ? <SimPage {...p} />
       : r.startsWith('/berita') ? <NewsPage {...p} scope={r.split('/')[2]} key={r} />
       : r === '/peringatan' ? <AlertsPage {...p} onChanged={reloadPulse} />
       : r === '/rekam' ? <TrackPage {...p} />

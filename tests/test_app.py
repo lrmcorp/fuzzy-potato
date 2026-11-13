@@ -649,3 +649,35 @@ def test_short_horizons_and_indonesian_numbers_in_stored_brief(db):
     from arah import panel
     db.set("sbt:foreign_day:IHSG", {"_at": 1, "v": {"net_foreign": 0, "foreign_buy": 0, "foreign_sell": 0}})
     assert panel.foreign_flow(db)["day"] is None and panel.gauge_factors(db)["ID"][2]["side"] is None
+
+
+def test_capital_simulation_splits_lots_and_shows_rupiah_ranges(db):
+    from arah.simulate import allocate
+
+    cost = lambda c: c["price"] * 100
+    cards = [{"key": "A", "price": 1000}, {"key": "B", "price": 2000}, {"key": "C", "price": 50000}]
+    # Rp 1 juta: C (Rp 5 juta per lot) is dropped; A and B share the rest in whole lots, no stock past 1.5x its share.
+    got = dict((c["key"], n) for c, n in allocate(cards, 1_000_000, cost))
+    assert set(got) == {"A", "B"} and got["A"] * 100_000 + got["B"] * 200_000 <= 1_000_000
+    assert got["A"] * 100_000 <= 750_000 and got["B"] * 200_000 <= 750_000
+    assert allocate(cards, 50_000, cost) == []
+
+    c = TestClient(create_app(Settings(password="", secret="k" * 32, openrouter_key="", claude_bin="/nonexistent"), db, background=False))
+    price = db.one("SELECT c FROM bars WHERE symbol='BBCA.JK' AND interval='1d' ORDER BY ts DESC LIMIT 1")["c"]
+    db.save_report("recs", {"at": 1, "ID": [{"key": "BBCA", "name": "Bank Central Asia", "country": "ID", "price": price,
+                                            "plan": {"stop": price * 0.9, "targets": [price * 1.1, price * 1.2], "rr": 1.0}}],
+                            "US": [], "screened": {"ID": 1, "US": 0}})
+    s = c.get(f"/api/simulate?capital={price * 100 * 3 + 5}&market=ID").json()
+    it = s["items"][0]
+    assert it["key"] == "BBCA" and it["units"] == 3 and abs(s["cash"] - 5) < 1e-6
+    assert abs(it["loss_at_stop"] - 3 * 100 * price * 0.1) < 1e-3
+    for h in ("1w", "1m", "2m", "3m"):
+        o = it["outcomes"][h]
+        assert o["q05"] < o["q50"] < o["q95"]
+        assert abs(s["total"][h]["q50"] - (o["q50"] + s["cash"])) < 1e-6
+    # Longer horizons spread wider.
+    w = {h: it["outcomes"][h]["q95"] - it["outcomes"][h]["q05"] for h in ("1w", "3m")}
+    assert w["3m"] > w["1w"]
+    small = c.get("/api/simulate?capital=1000&market=ID").json()
+    assert small["items"] == [] and small["need"]["key"] == "BBCA"
+    assert c.get("/api/simulate?capital=0").status_code == 422

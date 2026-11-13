@@ -16,6 +16,7 @@ const PATHS: Record<string, ReactNode> = {
   star: <path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z" />,
   back: <path d="M15 5l-7 7 7 7" />,
   chevron: <path d="M6 9l6 6 6-6" />,
+  calc: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15v3M8 18h.01M12 18h.01" /></>,
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
   next: <path d="M9 5l7 7-7 7" />,
   close: <><path d="M6 6l12 12" /><path d="M18 6L6 18" /></>,
