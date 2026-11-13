@@ -11,7 +11,7 @@ from ..db import DB
 
 log = logging.getLogger("arah.calendar")
 URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
-COUNTRY = {"USD": "US", "JPY": "JP", "CNY": "CN", "SGD": "SG", "IDR": "ID"}
+COUNTRY = {"USD": "US", "JPY": "JP", "CNY": "CN", "SGD": "SG", "IDR": "ID", "EUR": "EU", "GBP": "GB"}
 
 # keyword in the event title -> (Indonesian, English) reason it matters to the owner
 WHY = [
@@ -28,6 +28,9 @@ WHY = [
                 "Economic growth. Shows whether that economy is strong or slowing.")),
     (("retail sales", "consumer"), ("Belanja masyarakat. Petunjuk kekuatan permintaan di negara itu.",
                                     "Consumer spending. A read on demand in that country.")),
+    (("ecb", "main refinancing", "boe", "official bank rate", "monetary policy"),
+     ("Keputusan bunga bank sentral besar. Menggerakkan dolar dan arus dana ke negara berkembang.",
+      "A major central bank's rate decision. Moves the dollar and money flows into emerging markets.")),
     (("boj", "bank of japan"), ("Keputusan bank sentral Jepang. Menggerakkan yen dan bursa Tokyo.",
                                "The Bank of Japan's decision. Moves the yen and Tokyo stocks.")),
     (("pboc", "loan prime", "people's bank"), ("Keputusan bunga China. Menggerakkan yuan dan bursa China.",
@@ -54,7 +57,7 @@ def pick(raw: list) -> list[dict]:
         if not isinstance(ev, dict) or ev.get("country") not in COUNTRY:
             continue
         # The feed marks few Asian releases "High", so Japan and China also keep "Medium".
-        wanted = ("High",) if ev["country"] == "USD" else ("High", "Medium")
+        wanted = ("High",) if ev["country"] in ("USD", "EUR", "GBP") else ("High", "Medium")
         if ev.get("impact") not in wanted:
             continue
         try:
@@ -93,7 +96,7 @@ async def refresh_calendar(db: DB, max_age: int = 6 * 3600) -> bool:
     return True
 
 
-def upcoming(db: DB, limit: int = 6) -> list[dict]:
+def upcoming(db: DB, limit: int = 30) -> list[dict]:
     """Events from now on. Empty when the feed is older than two days, so stale dates are never shown."""
     data = db.get("calendar") or {}
     if time.time() - data.get("at", 0) > 2 * 86400:

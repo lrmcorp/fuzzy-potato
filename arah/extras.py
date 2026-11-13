@@ -132,10 +132,18 @@ def ask_context(db: DB, brief: dict | None) -> list[str]:
     return lines[:40]
 
 
+EVENTS_PER_SIDE = 10
+
+
 def events_for_brief(db: DB, desks: dict | None) -> list[dict]:
-    """Calendar feed events for this week, then dated events the desks found in the news."""
+    """Up to 10 coming events for Indonesia and 10 for the rest of the world, soonest first: this week's
+    calendar releases plus dated events the desks found in the news."""
     out = [dict(e, source="calendar") for e in upcoming(db)]
     for d in (desks or {}).values():
         out += [dict(e, source="news") for e in d.get("ahead", [])]
-    return sorted(out, key=lambda e: e["at"])[:8]
+    out.sort(key=lambda e: e["at"])
+    picked: list[dict] = []
+    for side in ("id", "world"):
+        picked += [dict(e, side=side) for e in out if (e["country"] == "ID") == (side == "id")][:EVENTS_PER_SIDE]
+    return sorted(picked, key=lambda e: e["at"])
 

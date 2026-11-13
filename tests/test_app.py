@@ -285,3 +285,18 @@ def test_empty_stock_screen_keeps_last_picks(db, monkeypatch):
     again = asyncio.run(build_recs(db))
     assert again["screened"] == first["screened"] and recs_ok(db)
     assert db.latest_report("recs")["screened"] == first["screened"]
+
+
+def test_events_split_into_indonesia_and_world_ten_each(db):
+    import time as _t
+
+    from arah.extras import events_for_brief
+
+    now = int(_t.time())
+    cal = [{"at": now + 3600 * i, "country": "US", "title": f"US {i}", "why": {"id": "", "en": ""}} for i in range(14)]
+    db.set("calendar", {"at": now, "events": cal})
+    desks = {"ID": {"ahead": [{"at": now + 7200 * i, "country": "ID", "what": {"id": f"ID {i}", "en": ""}} for i in range(12)]}}
+    ev = events_for_brief(db, desks)
+    assert sum(e["side"] == "world" for e in ev) == 10 and sum(e["side"] == "id" for e in ev) == 10
+    assert [e["at"] for e in ev] == sorted(e["at"] for e in ev)
+    assert all(e["source"] == "news" for e in ev if e["side"] == "id")
