@@ -92,13 +92,14 @@ function Shell({route, pulse, reloadPulse, children}: {route: string; pulse: Pul
             ))}
           </nav>
           <HeaderSearch />
+          <SessionChip pulse={pulse} />
           <StaleChip pulse={pulse} onChanged={reloadPulse} wide={asset} />
         </div>
       </header>
       {!asset && (
         <div className="phone-top">
           <Logo />
-          <StaleChip pulse={pulse} onChanged={reloadPulse} />
+          <span className="phone-chips"><SessionChip pulse={pulse} /><StaleChip pulse={pulse} onChanged={reloadPulse} /></span>
         </div>
       )}
       <main id="main" className="main">{children}</main>
@@ -112,6 +113,13 @@ function Shell({route, pulse, reloadPulse, children}: {route: string; pulse: Pul
       </nav>
     </div>
   );
+}
+
+/** IDX session from the exchange's timetable in WIB: Pra-pembukaan, Sesi 1, Istirahat, Sesi 2 or Tutup. */
+function SessionChip({pulse}: {pulse: PulseInfo | null}) {
+  const s = pulse?.idx;
+  if (!s) return null;
+  return <span className={`sess${s.open ? ' sess-open' : ''}`} aria-label={`Bursa Efek Indonesia: ${s.label}`}><span className="sess-dot" />BEI · {s.label}</span>;
 }
 
 function usePulse(enabled: boolean): [PulseInfo | null, () => void] {

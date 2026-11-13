@@ -16,7 +16,7 @@ from .brief import build_brief
 from .config import BRIEF_SCHEDULE, DEFAULT_HORIZONS, WEEKLY_OUTLOOK, Settings
 from .data.bca import refresh_bca
 from .data.calendar import refresh_calendar
-from . import push
+from . import panel, push
 from . import verdict_rules as rules
 from .data import sbterm
 from .data.frankfurter import fill as fill_fx
@@ -239,6 +239,10 @@ class Runtime:
             return
         keys = ["IHSG", "LQ45"] + [k for k in self.db.get("watchlist", []) if k in BY_KEY and BY_KEY[k].country == "ID"]
         keys += [r["asset"] for r in self.db.q("SELECT asset FROM picks_ledger WHERE status='open'") if r["asset"] in BY_KEY and BY_KEY[r["asset"]].country == "ID"]
+        # IHSG's net foreign flow for the day; cached for 15 minutes, so this is one request per quarter hour.
+        ses = panel.idx_session()
+        if ses["day"] and ses["key"] != "pra":
+            await sbterm.foreign_day(self.db, sb, "IHSG")
         for key in list(dict.fromkeys(keys))[:12]:
             asset = BY_KEY[key]
             try:

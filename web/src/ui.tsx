@@ -59,7 +59,7 @@ export function VerdictTag({tag, prefix, suffix, paused}: {tag: TagInfo | null |
 /** ▲/▼ follows the price; the colour follows what it means for a rupiah holder (a rising USD/IDR is bad). */
 export function ChangeText({value, upIsGood = true, label, digits = 1}: {value: number | null | undefined; upIsGood?: boolean; label?: string; digits?: number}) {
   const {pct} = useT();
-  if (value == null) return <span className="muted">Tidak ada data</span>;
+  if (value == null) return <span className="muted" aria-label="Tidak ada data">—</span>;
   const flat = Math.abs(value) < 0.5 * 10 ** -digits;
   const good = value >= 0 ? upIsGood : !upIsGood;
   return (

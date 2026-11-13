@@ -1,6 +1,7 @@
 /* Ringkasan (redesign pack prompt 02, mockups Main.html and MobileHome.html). */
 import {useState} from 'react';
-import {api, type EventItem, type PulseInfo, type RecordInfo, type Simple, type SimpleCard} from './api';
+import {api, type EventItem, type FlowRow, type PanelInfo, type PanelRow, type PulseInfo, type RecordInfo, type Simple, type SimpleCard} from './api';
+import {compact} from './market';
 import {useLoad} from './hooks';
 import {useT} from './i18n';
 import {ChangeText, Seg, Skeleton, SourceLine, Sparkline, VerdictTag} from './ui';
@@ -90,6 +91,58 @@ function AbroadCard({s}: {s: NonNullable<Simple['abroad']>}) {
         })}
       </div>
     </a>
+  );
+}
+
+/** Net foreign flow: IHSG today as one number, then the stocks foreign investors bought and sold most. */
+function ForeignCard({f}: {f: PanelInfo['foreign']}) {
+  const net = f.day?.net_foreign ?? null;
+  const max = Math.max(...[...f.buy, ...f.sell].map(r => Math.abs(r.net)), 1);
+  const list = (rows: FlowRow[], buy: boolean) => (
+    <ul className="flow-list" aria-label={buy ? 'Beli bersih asing terbesar' : 'Jual bersih asing terbesar'}>
+      {rows.length === 0 ? <li className="muted">—</li> : rows.map(r => (
+        <li key={r.key}>
+          <a href={`#/a/${r.key}`}>{r.key}</a>
+          <span className="flow-bar"><span style={{width: `${Math.max(6, (Math.abs(r.net) / max) * 100)}%`, background: buy ? 'var(--up)' : 'var(--down-mark)'}} /></span>
+          <span className={buy ? 'chg-up' : 'chg-down'}>{compact(Math.abs(r.net))}</span>
+        </li>
+      ))}
+    </ul>
+  );
+  return (
+    <div className="mcard flow">
+      <div className="mcard-top"><span className="mcard-name">Asing di IHSG</span><span className="caption">hari ini</span></div>
+      <span className={`mcard-val ${net == null ? '' : net >= 0 ? 'chg-up' : 'chg-down'}`}>
+        {net == null ? '—' : `${net >= 0 ? 'Beli' : 'Jual'} ${compact(Math.abs(net))}`}
+      </span>
+      <div className="flow-cols">
+        <div><span className="caption">Beli bersih · 1 bln</span>{list(f.buy, true)}</div>
+        <div><span className="caption">Jual bersih · 1 bln</span>{list(f.sell, false)}</div>
+      </div>
+      <SourceLine src={f.source && f.at ? {source: f.source, at: f.at, delay_min: 0} : null} />
+    </div>
+  );
+}
+
+/** A short table of values with their one-month change; "—" where there is no feed. */
+function ValueCard({title, rows, period}: {title: string; rows: PanelRow[]; period: string}) {
+  const {num} = useT();
+  // Several feeds in one card: the line shows the oldest of them, so the card never looks fresher than it is.
+  const src = rows.map(r => r.src).filter((x): x is NonNullable<typeof x> => !!x).sort((x, y) => x.at - y.at)[0] ?? null;
+  return (
+    <div className="mcard vcard">
+      <div className="mcard-top"><span className="mcard-name">{title}</span><span className="caption">{period}</span></div>
+      <dl className="vrows">
+        {rows.map(r => (
+          <div key={r.key} className="vrow">
+            <dt>{r.label}</dt>
+            <dd className="num">{r.price == null ? '—' : `${num(r.price, r.decimals ?? 2)}${r.unit ?? ''}`}</dd>
+            <dd className="num">{r.price == null ? <span className="muted">—</span> : <ChangeText value={r.chg1m} />}</dd>
+          </div>
+        ))}
+      </dl>
+      <SourceLine src={src} />
+    </div>
   );
 }
 
@@ -213,6 +266,7 @@ function MarketPunch({place, sentence, why, causes, news, asset, assetLabel, gau
 export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo | null}) {
   const [h, setH] = useState('1m');
   const b = useLoad(api.brief, [], onAuth);
+  const pn = useLoad(api.panel, [], onAuth);
   const other = useLoad(() => (h === '1m' ? Promise.resolve(null) : api.simple(h)), [h], onAuth);
   const brief = b.data?.brief;
   const simple: Simple | null | undefined = h === '1m' ? brief?.simple : other.data;
@@ -254,7 +308,13 @@ export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo 
         {simple?.indonesia && <MarketCard c={simple.indonesia} title="IHSG" h={h} />}
         {simple?.usd && <MarketCard c={simple.usd} title="USD/IDR" h={h} />}
         {simple?.cny && <MarketCard c={simple.cny} title="CNY/IDR" h={h} />}
+      </section>
+
+      <section className="ctx-cards" aria-label="Asing, luar negeri, komoditas dan makro">
         {simple?.abroad && <AbroadCard s={simple.abroad} />}
+        {pn.data && <ForeignCard f={pn.data.foreign} />}
+        {pn.data && <ValueCard title="Komoditas" rows={pn.data.commodities} period="harga · 1 bln" />}
+        {pn.data && <ValueCard title="Makro" rows={pn.data.macro} period="nilai · 1 bln" />}
       </section>
 
       <div className={events.length ? 'home-grid' : ''}>
