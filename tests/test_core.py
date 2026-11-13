@@ -277,3 +277,90 @@ def test_ai_text_numbers_become_indonesian():
     # Already Indonesian, years and clock times stay as they are.
     assert id_numbers("Rupiah Rp18.250 per dolar, naik 2,5% pada 2026") == "Rupiah Rp18.250 per dolar, naik 2,5% pada 2026"
     assert id_numbers("Rilis 20.30 WIB") == "Rilis 20.30 WIB"
+
+
+def test_story_cluster_lists_sources_impact_and_tickers(tmp_path):
+    import time as _t
+
+    from arah.data.news import _store, impact, tickers, top_stories
+    from arah.db import DB
+
+    db = DB(tmp_path / "n.db")
+    now = int(_t.time())
+    same = "Asing jual bersih BBRI dan Telkom usai rebalancing MSCI"
+    _store(db, "id_flow", "ID", [
+        {"title": same, "source": "Reuters", "url": "a1", "published_at": now - 900},
+        {"title": same + " hari ini", "source": "Kontan", "url": "a2", "published_at": now - 600},
+        {"title": "Asing jual bersih BBRI dan Telkom setelah rebalancing MSCI", "source": "CNBC Indonesia", "url": "a3",
+         "published_at": now - 300},
+    ])
+    top = top_stories(db, ["id_flow"])
+    assert len(top) == 1 and top[0]["outlets"] == 3
+    # Tier 1 outlets first, then tier 2; each named once.
+    assert top[0]["sources"] == ["CNBC Indonesia", "Kontan", "Reuters"]
+    assert top[0]["impact"] == "negatif" and top[0]["tickers"] == ["BBRI", "TLKM"]
+
+    # Phrases outrank single words: a rate cut is good news although it "falls".
+    assert impact("BI pangkas suku bunga, IHSG menguat") == "positif"
+    assert impact("Suku bunga turun 25 bps") == "positif" and impact("Inflasi naik ke 3,1%") == "negatif"
+    assert impact("RUPS tahunan digelar pekan depan") == "netral"
+    # Short US codes such as V or MA are only matched by name; four-letter codes need capitals.
+    assert tickers("Visa and Mastercard settle") == ["MA"] and tickers("bbca naik") == [] and tickers("BBCA naik") == ["BBCA"]
+
+
+def test_indonesian_agenda_follows_published_rules(monkeypatch):
+    from datetime import date, datetime
+
+    from arah.data import agenda_id
+
+    monkeypatch.setenv("ARAH_BI_RDG", "2026-11-19, bukan-tanggal")
+    now = datetime(2026, 11, 13, 10, tzinfo=agenda_id.WIB).timestamp()
+    got = {e["kind"]: datetime.fromtimestamp(e["at"], agenda_id.WIB).date() for e in agenda_id.upcoming(now, days=80)}
+    # 30 Nov 2026 is the last business day of November; 1 Dec 2026 a Tuesday; 1 Jan 2027 a Friday (no holiday list).
+    assert got["msci"] == date(2026, 11, 30) and got["rdg"] == date(2026, 11, 19)
+    items = agenda_id.upcoming(now, days=80)
+    bps = [datetime.fromtimestamp(e["at"], agenda_id.WIB).date() for e in items if e["kind"] == "bps"]
+    assert bps == [date(2026, 12, 1), date(2027, 1, 1)]
+    assert all(e["why"]["id"] and e["note"] == "jadwal rutin" and e["country"] == "ID" for e in items)
+    # Index changes take effect on the first trading day of February: 1 Feb 2027 is a Monday.
+    later = datetime(2027, 1, 20, tzinfo=agenda_id.WIB).timestamp()
+    assert {e["kind"]: datetime.fromtimestamp(e["at"], agenda_id.WIB).date() for e in agenda_id.upcoming(later)}["idx"] == date(2027, 2, 1)
+
+
+def test_one_outlet_counts_once_and_record_low_is_negative(tmp_path):
+    import time as _t
+
+    from arah.data.news import _store, impact, top_stories
+    from arah.db import DB
+
+    db = DB(tmp_path / "n.db")
+    now = int(_t.time())
+    t = "IHSG ditutup menguat 135 poin sore ini"
+    _store(db, "id_market", "ID", [{"title": t, "source": "ANTARA News", "url": "b1", "published_at": now - 60},
+                                   {"title": t, "source": "ANTARA Foto", "url": "b2", "published_at": now - 30}])
+    top = top_stories(db, ["id_market"])
+    assert top[0]["outlets"] == 1 and top[0]["sources"] == ["ANTARA News"]
+    assert impact("Rupiah cetak rekor penutupan terendah") == "negatif"
+    assert impact("Delapan saham terdepak dari indeks MSCI") == "negatif"
+
+
+def test_same_move_in_different_words_is_one_story(tmp_path):
+    import time as _t
+
+    from arah.data.news import _store, top_stories
+    from arah.db import DB
+
+    db = DB(tmp_path / "n.db")
+    now = int(_t.time())
+    _store(db, "id_market", "ID", [
+        {"title": "IHSG Ditutup Rebound 2,66% Pasca Review MSCI November 2026, Tren Pemulihan Berlanjut?", "source": "kontan.co.id", "url": "c1", "published_at": now - 300},
+        {"title": "IHSG Melonjak 2,66% Jadi 5.250 Hari Kamis (12/11), Ada Net Buy Asing di Saham Ini", "source": "Pusat Data Kontan", "url": "c2", "published_at": now - 200},
+        {"title": "IHSG Naik 2,66 Persen di Tengah Gejolak Politik dan Evaluasi Indeks MSCI", "source": "Kompas.com", "url": "c3", "published_at": now - 100},
+        {"title": "IHSG Naik 1,10 Persen Ditopang Saham Bank", "source": "Kompas.com", "url": "c4", "published_at": now - 50},
+        {"title": "Rupiah Kamis kian melemah jadi Rp18.198 per dolar AS", "source": "ANTARA News", "url": "c5", "published_at": now - 40},
+    ])
+    top = top_stories(db, ["id_market"])
+    big = [s for s in top if "2,66" in s["title"]]
+    assert len(big) == 1 and big[0]["outlets"] == 2 and big[0]["sources"] == ["Kompas.com", "kontan.co.id"]
+    # A different number on the same index is a different story; so is the rupiah.
+    assert any("1,10" in s["title"] for s in top) and any("Rupiah" in s["title"] for s in top) and len(top) == 3

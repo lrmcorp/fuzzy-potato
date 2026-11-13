@@ -420,3 +420,8 @@ a:hover { text-decoration: underline; }
 .sess-open { color: var(--ink); }
 .sess-open .sess-dot { background: var(--up); }
 .phone-chips { display: inline-flex; gap: var(--s2); align-items: center; }
+
+/* Fase 5: story tags */
+.story-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 2px; }
+.tick { font-size: var(--fs-caption); font-weight: 600; color: var(--ink); border: 1px solid var(--divider); border-radius: var(--r-tag); padding: 1px 6px; }
+.tick:hover { text-decoration: none; border-color: var(--control-border); }

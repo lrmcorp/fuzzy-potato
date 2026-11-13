@@ -32,7 +32,7 @@ export function Icon({name, size = 20, className}: {name: keyof typeof PATHS | s
 }
 
 /** The four action marks and the three direction marks, drawn so meaning never rests on colour alone. */
-function Mark({icon}: {icon: string}) {
+export function Mark({icon}: {icon: string}) {
   const common = {width: 10, height: 10, viewBox: '0 0 10 10', 'aria-hidden': true as const, className: 'mark'};
   if (icon === 'full') return <svg {...common}><circle cx="5" cy="5" r="4.5" fill="currentColor" /></svg>;
   if (icon === 'half') return <svg {...common}><circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M5 1a4 4 0 0 0 0 8z" fill="currentColor" /></svg>;
