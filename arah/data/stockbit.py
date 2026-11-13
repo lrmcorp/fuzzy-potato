@@ -30,6 +30,7 @@ READ_PREFIXES = ("/charts/", "/company-price-feed/", "/marketdetectors/", "/orde
                  "/order-trade/running-trade", "/order-trade/trade-book/", "/findata-view/foreign-domestic/",
                  "/insider/company/", "/stream/v3/symbol/")
 PACE = 1.0
+TERMINAL_PACE = 4.0
 TTL = 5.0
 INDEX_CODES = {"IHSG": "IHSG", "LQ45": "LQ45"}
 
@@ -130,8 +131,12 @@ class Stockbit:
             return {"configured": False}
         now = time.time()
         a, r = token_exp(s.get("access", "")), token_exp(s.get("refresh", ""))
+        err = self.db.get("stockbit_error")
+        # Once Stockbit has refused the session, every further call is another refusal on the owner's account:
+        # stop until a new session is saved.
+        refused = bool(err and err.get("kind") == "refused")
         return {"configured": True, "access_until": a, "refresh_until": r,
-                "usable": bool((a and a > now) or (r and r > now)), "error": self.db.get("stockbit_error")}
+                "usable": bool((a and a > now) or (r and r > now)) and not refused, "error": err}
 
     async def _refresh(self, client: httpx.AsyncClient, s: dict) -> dict:
         if not s.get("refresh") or (token_exp(s["refresh"]) or 0) < time.time():
@@ -169,7 +174,11 @@ class Stockbit:
             s = self.session
             if not s:
                 raise StockbitError("no Stockbit session configured")
-            wait = PACE - (time.monotonic() - self._last)
+            if not self.status().get("usable"):
+                raise StockbitError("Stockbit refused this session; reconnect it from the app")
+            # Terminal data (brokers, foreign flow, insiders, posts) is paced slower than prices.
+            pace = PACE if path.startswith(("/charts/", "/company-price-feed/")) else TERMINAL_PACE
+            wait = pace - (time.monotonic() - self._last)
             if wait > 0:
                 await asyncio.sleep(wait)
             async with httpx.AsyncClient(timeout=15) as client:

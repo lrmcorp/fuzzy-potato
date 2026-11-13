@@ -472,3 +472,20 @@ def test_search_watch_grouped_alerts_plan_and_pulse(db):
     assert p["alerts_active"] == 1 and p["state"] in ("live", "delayed", "paused")
     assert c.post("/api/alerts/batch", json={"asset": "PTBA", "levels": []}).status_code == 400
     assert c.post("/api/stockbit/session", json={"value": "not a session value at all"}).status_code == 400
+
+
+def test_refused_stockbit_session_stops_all_calls_until_reconnected(db):
+    import asyncio
+
+    from arah.data.stockbit import Stockbit, StockbitError
+
+    db.set("stockbit_session", {"access": "", "refresh": "x." + "eyJleHAiOjk5OTk5OTk5OTl9" + ".y"})
+    sb = Stockbit(db)
+    assert sb.status()["usable"]
+    db.set("stockbit_error", {"at": 1, "kind": "refused"})
+    assert not sb.status()["usable"]
+    try:
+        asyncio.run(sb.get("/charts/BBCA/daily?timeframe=today"))
+        raise AssertionError("a refused session must not reach Stockbit")
+    except StockbitError as e:
+        assert "reconnect" in str(e)
