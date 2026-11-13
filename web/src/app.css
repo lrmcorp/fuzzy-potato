@@ -444,3 +444,11 @@ th .term-pop, .num .term-pop { left: auto; right: 0; }
 .risk-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); }
 .risk-opts .btn { flex-direction: column; min-height: 64px; gap: 2px; white-space: normal; text-align: center; }
 .profile-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); justify-content: space-between; }
+
+/* Five horizons: keep each on one line; on a phone the title sits above the switch. */
+.seg button { white-space: nowrap; }
+.gauge-head { flex-wrap: wrap; gap: var(--s2); }
+@media (max-width: 760px) {
+  .gauge-head .seg { display: flex; width: 100%; }
+  .gauge-head .seg button, .a-grid .seg button { flex: 1 1 0; min-width: 0; padding: 0 4px; font-size: 14px; }
+}

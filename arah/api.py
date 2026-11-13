@@ -34,6 +34,7 @@ from .signals import snapshot
 from . import panel
 from .data import agenda_id
 from . import verdict_rules as rules
+from .signals import id_numbers
 from .recommend import PROFILES, VERDICTS_V, order_picks, picks_summary
 from .universe import HEADLINE_KEYS, BY_KEY, COUNTRIES, CRYPTO, COMMODITIES, DEFAULT_LEVELS, FX, INDICES, STOCKS, resolve
 
@@ -59,6 +60,19 @@ def valid_token(secret: str, token: str | None) -> bool:
         return False
     exp, sig = token.split(".", 1)
     return exp.isdigit() and int(exp) > time.time() and hmac.compare_digest(sig, _sign(secret, exp))
+
+
+def _id_text(v):
+    """Indonesian number format for every Indonesian text in a stored brief ({"id": ..., "en": ...} pairs), so a
+    brief written before the format rule still reads 5.311,36 and 1,2%."""
+    if isinstance(v, dict):
+        out = {k: _id_text(x) for k, x in v.items()}
+        if isinstance(v.get("id"), str) and "en" in v:
+            out["id"] = id_numbers(v["id"])
+        return out
+    if isinstance(v, list):
+        return [_id_text(x) for x in v]
+    return v
 
 
 class ProfileBody(BaseModel):
@@ -189,6 +203,8 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
             # Indonesian routine dates (BPS inflation, MSCI and IDX index changes, BI meetings) join the calendar.
             b = {**b, "events": sorted((b.get("events") or []) + agenda_id.upcoming(), key=lambda e: e["at"])}
         err = db.get("llm_error") if settings.llm_enabled else None
+        if b:
+            b = _id_text(b)
         return {"brief": b, "building": rt._brief_lock.locked(), "llm_error": (err or {}).get("kind"),
                 "llm_enabled": settings.llm_enabled,
                 # The 1-month forecasts for the headline markets, judged after the month has passed.
@@ -253,7 +269,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         return out
 
     @app.get("/api/simple", dependencies=[Depends(auth)])
-    def simple(h: str = Query("1m", pattern="^[123]m$")):
+    def simple(h: str = Query("1m", pattern="^(1d|1w|[123]m)$")):
         b = db.latest_report("brief") or {}
         if h == "1m" and b.get("simple"):
             return b["simple"]

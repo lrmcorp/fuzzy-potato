@@ -13,7 +13,8 @@ const DIRTAG = {
   turun: {key: 'turun', label: 'Turun', icon: 'down', tone: 'orange'},
   belum_jelas: {key: 'belum_jelas', label: 'Belum jelas arahnya', icon: 'square', tone: 'grey'},
 } as const;
-const H_LABEL: Record<string, string> = {'1m': '1 bln', '2m': '2 bln', '3m': '3 bln'};
+const H_LABEL: Record<string, string> = {'1d': '1 hari', '1w': '1 mgg', '1m': '1 bln', '2m': '2 bln', '3m': '3 bln'};
+const H_KEYS = ['1d', '1w', '1m', '2m', '3m'];
 // Foreign markets by the name of their index, the way the news writes them.
 const INDEX_NAME: Record<string, string> = {SPX: 'S&P 500', N225: 'Nikkei 225', STI: 'STI', SSE: 'Shanghai Composite'};
 
@@ -353,7 +354,7 @@ export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo 
           news="#/berita/ID" asset="IHSG" assetLabel="IHSG" gauge={ind?.gauge} h={h} record={b.data?.record} factors={pn.data?.factors.ID}>
           <div className="gauge-head">
             <span>Arah pasar</span>
-            <Seg label="Rentang prakiraan" value={h} onChange={setH} options={['1m', '2m', '3m'].map(k => ({key: k, text: H_LABEL[k]}))} />
+            <Seg label="Rentang prakiraan" value={h} onChange={setH} options={H_KEYS.map(k => ({key: k, text: H_LABEL[k]}))} />
           </div>
         </MarketPunch>
         {simple?.headline_us && (

@@ -629,3 +629,23 @@ def test_risk_profile_orders_picks_and_gauge_lists_its_factors(db):
     assert [x["label"] for x in f["ID"]] == ["IHSG 1 bln", "USD/IDR 1 bln", "Asing hari ini"] and len(f["US"]) == 3
     # Prices exist for IHSG, so it has a direction; foreign flow has no Stockbit data, so it has none ("—").
     assert f["ID"][0]["side"] in (-1, 0, 1) and f["ID"][2]["side"] is None and f["ID"][2]["value"] is None
+
+
+def test_short_horizons_and_indonesian_numbers_in_stored_brief(db):
+    c = TestClient(create_app(Settings(password="", secret="k" * 32, openrouter_key="", claude_bin="/nonexistent"), db, background=False))
+    for h, words in (("1d", "1 hari bursa"), ("1w", "1 minggu"), ("3m", "3 bulan")):
+        s = c.get(f"/api/simple?h={h}").json()
+        assert s["horizon"] == h and words in s["headline"] and s["indonesia"]["next"]["range"]
+    assert c.get("/api/simple?h=5y").status_code == 422
+    f = c.get("/api/forecast/IHSG?h=1d").json()
+    assert f["horizon"] == "1d" and f["conclusion"]["band"][-1]["step"] == 1
+
+    db.save_report("brief", {"headline": {"id": "IHSG naik 1.2% ke 5,311.36", "en": "IHSG up 1.2% to 5,311.36"},
+                             "countries": {"ID": {"summary": {"id": "Asing beli Rp 1,250 miliar.", "en": "x"}}}})
+    b = c.get("/api/brief").json()["brief"]
+    assert b["headline"]["id"] == "IHSG naik 1,2% ke 5.311,36" and b["headline"]["en"] == "IHSG up 1.2% to 5,311.36"
+    assert b["countries"]["ID"]["summary"]["id"] == "Asing beli Rp 1.250 miliar."
+
+    from arah import panel
+    db.set("sbt:foreign_day:IHSG", {"_at": 1, "v": {"net_foreign": 0, "foreign_buy": 0, "foreign_sell": 0}})
+    assert panel.foreign_flow(db)["day"] is None and panel.gauge_factors(db)["ID"][2]["side"] is None
