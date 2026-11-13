@@ -101,6 +101,24 @@ US_STOCKS = [
     ("BAC", "Bank of America"),
 ]
 
+# Sector of each stock, in the words an Indonesian investor uses. Static: these rarely change.
+SECTOR = {
+    "BBCA": "Bank", "BBRI": "Bank", "BMRI": "Bank", "BBNI": "Bank", "BRIS": "Bank",
+    "TLKM": "Telekomunikasi", "EXCL": "Telekomunikasi", "ISAT": "Telekomunikasi",
+    "ASII": "Otomotif & konglomerasi", "UNTR": "Alat berat & tambang",
+    "ADRO": "Batu bara", "PTBA": "Batu bara", "ITMG": "Batu bara",
+    "ANTM": "Tambang logam", "MDKA": "Tambang logam", "INCO": "Nikel", "AMMN": "Tambang logam",
+    "GOTO": "Teknologi", "UNVR": "Barang konsumsi", "ICBP": "Barang konsumsi", "INDF": "Barang konsumsi",
+    "KLBF": "Kesehatan", "AMRT": "Ritel", "CPIN": "Pakan & unggas", "PGAS": "Gas", "MEDC": "Minyak & gas",
+    "SMGR": "Semen", "INKP": "Kertas", "BRPT": "Petrokimia & energi", "AKRA": "Distribusi energi",
+    "NVDA": "Semikonduktor", "AMD": "Semikonduktor", "AVGO": "Semikonduktor",
+    "AAPL": "Teknologi", "MSFT": "Teknologi", "GOOGL": "Teknologi", "META": "Teknologi", "CRM": "Teknologi", "ORCL": "Teknologi",
+    "AMZN": "Ritel online", "TSLA": "Otomotif", "NFLX": "Media",
+    "JPM": "Bank", "BAC": "Bank", "V": "Pembayaran", "MA": "Pembayaran",
+    "UNH": "Kesehatan", "LLY": "Farmasi", "JNJ": "Farmasi", "XOM": "Minyak & gas",
+    "PG": "Barang konsumsi", "KO": "Barang konsumsi", "COST": "Ritel", "WMT": "Ritel", "HD": "Ritel",
+}
+
 STOCKS = [Asset(c, f"{c}.JK", n, "stock", "ID", decimals=0, up_is=1) for c, n in ID_STOCKS] + [
     Asset(c, c, n, "stock", "US", up_is=1) for c, n in US_STOCKS
 ]
