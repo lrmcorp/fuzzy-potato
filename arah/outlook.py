@@ -26,30 +26,38 @@ NEXT_NAMES = STATE_NAMES
 # 40% to be "Menekan". Anything between is a coin toss with a slight lean, shown as "Seimbang".
 GOOD_AT, BAD_AT = 0.60, 0.40
 # Bumped when the summary's shape or rules change, so a stored one is rebuilt on the next start.
-SIMPLE_V = 7
+SIMPLE_V = 8
 
 
-def price_now(snap: dict, asset: Asset) -> int:
-    """+1 up, -1 down, 0 when the last month's move is within half of a normal month's swing."""
-    m = snap.get("chg1m") or 0.0
+# The look-back that matches each horizon: the change field, its length in trading days, and how it reads.
+PERIOD = {"1d": ("chg1d", 1, "hari ini"), "1w": ("chg1w", 5, "sepekan terakhir"), "1m": ("chg1m", 21, "sebulan terakhir"),
+          "2m": ("chg2m", 42, "2 bulan terakhir"), "3m": ("chg3m", 63, "3 bulan terakhir")}
+
+
+def price_now(snap: dict, asset: Asset, horizon: str = "1m") -> int:
+    """+1 up, -1 down, 0 when the move over the period is within half of a normal swing for that period."""
+    field, days, _ = PERIOD.get(horizon, PERIOD["1m"])
+    m = snap.get(field) or 0.0
     s = snap.get("spark") or []
-    days = 30 if asset.days_per_week == 7 else 21
     if len(s) > 21:
         r = [math.log(b / a) for a, b in zip(s, s[1:]) if a > 0 and b > 0]
         mu = sum(r) / len(r)
         sd = math.sqrt(sum((x - mu) ** 2 for x in r) / max(len(r) - 1, 1))
         quiet = 0.5 * sd * math.sqrt(days) * 100
     else:
-        quiet = 1.0 if asset.klass == "fx" else 2.0
+        quiet = (1.0 if asset.klass == "fx" else 2.0) * math.sqrt(days / 21)
     if abs(m) < quiet:
         return 0
     return 1 if m > 0 else -1
 
 
-def gauge_now(snap: dict, asset: Asset) -> float:
-    """Where the last month puts the market for the owner: a 10% move in their favour reaches the end."""
-    m = (snap.get("chg1m") or 0.0) * (asset.up_is or 1)
-    return round(min(0.97, max(0.03, 0.5 + m / 20)), 3)
+def gauge_now(snap: dict, asset: Asset, horizon: str = "1m") -> float:
+    """Where the period puts the market for the owner: a 10% move in a month reaches the end, scaled by the square
+    root of time for other periods (about 2,2% in a day, 4,9% in a week, 17% in three months)."""
+    field, days, _ = PERIOD.get(horizon, PERIOD["1m"])
+    full = 10.0 * math.sqrt(days / 21)
+    m = (snap.get(field) or 0.0) * (asset.up_is or 1)
+    return round(min(0.97, max(0.03, 0.5 + m / (2 * full))), 3)
 
 
 def favorable(p_up: float, asset: Asset) -> float:
@@ -104,7 +112,7 @@ def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
     shown = snap["price"]
     scale = shown / f["s0"] if f["s0"] else 1.0
     lo_px, hi_px = f["q05"] * scale, f["q95"] * scale
-    now_dir = price_now(snap, asset)
+    now_dir = price_now(snap, asset, horizon)
     now_state, nxt = state_of(now_dir, asset), next_state(f["p_up"], asset)
     next_dir = 1 if f["p_up"] >= 0.5 else -1
     fx = asset.klass == "fx"
@@ -156,7 +164,7 @@ def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
                  # The range is the model's 5th to 95th percentile: 9 in 10 of its simulated paths end inside it.
                  "odds": {"n": 9, "of": 10}},
         # Positions on the gauge from Menekan (0) to Mendukung (1), from the owner's side.
-        "gauge": {"now": gauge_now(snap, asset), "next": round(favorable(f["p_up"], asset), 3)},
+        "gauge": {"now": gauge_now(snap, asset, horizon), "next": round(favorable(f["p_up"], asset), 3)},
         "why": reasons[0]["text"] if reasons else None,
         "reasons": reasons, "watch": view.get("watch"),
         "from_team": bool(ins), "grade": (view.get("validation") or {}).get("grade"),
@@ -189,8 +197,8 @@ def headline(card_id: dict | None, horizon: str = "1m", subject: str = "Pasar") 
     if not card_id:
         return None
     g = card_id["gauge"]["now"]
-    now = (f"{subject} tertekan sebulan terakhir." if g < 0.4 else f"{subject} menguat sebulan terakhir." if g > 0.6
-           else f"{subject} tenang sebulan terakhir.")
+    past = PERIOD.get(horizon, PERIOD["1m"])[2]
+    now = (f"{subject} tertekan {past}." if g < 0.4 else f"{subject} menguat {past}." if g > 0.6 else f"{subject} tenang {past}.")
     ahead = {"1d": "besok", "1w": "sepekan ke depan", "1m": "sebulan ke depan", "2m": "2 bulan ke depan",
              "3m": "3 bulan ke depan"}.get(horizon, "sebulan ke depan")
     d = card_id["next"]["dir"]

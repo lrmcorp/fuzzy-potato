@@ -109,6 +109,7 @@ def snapshot(db: DB, asset: Asset) -> dict | None:
         "chg1d": pct_change(c, 1),
         "chg1w": pct_change(c, w),
         "chg1m": pct_change(c, 30 if w == 7 else 21),
+        "chg2m": pct_change(c, 60 if w == 7 else 42),
         "chg3m": pct_change(c, 90 if w == 7 else 63),
         "chg6m": pct_change(c, 180 if w == 7 else 126),
         "ma20": float(c[-20:].mean()) if len(c) >= 20 else None,
@@ -138,7 +139,7 @@ def snapshot(db: DB, asset: Asset) -> dict | None:
         if time.time() - (q["at"] or 0) < 4 * 86400:
             # Changes over a week and a month are measured to the same quote as "today", so the card's two
             # numbers and the headline all start from one price. A large gap to the daily-close figure is logged.
-            for key, n in (("chg1w", w), ("chg1m", 30 if w == 7 else 21)):
+            for key, n in (("chg1w", w), ("chg1m", 30 if w == 7 else 21), ("chg2m", 60 if w == 7 else 42), ("chg3m", 90 if w == 7 else 63)):
                 if len(c) > n and c[-1 - n] > 0:
                     by_quote = (q["price"] / float(c[-1 - n]) - 1) * 100
                     if out[key] is not None and abs(by_quote - out[key]) > 3:
@@ -148,6 +149,19 @@ def snapshot(db: DB, asset: Asset) -> dict | None:
             if q["chg1d"] is not None:
                 out["chg1d"] = q["chg1d"]
     return out
+
+
+def _prev_close(db: DB, asset: Asset, at: int) -> float | None:
+    """Close of the last trading day before the quote's own day. When the bars already hold the quote's day
+    (a bar that starts less than a day before the quote), the bar before it is yesterday."""
+    if not at:
+        return None
+    rows = db.q("SELECT ts, c FROM bars WHERE symbol=? AND interval='1d' AND ts<=? ORDER BY ts DESC LIMIT 2", (asset.symbol, at))
+    if not rows:
+        return None
+    if at - rows[0]["ts"] < 86400:
+        return float(rows[1]["c"]) if len(rows) > 1 and rows[1]["c"] else None
+    return float(rows[0]["c"]) if rows[0]["c"] else None
 
 
 def quote_info(db: DB, asset: Asset) -> dict | None:
@@ -165,6 +179,13 @@ def quote_info(db: DB, asset: Asset) -> dict | None:
     else:
         delay = 15  # IDX and Asian exchanges through Yahoo
     prev = q["prev_close"]
+    if src != "Stockbit":
+        # Yahoo's chart "previous close" is the close before the chart's range began (days ago for a 5-day
+        # range), not yesterday's. The previous trading day's close comes from the daily bars instead.
+        # Yahoo's daily bars carry the odd bad tick too, so when the two candidates disagree the one implying the
+        # smaller move wins: a jump only one source shows is more likely a bad print than a real move.
+        cands = [x for x in (_prev_close(db, asset, int(q["market_ts"] or q["fetched_at"] or 0)), prev) if x]
+        prev = min(cands, key=lambda x: abs(float(q["price"]) / x - 1)) if cands else None
     return {"price": float(q["price"]), "prev": float(prev) if prev else None,
             "chg1d": (float(q["price"]) / float(prev) - 1) * 100 if prev else None,
             "source": src, "at": int(q["market_ts"] or q["fetched_at"] or 0), "delay_min": delay}

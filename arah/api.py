@@ -212,9 +212,10 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
                 "record": record_summary(db, "1m", HEADLINE_KEYS)}
 
     @app.get("/api/panel", dependencies=[Depends(auth)])
-    def panel_data():
-        """Ringkasan extras: foreign flow, commodities and macro, each with its source and time."""
-        return panel.summary(db)
+    def panel_data(h: str = Query("1m", pattern="^(1d|1w|[123]m)$")):
+        """Ringkasan extras: foreign flow, commodities and macro, each with its source and time. The gauge's
+        factors look back over the same period as the chosen horizon."""
+        return panel.summary(db, h)
 
     @app.post("/api/brief/run", dependencies=[Depends(auth)])
     async def brief_run():
