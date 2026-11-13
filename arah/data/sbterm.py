@@ -108,8 +108,9 @@ async def insider(db: DB, sb: Stockbit, code: str) -> list[dict] | None:
         for m in d.get("movement") or []:
             ch = m.get("changes") or {}
             cur = m.get("current") or {}
-            out.append({"name": str(m.get("name") or "")[:80], "date": m.get("date"), "at": _holder_date(m.get("date")),
-                        "action": str(m.get("action_type") or "")[:40], "nationality": str(m.get("nationality") or "")[:20],
+            action = str(m.get("action_type") or "").replace("ACTION_TYPE_", "").replace("_", " ").title()[:30]
+            out.append({"name": _name(m.get("name")), "date": m.get("date"), "at": _holder_date(m.get("date")),
+                        "action": action, "side": insider_side(action), "nationality": str(m.get("nationality") or "")[:20],
                         "change_shares": _val(ch.get("value") if isinstance(ch, dict) else ch) if ch else None,
                         "change_pct": _val(ch.get("percentage")) if isinstance(ch, dict) else None,
                         "now_pct": _val(cur.get("percentage")) if isinstance(cur, dict) else None,
@@ -118,12 +119,23 @@ async def insider(db: DB, sb: Stockbit, code: str) -> list[dict] | None:
     return await _cached(db, "insider", code, fetch)
 
 
+def _name(v) -> str:
+    """HENDRA TANUMIHARDJA -> Hendra Tanumihardja, keeping company forms such as PT and Tbk readable."""
+    words = str(v or "").title().split()
+    fix = {"Pt": "PT", "Tbk": "Tbk", "Ltd": "Ltd", "Llc": "LLC", "Bv": "BV", "Inc": "Inc", "Plc": "PLC", "Ii": "II"}
+    return " ".join(fix.get(w.strip(".,"), w) for w in words)[:80]
+
+
 def insider_side(action: str) -> int:
     a = action.lower()
     return 1 if ("buy" in a or "beli" in a or "acq" in a) else -1 if ("sell" in a or "jual" in a or "dispos" in a) else 0
 
 
-_TAG = re.compile(r"<[^>]+>|\$[A-Z]{3,5}\b")
+_TAG = re.compile(r"<[^>]+>|\$[A-Z]{3,5}\b|\[%[^%\]]*%\]")
+# Words that make a post about the stock or the market rather than politics or chatter.
+_MARKET = ("asing", "akumulasi", "distribusi", "bandar", "broker", "laba", "dividen", "target", "support", "resist",
+           "breakout", "volume", "kuartal", "rights", "buyback", "net buy", "net sell", "valuasi", "per ", "pbv", "nim", "kredit",
+           "foreign", "earnings", "profit", "harga", "tp ", "entry", "cutloss", "naik", "turun")
 
 
 async def stream(db: DB, sb: Stockbit, code: str) -> list[dict] | None:
@@ -135,11 +147,13 @@ async def stream(db: DB, sb: Stockbit, code: str) -> list[dict] | None:
             text = " ".join(text.split())[:220]
             if not text:
                 continue
+            if not any(w in text.lower() for w in _MARKET):
+                continue  # politics, jokes and personal chatter say nothing about the stock
             out.append({"text": text, "at": str(p.get("created_at") or "")[:19], "likes": int(_val(p.get("total_likes")) or 0),
                         "replies": int(_val(p.get("total_replies")) or 0), "type": str(p.get("type") or "")[:20],
                         "url": str(p.get("title_url") or "")[:200]})
-        # The posts people engaged with most first: a single post is noise, a busy one is a signal.
-        return sorted(out, key=lambda x: -(x["likes"] + 2 * x["replies"]))[:8]
+        # The posts people liked most first ("replies" counts a whole thread, so it does not rank).
+        return sorted(out, key=lambda x: -x["likes"])[:8]
     return await _cached(db, "stream", code, fetch)
 
 
@@ -184,7 +198,7 @@ def fact_lines(code: str, s: dict) -> list[tuple[str, str]]:
         out.append((f"{code}.SB{i}", f"Major-holder filing {m['date']}: {m['name']} {m['action'] or 'changed holding'}"
                     + (f" ({m['change_pct']:+.2f}% of shares)" if m.get("change_pct") is not None else "")
                     + (f", now {m['now_pct']:.2f}%" if m.get("now_pct") is not None else "")))
-    busy = [p for p in (s.get("stream") or []) if p["likes"] + p["replies"] >= 5][:2]
+    busy = [p for p in (s.get("stream") or []) if p["likes"] >= 5][:2]
     for i, p in enumerate(busy, 6):
         out.append((f"{code}.SB{i}", f"Stockbit community post ({p['likes']} likes, unverified opinion): {p['text'][:160]}"))
     return out

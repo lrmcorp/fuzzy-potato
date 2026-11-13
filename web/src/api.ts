@@ -55,7 +55,7 @@ export interface SbTerminal {
   bandar: {label: string | null; side: number; avg: SbPart; top1: SbPart; top3: SbPart; top5: SbPart; top10: SbPart;
     buyers: number | null; sellers: number | null; value: number | null} | null;
   foreign: {range: string | null; net_foreign: number | null; foreign_buy: number | null; foreign_sell: number | null; net_domestic: number | null} | null;
-  insider: {name: string; date: string; at: number | null; action: string; nationality: string; change_shares: number | null;
+  insider: {name: string; date: string; at: number | null; action: string; side: number; nationality: string; change_shares: number | null;
     change_pct: number | null; now_pct: number | null; price: string}[] | null;
   stream: {text: string; at: string; likes: number; replies: number; type: string; url: string}[] | null;
   at: number;
