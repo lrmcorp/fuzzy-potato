@@ -32,6 +32,7 @@ from .runtime import Runtime
 from .service import all_horizons, build_view, forecast_asset, horizon_name, record_summary, track_record, validation
 from .signals import snapshot
 from . import panel
+from .data import agenda_id
 from . import verdict_rules as rules
 from .recommend import VERDICTS_V, picks_summary
 from .universe import HEADLINE_KEYS, BY_KEY, COUNTRIES, CRYPTO, COMMODITIES, DEFAULT_LEVELS, FX, INDICES, STOCKS, resolve
@@ -180,6 +181,9 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
     @app.get("/api/brief", dependencies=[Depends(auth)])
     def brief():
         b = db.latest_report("brief")
+        if b:
+            # Indonesian routine dates (BPS inflation, MSCI and IDX index changes, BI meetings) join the calendar.
+            b = {**b, "events": sorted((b.get("events") or []) + agenda_id.upcoming(), key=lambda e: e["at"])}
         err = db.get("llm_error") if settings.llm_enabled else None
         return {"brief": b, "building": rt._brief_lock.locked(), "llm_error": (err or {}).get("kind"),
                 "llm_enabled": settings.llm_enabled,

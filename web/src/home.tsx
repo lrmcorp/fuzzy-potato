@@ -191,8 +191,9 @@ function importantEvents(events: EventItem[]): EventItem[] {
     const d = new Date(Date.now() + 7 * 3600 * 1000);  // Jakarta date
     return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 2) / 1000 - 7 * 3600;
   })();
+  // Routine Indonesian dates (BPS, MSCI, IDX index changes, BI) are worth seeing three weeks ahead.
   return events
-    .filter(e => e.at >= now - 3600 && e.at < endTomorrow)
+    .filter(e => e.at >= now - 3600 && (e.at < endTomorrow || (e.kind && e.at < now + 21 * 86400)))
     .filter(e => e.source === 'news' || e.country === 'ID' || !e.impact || e.impact === 'High')
     .slice(0, 6);
 }
@@ -206,12 +207,15 @@ function Agenda({events}: {events: EventItem[]}) {
       <ul className="agenda">
         {events.map((e, i) => {
           const isToday = wib(e.at, {day: 'numeric'}) === today;
+          const isTomorrow = wib(e.at, {day: 'numeric'}) === wib(Date.now() / 1000 + 86400, {day: 'numeric'});
+          const dayLabel = isToday ? 'Hari ini' : isTomorrow ? 'Besok' : wib(e.at, {weekday: 'short'});
+          const big = e.source === 'news' ? '•' : e.timed === false ? wib(e.at, {day: 'numeric', month: 'short'}) : wib(e.at, {hour: '2-digit', minute: '2-digit'});
           return (
             <li key={i} className="ag-item">
-              <span className="day"><small>{isToday ? 'Hari ini' : 'Besok'}</small><b>{e.source === 'news' ? '•' : wib(e.at, {hour: '2-digit', minute: '2-digit'})}</b></span>
+              <span className="day"><small>{dayLabel}</small><b>{big}</b></span>
               <span className="ag-body">
                 <span className="row-title">{e.title ?? l(e.what)}</span>
-                <span className="muted">{COUNTRY[e.country] ?? e.country}{e.source === 'news' ? ' · dari berita' : ' · WIB'}</span>
+                <span className="muted">{COUNTRY[e.country] ?? e.country}{e.source === 'news' ? ' · dari berita' : e.note ? ` · ${e.note}` : ' · WIB'}</span>
                 {(e.forecast || e.previous) && (
                   <span className="ag-nums">
                     {e.forecast && <>Perkiraan <b>{e.forecast.replace('.', ',')}</b></>}
@@ -219,7 +223,7 @@ function Agenda({events}: {events: EventItem[]}) {
                     {e.previous && <>Sebelumnya <b>{e.previous.replace('.', ',')}</b></>}
                   </span>
                 )}
-                {e.why && <span className="ag-why">{l(e.why)}</span>}
+                {e.why && <span className="ag-why"><b>Kenapa penting:</b> {l(e.why)}</span>}
               </span>
             </li>
           );

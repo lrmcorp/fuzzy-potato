@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import logging
 import math
+import re
 import time
 from email.utils import parsedate_to_datetime
 from urllib.parse import quote_plus
@@ -213,9 +214,91 @@ _STOP = {"the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "as", "at
          "yang", "di", "ke", "dan", "dari", "untuk", "ini", "itu", "pada", "dengan", "akan", "jadi", "dalam"}
 
 
+# Phrases first: "suku bunga turun" is good news for stocks although "turun" alone is not.
+_IMPACT_PHRASES = {
+    1: ("rupiah menguat", "suku bunga turun", "bunga turun", "bi rate turun", "bi-rate turun", "inflasi turun", "inflasi melandai",
+        "pangkas suku bunga", "rate cut", "cuts rates", "beli bersih", "net buy", "laba naik", "laba melonjak",
+        "dividen", "buyback", "upgrade", "record high", "rekor tertinggi", "all time high"),
+    -1: ("rupiah melemah", "suku bunga naik", "bunga naik", "bi rate naik", "inflasi naik", "inflasi melonjak", "rate hike", "raises rates",
+         "jual bersih", "net sell", "laba turun", "gagal bayar", "downgrade", "rekor terendah", "keluar dari indeks"),
+}
+_IMPACT_WORDS = {
+    1: ("naik", "menguat", "melonjak", "melesat", "tertinggi", "untung", "surplus", "tumbuh", "ekspansi", "rebound",
+        "rally", "rallies", "rise", "rises", "jump", "jumps", "surge", "surges", "gain", "gains", "beat", "beats", "soar", "soars"),
+    -1: ("turun", "melemah", "anjlok", "merosot", "ambles", "ambruk", "terendah", "terdepak", "didepak", "rugi", "defisit", "phk", "tarif", "sanksi", "resesi",
+         "fall", "falls", "drop", "drops", "plunge", "plunges", "slump", "slumps", "loss", "losses", "miss", "misses",
+         "recession", "sanction", "sanctions", "tariff", "tariffs", "default", "layoffs"),
+}
+
+
+def impact(title: str) -> str:
+    """Positif, negatif or netral for investors, from the headline's words. A rule, not a reading of the article."""
+    low = " " + " ".join(_word(title)) + " "
+    score = 0
+    for side, phrases in _IMPACT_PHRASES.items():
+        for p in phrases:
+            if f" {p} " in low:
+                score += 2 * side  # a phrase is more specific than a single word
+                low = low.replace(f" {p} ", " ")
+    for side, words in _IMPACT_WORDS.items():
+        score += side * sum(1 for w in words if f" {w} " in low)
+    return "positif" if score > 0 else "negatif" if score < 0 else "netral"
+
+
+# Names the press uses for the covered stocks, beside their ticker codes.
+TICKER_ALIASES = {
+    "BBCA": ("bca", "bank central asia"), "BBRI": ("bri", "bank rakyat indonesia"), "BMRI": ("bank mandiri",),
+    "BBNI": ("bni", "bank negara indonesia"), "BRIS": ("bsi", "bank syariah indonesia"), "TLKM": ("telkom",),
+    "ASII": ("astra international",), "ADRO": ("adaro", "alamtri"), "ANTM": ("antam", "aneka tambang"), "GOTO": ("goto",),
+    "UNVR": ("unilever indonesia",), "ICBP": ("indofood cbp",), "INDF": ("indofood sukses makmur",), "KLBF": ("kalbe",),
+    "UNTR": ("united tractors",), "PTBA": ("bukit asam",), "ITMG": ("indo tambangraya",), "MDKA": ("merdeka copper",),
+    "INCO": ("vale indonesia",), "AMRT": ("alfamart", "sumber alfaria"), "CPIN": ("charoen pokphand",),
+    "PGAS": ("pgn", "perusahaan gas negara"), "SMGR": ("semen indonesia",), "INKP": ("indah kiat",), "BRPT": ("barito pacific",),
+    "AMMN": ("amman mineral",), "EXCL": ("xl axiata", "xlsmart"), "ISAT": ("indosat",), "MEDC": ("medco",), "AKRA": ("akr corporindo",),
+    "NVDA": ("nvidia",), "AAPL": ("apple",), "MSFT": ("microsoft",), "GOOGL": ("alphabet", "google"), "AMZN": ("amazon",),
+    "META": ("meta platforms",), "TSLA": ("tesla",), "AVGO": ("broadcom",), "JPM": ("jpmorgan",), "MA": ("mastercard",),
+    "UNH": ("unitedhealth",), "XOM": ("exxon",), "LLY": ("eli lilly",), "JNJ": ("johnson & johnson",), "COST": ("costco",),
+    "NFLX": ("netflix",), "AMD": ("amd",), "CRM": ("salesforce",), "ORCL": ("oracle",), "KO": ("coca-cola",),
+    "WMT": ("walmart",), "BAC": ("bank of america",),
+}
+
+
+def tickers(title: str) -> list[str]:
+    """Covered stocks a headline names, by ticker code (4 letters, written in capitals) or by the name the press uses."""
+    raw = set(_word(title, lower=False))
+    low = " " + " ".join(_word(title)) + " "
+    out = []
+    for code, names in TICKER_ALIASES.items():
+        if (len(code) >= 4 and code in raw) or any(f" {' '.join(_word(n))} " in low for n in names):
+            out.append(code)
+    return out[:4]
+
+
+def _word(text: str, lower: bool = True) -> list[str]:
+    t = "".join(ch if ch.isalnum() else " " for ch in (text or ""))
+    return (t.lower() if lower else t).split()
+
+
+# Words that say the same move: "IHSG melonjak 2,66%" and "IHSG naik 2,66 persen" are one story.
+_SAME = {**{w: "~up" for w in ("naik", "menguat", "melonjak", "melesat", "rebound", "rises", "rise", "gains", "jumps", "surges")},
+         **{w: "~down" for w in ("turun", "melemah", "anjlok", "merosot", "ambles", "falls", "fall", "drops", "slides", "slumps")}}
+_NUM = re.compile(r"\d+(?:[.,]\d+)+|\d{3,}")
+
+
 def _tokens(title: str) -> set[str]:
-    word = "".join(ch.lower() if ch.isalnum() else " " for ch in title)
-    return {w for w in word.split() if len(w) > 2 and w not in _STOP}
+    # Precise numbers stay whole ("2,66" -> "2.66", "5.250" -> "5.250"); years are left out, they match too much.
+    nums = {"#" + n.replace(",", ".") for n in _NUM.findall(title) if not re.fullmatch(r"(19|20)\d\d", n)}
+    word = "".join(ch.lower() if ch.isalnum() else " " for ch in _NUM.sub(" ", title))
+    return {_SAME.get(w, w) for w in word.split() if len(w) > 2 and w not in _STOP} | nums
+
+
+def _same_story(a: set[str], b: set[str]) -> bool:
+    """Three shared words covering most of the shorter headline, or three shared words one of which is the same
+    precise number (a percentage or a price): two outlets rarely print the same 2,66% about different things."""
+    inter = a & b
+    if len(inter) < 3:
+        return False
+    return len(inter) / min(len(a), len(b)) >= 0.6 or any(t.startswith("#") for t in inter)
 
 
 def top_stories(db: DB, topics: list[str], limit: int = 30, max_age_h: int = 48) -> list[dict]:
@@ -223,35 +306,44 @@ def top_stories(db: DB, topics: list[str], limit: int = 30, max_age_h: int = 48)
     Each carries `outlets` (how many sources ran it) and the freshest headline's link."""
     tiers = news_tiers()
 
-    def tier(src: str) -> int | None:
+    def tier(src: str) -> tuple[int, str] | None:
+        """(tier, outlet): the outlet is the list entry that matched, so "ANTARA News" and "ANTARA Foto" are one outlet."""
         s = (src or "").lower()
         for k in (1, 2):
-            if any(t in s for t in tiers[k]):
-                return k
+            for t in tiers[k]:
+                if t in s:
+                    return k, t
         return None
 
     # Only named outlets on the configured list: an unnamed or unknown source is not shown at all.
-    rows = [dict(r, tier=t) for r in headlines(db, topics, limit=400, max_age_h=max_age_h) if (t := tier(r["source"]))]
+    rows = [dict(r, tier=t[0], outlet=t[1]) for r in headlines(db, topics, limit=400, max_age_h=max_age_h) if (t := tier(r["source"]))]
     stories: list[dict] = []
     for r in rows:  # newest first, so each story keeps its freshest headline
         tok = _tokens(r["title"])
         if not tok:
             continue
         for st in stories:
-            inter = len(tok & st["_tok"])
-            if inter >= 3 and inter / min(len(tok), len(st["_tok"])) >= 0.6:
-                st["_src"].add((r["source"] or r["url"][:40]).lower())
+            if _same_story(tok, st["_tok"]):
+                st["_src"].add(r["outlet"])
+                # The shortest name an outlet used ("Kontan" over "kontan.co.id").
+                old = st["_names"].get(r["outlet"])
+                if not old or len(r["source"]) < len(old[1]):
+                    st["_names"][r["outlet"]] = (r["tier"], r["source"])
                 st["tier"] = min(st["tier"], r["tier"])
                 st["_tok"] |= tok
                 break
         else:
-            stories.append(dict(r, _tok=set(tok), _src={(r["source"] or r["url"][:40]).lower()}))
+            stories.append(dict(r, _tok=set(tok), _src={r["outlet"]}, _names={r["outlet"]: (r["tier"], r["source"])}))
     now = time.time()
     for st in stories:
         outlets = len(st["_src"])
         age_h = max(0.0, (now - (st["published_at"] or now)) / 3600)
         low = st["title"].lower()
         st["outlets"] = outlets
+        # Every outlet that ran the story, the most trusted tier first.
+        st["sources"] = [n for _, n in sorted(st["_names"].values(), key=lambda x: (x[0], x[1].lower())) if n]
+        st["impact"] = impact(st["title"])
+        st["tickers"] = tickers(st["title"])
         st["score"] = (1.2 * math.log1p(outlets - 1) + (0.8 if st["tier"] == 1 else 0.4)
                        + 0.5 * min(2, sum(1 for m in MOVERS if m in low)) + 1.0 * math.exp(-age_h / 18))
     stories.sort(key=lambda x: -x["score"])

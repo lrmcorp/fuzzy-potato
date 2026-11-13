@@ -37,7 +37,7 @@ export interface SimpleCard {
   touch: Record<string, number>; bca: {currency: string; buy: number; sell: number; at: number} | null;
 }
 export interface EventItem {at: number; country: string; title?: string; what?: L; why?: L; source: 'calendar' | 'news'; side?: 'id' | 'world';
-  forecast?: string; previous?: string; impact?: string}
+  forecast?: string; previous?: string; impact?: string; timed?: boolean; kind?: string; note?: string}
 export interface Report {days: number; total: number; right: number; wrong: number}
 export interface Answer {verdict: State; confidence: 'thin' | 'fair' | 'strong'; answer: L; points: Reason[]; risk: L | null}
 export interface Calc {currency: string; amount_idr: number; rate: number; source: 'bca' | 'market'; rate_at: number | null; now: number;
@@ -123,7 +123,8 @@ export interface StockVerdict {
   parts: Record<string, {points: number; max: number}>;
   reasons: {part: string; share: number; good: boolean; text: L}[]; tested: boolean; at: number;
 }
-export interface Story {id: string; topic: string; country: string; title: string; source: string; url: string; published_at: number; outlets: number}
+export interface Story {id: string; topic: string; country: string; title: string; source: string; url: string; published_at: number; outlets: number;
+  sources?: string[]; impact?: 'positif' | 'negatif' | 'netral'; tickers?: string[]}
 export interface Feed {scope: string; topics: string[]; items: Story[];
   desks: {country: string; summary: L | null; mood: number | null; events: DeskEvent[]}[]}
 export interface TickerFeed {key: string; items: Story[]; posts: NonNullable<SbTerminal['stream']>}

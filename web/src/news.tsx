@@ -4,6 +4,7 @@ import {api, type Story} from './api';
 import {Async, ChipBar} from './components';
 import {useLoad} from './hooks';
 import {useT, type Key} from './i18n';
+import {Mark} from './ui';
 
 const SCOPES: {key: string; label: Key}[] = [
   {key: 'ID', label: 'c_ID'}, {key: 'US', label: 'c_US'}, {key: 'ASIA', label: 'scope_asia'}, {key: 'GLOBAL', label: 'c_GLOBAL'},
@@ -15,21 +16,41 @@ const TOPIC: Record<string, Key> = {
   jp: 'c_JP', sg: 'c_SG', cn: 'c_CN', global: 'tp_global',
 };
 
+const IMPACT = {
+  positif: {label: 'Positif', tone: 'green', icon: 'up'},
+  negatif: {label: 'Negatif', tone: 'orange', icon: 'down'},
+  netral: {label: 'Netral', tone: 'grey', icon: 'square'},
+} as const;
+
+/** "3 media: Kontan, Bisnis.com, CNBC Indonesia" or "+2" past the third. */
+function Sources({s}: {s: Story}) {
+  const names = s.sources?.length ? s.sources : [s.source].filter(Boolean);
+  if (!names.length) return <span>—</span>;
+  const shown = names.slice(0, 3).join(', ');
+  return <span>{names.length > 1 ? `${names.length} media: ` : ''}{shown}{names.length > 3 ? ` +${names.length - 3}` : ''}</span>;
+}
+
 export function StoryList({items, empty}: {items: Story[]; empty: string}) {
-  const {t, when} = useT();
+  const {when} = useT();
   if (items.length === 0) return <p className="note">{empty}</p>;
   return (
     <ol className="stories">
-      {items.map(s => (
-        <li key={s.id}>
-          <a href={s.url} target="_blank" rel="noopener noreferrer">{s.title}</a>
-          <span className="story-meta">
-            {s.outlets > 1 && <span className="story-n">{t('outlets', {n: s.outlets})}</span>}
-            <span>{s.source || t('src_unknown')}</span>
-            <span>{when(s.published_at)}</span>
-          </span>
-        </li>
-      ))}
+      {items.map(s => {
+        const im = s.impact ? IMPACT[s.impact] : null;
+        return (
+          <li key={s.id}>
+            <a href={s.url} target="_blank" rel="noopener noreferrer">{s.title}</a>
+            <span className="story-tags">
+              {im && <span className={`tag tag-${im.tone}`} title="Dampak menurut kata-kata judul"><Mark icon={im.icon} />{im.label}</span>}
+              {(s.tickers ?? []).map(k => <a key={k} className="tick" href={`#/a/${k}`}>{k}</a>)}
+            </span>
+            <span className="story-meta">
+              <Sources s={s} />
+              <span>{when(s.published_at)}</span>
+            </span>
+          </li>
+        );
+      })}
     </ol>
   );
 }
