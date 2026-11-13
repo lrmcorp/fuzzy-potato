@@ -334,7 +334,9 @@ function RecsPanel({onAuth}: PageProps) {
             <section key={m} aria-labelledby={`rec-${m}`}>
               <h2 id={`rec-${m}`} className="section-h">{t(m === 'ID' ? 'market_id' : 'market_us')}</h2>
               {recs[m].length === 0 ? (
-                <EmptyState isCompact title={t('no_recs_title')} description={t('no_recs_desc', {n: recs.screened[m]})} />
+                recs.screened[m] === 0
+                  ? <EmptyState isCompact title={t('recs_wait_title')} description={t('recs_wait_desc')} />
+                  : <EmptyState isCompact title={t('no_recs_title')} description={t('no_recs_desc', {n: recs.screened[m]})} />
               ) : (
                 <div className="rec-list">{recs[m].map(c => <RecCardView key={c.key} c={c} />)}</div>
               )}

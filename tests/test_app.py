@@ -264,3 +264,24 @@ def test_number_format_and_units():
     # 62% up for IHSG is good; 62% up for USD/IDR (rupiah weakening) is not good; 55% is neutral.
     assert next_state(0.62, BY_KEY["IHSG"]) == "good" and next_state(0.62, BY_KEY["USDIDR"]) == "bad"
     assert next_state(0.55, BY_KEY["IHSG"]) == "neutral" and next_state(0.40, BY_KEY["IHSG"]) == "bad"
+
+
+def test_empty_stock_screen_keeps_last_picks(db, monkeypatch):
+    import asyncio
+
+    from arah import recommend
+    from arah.recommend import build_recs, recs_ok
+    from arah.universe import STOCKS
+
+    async def no_fund(db_, symbol):
+        return {}
+
+    monkeypatch.setattr(recommend, "fetch_fundamentals", no_fund)
+    first = asyncio.run(build_recs(db))
+    assert sum(first["screened"].values()) > 0 and recs_ok(db)
+    # Price history gone (a failed download): the empty screen must not replace the last real one.
+    for a in STOCKS:
+        db.x("DELETE FROM bars WHERE symbol=?", (a.symbol,))
+    again = asyncio.run(build_recs(db))
+    assert again["screened"] == first["screened"] and recs_ok(db)
+    assert db.latest_report("recs")["screened"] == first["screened"]

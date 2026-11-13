@@ -19,7 +19,7 @@ from .extras import flips
 from .data.yahoo import build_synthetic, refresh_many
 from .db import DB
 from .outlook import SIMPLE_V, build_simple
-from .recommend import build_recs
+from .recommend import build_recs, recs_ok
 from .service import record_forecasts, score_forecasts, validation
 from .signals import fmt_price
 from .telegram import Bot, format_brief, format_report
@@ -60,6 +60,19 @@ class Runtime:
                 log.exception("ledger write failed for %s", a.key)
         score_forecasts(self.db)
         await self.check_alerts()
+        await self.ensure_recs()
+
+    async def ensure_recs(self) -> None:
+        """Stock picks missing or built without data (a failed download): try again, at most once an hour."""
+        if recs_ok(self.db) or time.time() - self.db.get("recs_try_at", 0) < 3600:
+            return
+        self.db.set("recs_try_at", int(time.time()))
+        try:
+            await self.refresh_data(stocks=True)
+            r = await build_recs(self.db)
+            log.info("stock screen rebuilt: %s screened, %s without data", r.get("screened"), r.get("missing"))
+        except Exception:
+            log.exception("stock screen failed")
 
     async def daily(self) -> None:
         await self.refresh_data(stocks=True)
@@ -79,7 +92,7 @@ class Runtime:
                 await refresh_calendar(self.db)
             except Exception:
                 log.exception("news or calendar refresh failed")
-            if not self.db.latest_report("recs", max_age=20 * 3600):
+            if not recs_ok(self.db):
                 await self.refresh_data(stocks=True)
                 await build_recs(self.db)
             brief = await build_brief(self.db, self.settings, slot=slot)

@@ -131,6 +131,8 @@ const S = {
   risks: ['Risiko', 'Risks'], plan: ['Rencana', 'Plan'], entry: ['Masuk', 'Entry'], target: ['Target', 'Target'],
   stop: ['Batas rugi', 'Stop'], rr: ['Imbal banding risiko', 'Reward to risk'],
   no_recs_title: ['Tidak ada saham yang lolos saringan hari ini', 'No stock passed the screen today'],
+  recs_wait_title: ['Saringan saham sedang disiapkan', 'The stock screen is being prepared'],
+  recs_wait_desc: ['Data harga saham belum terunduh lengkap. ARAH mencoba lagi otomatis setiap jam; buka lagi halaman ini nanti.', 'Stock price history has not finished downloading. ARAH retries every hour; check this page again later.'],
   no_recs_desc: ['Saringan memeriksa {n} saham. Tidak ada yang punya tiga keunggulan sekaligus tren naik. Menunggu lebih baik daripada memaksa.',
     'The screen checked {n} stocks. None has three strengths together with an uptrend. Waiting beats forcing a pick.'],
   recs_note: ['Saringan otomatis dari harga dan laporan keuangan. Bukan saran investasi.',

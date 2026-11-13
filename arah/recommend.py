@@ -6,6 +6,7 @@ nothing passes, the list is empty and the UI says so.
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import time
 
@@ -14,6 +15,8 @@ from .db import DB
 from .service import forecast_asset
 from .signals import both, fmt_num, fmt_pct, fmt_price, snapshot
 from .universe import BENCHMARK, BY_KEY, STOCKS, Asset
+
+log = logging.getLogger("arah.recommend")
 
 # Minimum average daily value traded, in the stock's own currency.
 MIN_VALUE = {"ID": 20e9, "US": 50e6}
@@ -161,15 +164,32 @@ async def build_recs(db: DB, top: int = 5) -> dict:
             return await fetch_fundamentals(db, a.symbol)
 
     funds = await asyncio.gather(*(fund(a) for a in STOCKS))
-    out: dict = {"at": int(time.time()), "ID": [], "US": [], "screened": {"ID": 0, "US": 0}}
+    out: dict = {"at": int(time.time()), "ID": [], "US": [], "screened": {"ID": 0, "US": 0}, "missing": {"ID": 0, "US": 0}}
     for a, fd in zip(STOCKS, funds):
-        card = evaluate(db, a, fd, snaps.get(BENCHMARK[a.country]))
+        try:
+            card = evaluate(db, a, fd, snaps.get(BENCHMARK[a.country]))
+        except Exception:  # one odd stock must not empty the whole screen
+            log.exception("screen failed for %s", a.key)
+            card = None
         if not card:
+            out["missing"][a.country] += 1
             continue
         out["screened"][a.country] += 1
         if card["ok"]:
             out[a.country].append(card)
     for c in ("ID", "US"):
         out[c] = sorted(out[c], key=lambda x: -x["score"])[:top]
+    if not sum(out["screened"].values()):
+        # No price history to screen (a download failed): keep the last real screen instead of an empty one.
+        prev = db.latest_report("recs")
+        if prev and sum((prev.get("screened") or {}).values()):
+            log.warning("stock screen had no data; keeping the previous picks")
+            return prev
     db.save_report("recs", out)
     return out
+
+
+def recs_ok(db: DB, max_age: int = 20 * 3600) -> bool:
+    """A recent screen that actually looked at stocks."""
+    r = db.latest_report("recs", max_age=max_age)
+    return bool(r and sum((r.get("screened") or {}).values()))
