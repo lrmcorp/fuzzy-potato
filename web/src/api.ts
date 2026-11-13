@@ -148,6 +148,11 @@ export interface PanelInfo {
   factors: Record<'ID' | 'US', Factor[]>; profile: RiskProfile | null;
   news: Record<'ID' | 'US', {count: number; href: string; top: {text: string; direction: string; url: string} | null}>;
 }
+export interface SimOut {q05: number; q50: number; q95: number; p_up?: number}
+export interface SimItem {key: string; name: string; sector: string | null; tag: TagInfo | null; price: number; currency: 'IDR' | 'USD';
+  units: number; unit: string; cost: number; stop: number; loss_at_stop: number; target1: number; outcomes: Record<string, SimOut>}
+export interface SimResult {capital: number; market: 'ID' | 'US'; fx: number | null; profile: string | null; items: SimItem[]; cash: number;
+  invested?: number; horizons: string[]; total?: Record<string, SimOut> | null; loss_at_stops?: number; need?: {key: string; rp: number} | null}
 export type RiskProfile = 'hati-hati' | 'sedang' | 'berani';
 export interface Factor {label: string; side: number | null; value: number | null; kind: 'pct' | 'idr'; href?: string}
 
@@ -206,6 +211,7 @@ export const api = {
   undoAlerts: (group: string) => call<{items: AlertItem[]}>(`/api/alerts/group/${encodeURIComponent(group)}`, {method: 'DELETE'}),
   pulse: () => call<PulseInfo>('/api/pulse'),
   panel: () => call<PanelInfo>('/api/panel'),
+  simulate: (capital: number, market: string) => call<SimResult>(`/api/simulate?capital=${Math.round(capital)}&market=${market}`),
   setProfile: (profile: RiskProfile) => call<{profile: RiskProfile}>('/api/profile', {method: 'POST', body: JSON.stringify({profile})}),
   stockbitSession: (value: string) => call('/api/stockbit/session', {method: 'POST', body: JSON.stringify({value})}),
   askTelegram: (question: string, answer: string) => call<{sent: boolean}>('/api/ask/telegram', {method: 'POST', body: JSON.stringify({question, answer})}),
