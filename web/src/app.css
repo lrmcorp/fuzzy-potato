@@ -358,3 +358,19 @@ a:hover { text-decoration: underline; }
 .logo img { height: 48px; width: auto; }
 @media (max-width: 760px) { .logo img { height: 44px; } }
 .login-logo { width: min(100%, 280px); height: auto; display: block; margin: 0 auto var(--s3); }
+
+/* Ringkasan: one punch per market. Indonesia first and largest, America under it. */
+.hero-stack { display: flex; flex-direction: column; gap: 0; padding-top: var(--s4); padding-bottom: var(--s4); }
+.punch { display: flex; flex-wrap: wrap; gap: var(--s4) var(--s6); align-items: center; padding: var(--s4) 0; }
+.punch + .punch { border-top: 1px solid var(--divider); }
+.punch .hero-text { flex: 1 1 420px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.punch .gauge-box { flex: 0 1 380px; }
+.why-line { margin: 0; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.punch.big .why-line { font-size: var(--fs-row); line-height: var(--lh-row); }
+.punch-links { margin: 0; display: flex; flex-wrap: wrap; gap: var(--s4); font-weight: 600; }
+.punch-links a { min-height: 32px; display: inline-flex; align-items: center; }
+.ag-item { align-items: flex-start !important; }
+.ag-item .day b { font-size: 15px; }
+.ag-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ag-nums { font-size: var(--fs-body); }
+.ag-why { color: var(--ink-2); font-size: var(--fs-body); }

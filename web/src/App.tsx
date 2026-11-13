@@ -149,7 +149,7 @@ export default function App() {
     const page = r === '/' ? <HomePage {...p} pulse={pulse} />
       : r.startsWith('/pasar') ? <MarketPage {...p} seg={r.split('/')[2] ?? 'pilihan'} paused={paused} />
       : r === '/cari' ? <CariPage />
-      : r === '/berita' ? <NewsPage {...p} />
+      : r.startsWith('/berita') ? <NewsPage {...p} scope={r.split('/')[2]} key={r} />
       : r === '/peringatan' ? <AlertsPage {...p} onChanged={reloadPulse} />
       : r === '/rekam' ? <TrackPage {...p} />
       : r === '/atur' ? <SettingsPage {...p} onLang={changeLang} authRequired={session.data.auth_required} />

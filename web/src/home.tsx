@@ -26,7 +26,8 @@ function Gauge({now, next, h}: {now: number; next: number; h: string}) {
       <div className="gauge-lbl" style={{left: pos(now), color: tone, ...edge(now)}}>Sekarang</div>
       <div className="gauge-dot" style={{left: pos(now), background: tone}} />
       <div className="gauge-dot hollow" style={{left: pos(next)}} />
-      <div className="gauge-lbl" style={{left: pos(next), ...edge(next)}}>{H_LABEL[h]}</div>
+      {/* When the two dots sit close together, the forecast label moves under the track so the labels never collide. */}
+      <div className="gauge-lbl" style={{left: pos(next), ...edge(next), ...(Math.abs(now - next) < 0.15 ? {top: 38} : {})}}>{H_LABEL[h]}</div>
       <div className="gauge-end" style={{left: 0}}>Menekan</div>
       <div className="gauge-end" style={{right: 0}}>Mendukung</div>
     </div>
@@ -116,33 +117,76 @@ function Watchlist() {
   );
 }
 
+const COUNTRY: Record<string, string> = {ID: 'Indonesia', US: 'Amerika Serikat', JP: 'Jepang', SG: 'Singapura', CN: 'China', EU: 'Eropa', GB: 'Inggris'};
+const wib = (ts: number, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('id-ID', {...o, timeZone: 'Asia/Jakarta'}).format(ts * 1000);
+
+/** Only what can move the owner's markets: high-impact releases, Indonesian events and dated news, today and
+ *  tomorrow. When nothing qualifies, the section is not shown at all. */
+function importantEvents(events: EventItem[]): EventItem[] {
+  const now = Date.now() / 1000;
+  const endTomorrow = (() => {
+    const d = new Date(Date.now() + 7 * 3600 * 1000);  // Jakarta date
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 2) / 1000 - 7 * 3600;
+  })();
+  return events
+    .filter(e => e.at >= now - 3600 && e.at < endTomorrow)
+    .filter(e => e.source === 'news' || e.country === 'ID' || !e.impact || e.impact === 'High')
+    .slice(0, 6);
+}
+
 function Agenda({events}: {events: EventItem[]}) {
-  const {l, lang} = useT();
-  const day = (ts: number) => ({
-    w: new Intl.DateTimeFormat('id-ID', {weekday: 'short'}).format(ts * 1000),
-    d: new Intl.DateTimeFormat('id-ID', {day: 'numeric'}).format(ts * 1000),
-  });
-  const list = events.slice(0, 3);
+  const {l} = useT();
+  const today = wib(Date.now() / 1000, {day: 'numeric'});
   return (
     <section className="card" aria-labelledby="ag-h">
-      <h2 id="ag-h" className="h2" style={{fontWeight: 600, marginBottom: 'var(--s4)'}}>Agenda hari ini</h2>
-      {list.length === 0 ? <p className="body">Tidak ada rilis besar hari ini.</p> : (
-        <ul className="agenda">
-          {list.map((e, i) => {
-            const x = day(e.at);
-            const country = {ID: 'Indonesia', US: 'Amerika Serikat', JP: 'Jepang', SG: 'Singapura', CN: 'China', EU: 'Eropa', GB: 'Inggris'}[e.country] ?? e.country;
-            return (
-              <li key={i}>
-                <span className="day"><small>{x.w}</small><b>{x.d}</b></span>
-                <span><span className="row-title">{e.title ? `${e.title.split(',')[0]} ${country}` : l(e.what)}</span><br />
-                  <span className="muted">{e.why ? l(e.why).split('.')[0] : lang === 'id' ? 'Dari berita' : 'From the news'}</span></span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <h2 id="ag-h" className="h2" style={{fontWeight: 600, marginBottom: 'var(--s4)'}}>Agenda penting</h2>
+      <ul className="agenda">
+        {events.map((e, i) => {
+          const isToday = wib(e.at, {day: 'numeric'}) === today;
+          return (
+            <li key={i} className="ag-item">
+              <span className="day"><small>{isToday ? 'Hari ini' : 'Besok'}</small><b>{e.source === 'news' ? '•' : wib(e.at, {hour: '2-digit', minute: '2-digit'})}</b></span>
+              <span className="ag-body">
+                <span className="row-title">{e.title ?? l(e.what)}</span>
+                <span className="muted">{COUNTRY[e.country] ?? e.country}{e.source === 'news' ? ' · dari berita' : ' · WIB'}</span>
+                {(e.forecast || e.previous) && (
+                  <span className="ag-nums">
+                    {e.forecast && <>Perkiraan <b>{e.forecast.replace('.', ',')}</b></>}
+                    {e.forecast && e.previous && ' · '}
+                    {e.previous && <>Sebelumnya <b>{e.previous.replace('.', ',')}</b></>}
+                  </span>
+                )}
+                {e.why && <span className="ag-why">{l(e.why)}</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
       <p style={{margin: 'var(--s4) 0 0'}}><a href="#/berita" style={{fontWeight: 600}}>Kalender lengkap</a></p>
     </section>
+  );
+}
+
+/** One market in one punch: the sentence, why in two short lines, and where to read more. */
+function MarketPunch({place, sentence, why, causes, news, asset, assetLabel, gauge, h, big, children}: {
+  place: string; sentence: string | null | undefined; why: string[]; causes: number; news: string; asset: string; assetLabel: string;
+  gauge?: {now: number; next: number}; h: string; big?: boolean; children?: React.ReactNode}) {
+  return (
+    <div className={`punch${big ? ' big' : ''}`}>
+      <div className="hero-text">
+        <span className="caption">{place}</span>
+        {big ? <h1 className="h1">{sentence}</h1> : <h2 className="h2">{sentence}</h2>}
+        {why.length > 0 && <p className="why-line"><b>Kenapa:</b> {why.join(' ')}</p>}
+        <p className="punch-links">
+          <a href={news}>{causes ? `${causes} berita penyebab` : 'Berita penyebab'}</a>
+          <a href={`#/a/${asset}`}>Lihat {assetLabel}</a>
+        </p>
+      </div>
+      <div className="gauge-box">
+        {children}
+        {gauge ? <Gauge now={gauge.now} next={gauge.next} h={h} /> : <Skeleton lines={1} />}
+      </div>
+    </div>
   );
 }
 
@@ -155,22 +199,34 @@ export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo 
   const ind = simple?.indonesia;
   if (b.error && !brief) return <p className="err">Data gagal dimuat. Muat ulang halaman.</p>;
   if (!brief) return <><div className="card"><Skeleton lines={3} /></div><div className="card"><Skeleton lines={4} /></div></>;
-  const causes = (brief.countries?.ID?.events ?? []).length;
-  const events = [...(brief.events ?? [])].sort((a, c) => a.at - c.at);
+  const causes = (c: string) => (brief.countries?.[c]?.events ?? []).length;
+  const us = simple?.abroad?.countries.find(c => c.country === 'US');
+  // Why: the analyst desk's own summary when the AI team ran, else the strongest reasons on the market's card.
+  const whyOf = (c: string, card?: SimpleCard | null): string[] => {
+    const desk = brief.countries?.[c]?.summary?.id;
+    if (desk) return [desk.split(/(?<=\.)\s/)[0]];
+    // Reasons that point the same way as the sentence come first: "tertekan" is explained by what presses.
+    const g = card?.gauge?.now ?? 0.5;
+    const want = g < 0.4 ? -1 : g > 0.6 ? 1 : 0;
+    const up = (card?.up_is ?? 1) >= 0 ? 1 : -1;
+    const score = (lean: number) => (want === 0 ? 0 : lean * up === want ? -1 : lean === 0 ? 0 : 1);
+    return [...(card?.reasons ?? [])].sort((x, y) => score(x.lean) - score(y.lean)).slice(0, 2).map(r => r.text.id);
+  };
+  const events = importantEvents([...(brief.events ?? [])].sort((a, c) => a.at - c.at));
   return (
     <>
-      <section className="card hero" aria-label="Arah pasar hari ini">
-        <div className="hero-text">
-          <h1 className="h1">{simple?.headline ?? brief.headline.id}</h1>
-          <a href="#/berita">{causes ? `Kenapa? ${causes} berita penyebab` : 'Kenapa? Lihat berita penyebab'}</a>
-        </div>
-        <div className="gauge-box">
+      <section className="card hero-stack" aria-label="Arah pasar hari ini">
+        <MarketPunch place="Indonesia" big sentence={simple?.headline ?? brief.headline.id} why={whyOf('ID', ind)} causes={causes('ID')}
+          news="#/berita/ID" asset="IHSG" assetLabel="IHSG" gauge={ind?.gauge} h={h}>
           <div className="gauge-head">
             <span>Arah pasar</span>
             <Seg label="Rentang prakiraan" value={h} onChange={setH} options={['1m', '2m', '3m'].map(k => ({key: k, text: H_LABEL[k]}))} />
           </div>
-          {ind?.gauge ? <Gauge now={ind.gauge.now} next={ind.gauge.next} h={h} /> : <Skeleton lines={1} />}
-        </div>
+        </MarketPunch>
+        {simple?.headline_us && (
+          <MarketPunch place="Amerika Serikat" sentence={simple.headline_us} why={whyOf('US', us)} causes={causes('US')}
+            news="#/berita/US" asset="SPX" assetLabel="S&P 500" gauge={us?.gauge} h={h} />
+        )}
       </section>
 
       <section className="mcards" aria-label="Pasar utama">
@@ -180,9 +236,9 @@ export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo 
         {simple?.abroad && <AbroadCard s={simple.abroad} />}
       </section>
 
-      <div className="home-grid">
+      <div className={events.length ? 'home-grid' : ''}>
         <Watchlist />
-        <Agenda events={events} />
+        {events.length > 0 && <Agenda events={events} />}
       </div>
       {pulse?.state === 'paused' && <p className="caption">Data belum diperbarui lebih dari sehari: sinyal dijeda.</p>}
     </>
