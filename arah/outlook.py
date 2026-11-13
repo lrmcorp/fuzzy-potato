@@ -79,7 +79,8 @@ def _spark(db: DB, asset: Asset, snaps: dict) -> list[float]:
     return snap.get("spark", [])
 
 
-HORIZON_WORDS = {"1m": ("sebulan", "next month"), "2m": ("2 bulan", "2 months"), "3m": ("3 bulan", "3 months")}
+HORIZON_WORDS = {"1d": ("besok", "tomorrow"), "1w": ("sepekan", "next week"), "1m": ("sebulan", "next month"),
+                 "2m": ("2 bulan", "2 months"), "3m": ("3 bulan", "3 months")}
 
 
 def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
@@ -190,7 +191,7 @@ def headline(card_id: dict | None, horizon: str = "1m", subject: str = "Pasar") 
     g = card_id["gauge"]["now"]
     now = (f"{subject} tertekan sebulan terakhir." if g < 0.4 else f"{subject} menguat sebulan terakhir." if g > 0.6
            else f"{subject} tenang sebulan terakhir.")
-    months = {"1m": "1 bulan", "2m": "2 bulan", "3m": "3 bulan"}.get(horizon, "1 bulan")
+    months = {"1d": "1 hari bursa", "1w": "1 minggu", "1m": "1 bulan", "2m": "2 bulan", "3m": "3 bulan"}.get(horizon, "1 bulan")
     d = card_id["next"]["dir"]
     if d == "belum_jelas":
         return f"{now} ARAH belum melihat arah yang jelas untuk {months} ke depan."

@@ -69,6 +69,8 @@ def foreign_flow(db: DB, top: int = 5) -> dict:
     """IHSG's net foreign flow for the latest day (from the Stockbit job), and the five covered stocks foreign
     investors bought and sold most over the last month (from the cached per-stock Stockbit data)."""
     day = (db.get("sbt:foreign_day:IHSG") or {}).get("v")
+    if day and not day.get("net_foreign") and not day.get("foreign_buy") and not day.get("foreign_sell"):
+        day = None
     rows = []
     for a in STOCKS:
         if a.country != "ID":
@@ -103,6 +105,8 @@ def gauge_factors(db: DB) -> dict:
 
     flow = (db.get("sbt:foreign_day:IHSG") or {}).get("v") or {}
     net = flow.get("net_foreign")
+    if not net and not flow.get("foreign_buy") and not flow.get("foreign_sell"):
+        net = None  # Stockbit answers zeros before the session or for an empty day
     vix = snapshot(db, BY_KEY["VIX"])
     v1w = vix.get("chg1w") if vix else None
     return {

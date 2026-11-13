@@ -9,7 +9,10 @@ import {StoryList} from './news';
 import {FlowPanel, HistoryPanel, LivePanel, TickerNews} from './pages';
 import {ChangeText, Icon, Seg, Sheet, Skeleton, SourceLine, StaleChip, Term, toast} from './ui';
 
-const H = [{key: '1m', text: '+1 bln'}, {key: '2m', text: '+2 bln'}, {key: '3m', text: '+3 bln'}];
+const H = [{key: '1d', text: '+1 hari'}, {key: '1w', text: '+1 mgg'}, {key: '1m', text: '+1 bln'}, {key: '2m', text: '+2 bln'}, {key: '3m', text: '+3 bln'}];
+const H_TEXT: Record<string, string> = Object.fromEntries(H.map(x => [x.key, x.text]));
+// History shown before the forecast: short horizons get a short past, so the cone is wide enough to read.
+const HIST_DAYS: Record<string, number> = {'1d': 21, '1w': 63};
 
 /* ---------- Forecast chart: 6 months of history, then the 50% and 90% bands ---------- */
 
@@ -41,7 +44,7 @@ function ForecastChart({f}: {f: Forecast}) {
   const [table, setTable] = useState(false);
   const [box, width] = useWidth<HTMLDivElement>(760);
   const d = f.s0 < 100 ? 2 : f.decimals;
-  const hist = f.history.slice(-126);
+  const hist = f.history.slice(-(HIST_DAYS[f.horizon] ?? 126));
   const band = f.conclusion.band;
   const last = band[band.length - 1];
   if (hist.length < 10 || !last) return <p className="body">Data belum cukup untuk prakiraan</p>;
@@ -70,7 +73,7 @@ function ForecastChart({f}: {f: Forecast}) {
     <>
       <div ref={box}>
       <svg className="fc-svg" viewBox={`0 0 ${W} ${Hh}`} width={W} height={Hh} role="img"
-        aria-label={`Harga 6 bulan terakhir dan prakiraan ${f.horizon_name.id}: tengah ${num(last.q50, d)}, 9 dari 10 kemungkinan antara ${num(last.q05, d)} sampai ${num(last.q95, d)}`}>
+        aria-label={`Harga ${HIST_DAYS[f.horizon] === 21 ? '1 bulan' : HIST_DAYS[f.horizon] === 63 ? '3 bulan' : '6 bulan'} terakhir dan prakiraan ${f.horizon_name.id}: tengah ${num(last.q50, d)}, 9 dari 10 kemungkinan antara ${num(last.q05, d)} sampai ${num(last.q95, d)}`}>
         {ticks.map(v => (
           <g key={v}>
             <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} className="fc-grid" />
@@ -93,7 +96,7 @@ function ForecastChart({f}: {f: Forecast}) {
         {!narrow && <text x={endX + 8} y={y(last.q05) + 18} className="fc-lbl">batas bawah</text>}
         <text x={L} y={Hh - 12} className="fc-axis">{month}</text>
         <text x={nowX} y={Hh - 12} textAnchor="middle" className="fc-axis">Hari ini</text>
-        <text x={endX} y={Hh - 12} textAnchor="end" className="fc-axis">{f.horizon === '1m' ? '+1 bln' : f.horizon === '2m' ? '+2 bln' : '+3 bln'}</text>
+        <text x={endX} y={Hh - 12} textAnchor="end" className="fc-axis">{H_TEXT[f.horizon] ?? f.horizon}</text>
       </svg>
       </div>
       <div className="fc-legend">
