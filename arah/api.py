@@ -31,6 +31,7 @@ from .llm import budget_state, claude_calls_today
 from .runtime import Runtime
 from .service import all_horizons, build_view, forecast_asset, horizon_name, record_summary, track_record, validation
 from .signals import snapshot
+from . import panel
 from . import verdict_rules as rules
 from .recommend import VERDICTS_V, picks_summary
 from .universe import HEADLINE_KEYS, BY_KEY, COUNTRIES, CRYPTO, COMMODITIES, DEFAULT_LEVELS, FX, INDICES, STOCKS, resolve
@@ -184,6 +185,11 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
                 "llm_enabled": settings.llm_enabled,
                 # The 1-month forecasts for the headline markets, judged after the month has passed.
                 "record": record_summary(db, "1m", HEADLINE_KEYS)}
+
+    @app.get("/api/panel", dependencies=[Depends(auth)])
+    def panel_data():
+        """Ringkasan extras: foreign flow, commodities and macro, each with its source and time."""
+        return panel.summary(db)
 
     @app.post("/api/brief/run", dependencies=[Depends(auth)])
     async def brief_run():
@@ -621,6 +627,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
             state = "delayed"
         n = db.one("SELECT COUNT(*) n FROM alerts WHERE triggered_at IS NULL")["n"]
         return {"state": state, "at": at, "since": err.get("at"), "stockbit": bool(sb.get("configured")), "delay_min": 15,
+                "idx": panel.idx_session(),
                 "alerts_active": n, "telegram": settings.telegram_enabled}
 
     @app.get("/api/settings", dependencies=[Depends(auth)])

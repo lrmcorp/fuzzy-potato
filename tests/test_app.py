@@ -572,3 +572,35 @@ def test_picks_show_market_columns_and_held_status(db, monkeypatch):
     assert rules.pick_status({"held": True}, "tunggu") == "tunggu"
     assert rules.pick_status({}, "hindari") == "hindari"
     assert rules.tag("kurangi")["label"] == "Kurangi"
+
+
+def test_ringkasan_panel_session_flow_and_missing_feeds(db):
+    from datetime import datetime
+
+    from arah import panel
+
+    at = lambda s: datetime.strptime(s, "%Y-%m-%d %H:%M").replace(tzinfo=panel.WIB).timestamp()
+    # 12 Nov 2026 is a Thursday, 13 Nov a Friday (shorter first session), 14 Nov a Saturday.
+    assert panel.idx_session(at("2026-11-12 08:50"))["label"] == "Pra-pembukaan"
+    assert panel.idx_session(at("2026-11-12 11:59"))["label"] == "Sesi 1"
+    assert panel.idx_session(at("2026-11-12 13:00"))["label"] == "Istirahat"
+    assert panel.idx_session(at("2026-11-13 13:45"))["label"] == "Istirahat"
+    assert panel.idx_session(at("2026-11-13 14:00"))["label"] == "Sesi 2"
+    assert panel.idx_session(at("2026-11-12 16:00"))["label"] == "Tutup"
+    assert panel.idx_session(at("2026-11-14 10:00")) == {"key": "tutup", "label": "Tutup", "open": False, "day": False}
+
+    # Nothing cached from Stockbit: no numbers, no source.
+    f = panel.foreign_flow(db)
+    assert f["day"] is None and f["buy"] == [] and f["sell"] == [] and f["source"] is None
+    for k, v in (("BBCA", 5e11), ("BBRI", -3e11), ("TLKM", 1e11), ("ASII", -9e11)):
+        db.set(f"sbt:foreign:{k}", {"_at": 100, "v": {"net_foreign": v}})
+    db.set("sbt:foreign_day:IHSG", {"_at": 200, "v": {"net_foreign": -1.2e11}})
+    f = panel.foreign_flow(db)
+    assert [r["key"] for r in f["buy"]] == ["BBCA", "TLKM"] and [r["key"] for r in f["sell"]] == ["ASII", "BBRI"]
+    assert f["day"]["net_foreign"] == -1.2e11 and f["source"] == "Stockbit"
+
+    # Coal and nickel have no feed: shown as "—" (None), never approximated. BI Rate likewise until a source is set.
+    c = {r["label"]: r for r in panel.commodities(db)}
+    assert c["Batu bara"]["price"] is None and c["Nikel"]["price"] is None and c["Emas"]["price"] is not None
+    m = {r["key"]: r for r in panel.macro(db)}
+    assert m["BIRATE"]["price"] is None and m["DXY"]["price"] is not None and m["US10Y"]["chg1m"] is not None

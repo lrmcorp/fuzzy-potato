@@ -136,7 +136,15 @@ export interface PlanLevel {level: number; label: string; kind: 'stop' | 'target
 export interface PlanInfo {key: string; name: string; klass: string; price: number | null; decimals: number; unit: string; from_plan: boolean;
   plan: {entry: [number, number]; stop: number; targets: [number, number]; rr: number} | null; levels: PlanLevel[]}
 export interface PulseInfo {state: 'live' | 'delayed' | 'paused'; at: number | null; since: number | null; stockbit: boolean; delay_min: number;
-  alerts_active: number; telegram: boolean}
+  alerts_active: number; telegram: boolean; idx?: {key: string; label: string; open: boolean; day: boolean}}
+export interface PanelRow {key: string; label: string; price: number | null; chg1m: number | null; decimals?: number; unit?: string; src: SrcInfo | null}
+export interface FlowRow {key: string; name: string; net: number; at: number | null}
+export interface PanelInfo {
+  session: {key: string; label: string; open: boolean};
+  foreign: {day: {net_foreign: number; foreign_buy: number | null; foreign_sell: number | null; range?: string} | null;
+    buy: FlowRow[]; sell: FlowRow[]; covered: number; at: number | null; source: string | null};
+  commodities: PanelRow[]; macro: PanelRow[];
+}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -192,6 +200,7 @@ export const api = {
     call<{group: string; count: number}>('/api/alerts/batch', {method: 'POST', body: JSON.stringify({asset, levels, verdict_change})}),
   undoAlerts: (group: string) => call<{items: AlertItem[]}>(`/api/alerts/group/${encodeURIComponent(group)}`, {method: 'DELETE'}),
   pulse: () => call<PulseInfo>('/api/pulse'),
+  panel: () => call<PanelInfo>('/api/panel'),
   stockbitSession: (value: string) => call('/api/stockbit/session', {method: 'POST', body: JSON.stringify({value})}),
   askTelegram: (question: string, answer: string) => call<{sent: boolean}>('/api/ask/telegram', {method: 'POST', body: JSON.stringify({question, answer})}),
   delAlert: (id: number) => call<{items: AlertItem[]}>(`/api/alerts/${id}`, {method: 'DELETE'}),

@@ -1,0 +1,88 @@
+"""Extra market data for Ringkasan: IDX session status, foreign flow, commodities and macro.
+
+Every number here comes from stored data. When a series is not available, its value is None and the page shows
+"—" instead of a guess.
+"""
+from __future__ import annotations
+
+import time
+from datetime import datetime, timedelta, timezone
+
+from .db import DB
+from .signals import quote_info, snapshot
+from .universe import BY_KEY, STOCKS
+
+WIB = timezone(timedelta(hours=7))
+
+# IDX regular-market sessions in WIB, Monday to Thursday and Friday. Pre-closing (15.50 to 16.00) counts as the
+# end of Sesi 2. Exchange holidays are not known here, so a holiday on a weekday reads as a normal session day.
+_SESSIONS = {
+    "mon_thu": [("08:45", "pra", "Pra-pembukaan"), ("09:00", "sesi1", "Sesi 1"), ("12:00", "istirahat", "Istirahat"),
+                ("13:30", "sesi2", "Sesi 2"), ("16:00", "tutup", "Tutup")],
+    "fri": [("08:45", "pra", "Pra-pembukaan"), ("09:00", "sesi1", "Sesi 1"), ("11:30", "istirahat", "Istirahat"),
+            ("14:00", "sesi2", "Sesi 2"), ("16:00", "tutup", "Tutup")],
+}
+
+
+def idx_session(now: float | None = None) -> dict:
+    """{"key", "label", "open", "day"} for the IDX at the given time (default now)."""
+    t = datetime.fromtimestamp(now if now is not None else time.time(), WIB)
+    if t.weekday() >= 5:
+        return {"key": "tutup", "label": "Tutup", "open": False, "day": False}
+    hm = t.strftime("%H:%M")
+    state = ("tutup", "Tutup")
+    for start, key, label in _SESSIONS["fri" if t.weekday() == 4 else "mon_thu"]:
+        if hm >= start:
+            state = (key, label)
+    return {"key": state[0], "label": state[1], "open": state[0] in ("sesi1", "sesi2"), "day": True}
+
+
+# Commodities that matter to Indonesian stocks, in the brief's order. None means no feed is set up for it.
+COMMODITY_KEYS = [("COAL", "Batu bara", None), ("CPO", "CPO (sawit)", "CPO"), ("NICKEL", "Nikel", None),
+                  ("GOLD", "Emas", "GOLD"), ("BRENT", "Minyak Brent", "BRENT")]
+
+
+def _row(db: DB, key: str | None, label: str, unit: str = "") -> dict:
+    a = BY_KEY.get(key) if key else None
+    s = snapshot(db, a) if a else None
+    if not s:
+        return {"key": key or label, "label": label, "price": None, "chg1m": None, "src": None, "unit": unit}
+    return {"key": a.key, "label": label, "price": s["price"], "chg1m": s.get("chg1m"), "decimals": a.decimals,
+            "src": s.get("src") or quote_info(db, a), "unit": unit}
+
+
+def commodities(db: DB) -> list[dict]:
+    return [_row(db, k, label) for _, label, k in COMMODITY_KEYS]
+
+
+def macro(db: DB) -> list[dict]:
+    bi = db.get("bi_rate") or {}
+    return [
+        {"key": "BIRATE", "label": "BI Rate", "price": bi.get("value"), "chg1m": None, "decimals": 2, "unit": "%",
+         "src": {"source": bi.get("source"), "at": bi.get("at"), "delay_min": 0} if bi else None},
+        _row(db, "DXY", "DXY"),
+        _row(db, "US10Y", "Yield AS 10 thn", "%"),
+    ]
+
+
+def foreign_flow(db: DB, top: int = 5) -> dict:
+    """IHSG's net foreign flow for the latest day (from the Stockbit job), and the five covered stocks foreign
+    investors bought and sold most over the last month (from the cached per-stock Stockbit data)."""
+    day = (db.get("sbt:foreign_day:IHSG") or {}).get("v")
+    rows = []
+    for a in STOCKS:
+        if a.country != "ID":
+            continue
+        hit = db.get(f"sbt:foreign:{a.key}") or {}
+        v = hit.get("v") or {}
+        if v.get("net_foreign") is not None:
+            rows.append({"key": a.key, "name": a.name, "net": v["net_foreign"], "at": hit.get("_at")})
+    rows.sort(key=lambda r: -r["net"])
+    buys = [r for r in rows if r["net"] > 0][:top]
+    sells = [r for r in reversed(rows) if r["net"] < 0][:top]
+    at = max((r["at"] or 0 for r in rows), default=0) or None
+    return {"day": day, "buy": buys, "sell": sells, "covered": len(rows), "at": at, "source": "Stockbit" if rows or day else None}
+
+
+def summary(db: DB) -> dict:
+    return {"session": idx_session(), "foreign": foreign_flow(db), "commodities": commodities(db), "macro": macro(db)}

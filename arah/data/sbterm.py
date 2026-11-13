@@ -21,7 +21,7 @@ from ..db import DB
 from .stockbit import Stockbit, StockbitError, _num
 
 log = logging.getLogger("arah.sbterm")
-TTL = {"bandar": 1800, "foreign": 3600, "insider": 12 * 3600, "stream": 1800, "history": 12 * 3600}
+TTL = {"foreign_day": 15 * 60, "bandar": 1800, "foreign": 3600, "insider": 12 * 3600, "stream": 1800, "history": 12 * 3600}
 
 
 def _val(v) -> float | None:
@@ -90,6 +90,21 @@ async def foreign(db: DB, sb: Stockbit, code: str) -> dict | None:
                 "foreign_sell": _val((s.get("foreign_sell") or {}).get("value")),
                 "net_domestic": _val((s.get("net_domestic") or {}).get("value"))}
     return await _cached(db, "foreign", code, fetch)
+
+
+async def foreign_day(db: DB, sb: Stockbit, code: str = "IHSG") -> dict | None:
+    """Net foreign flow for the latest trading day, cached for 15 minutes."""
+    async def fetch():
+        d = await sb.get(f"/findata-view/foreign-domestic/v1/chart-data/{code}"
+                         "?market_type=MARKET_TYPE_REGULAR&period=PERIOD_RANGE_1D")
+        s = d.get("summary") or {}
+        net = _val((s.get("net_foreign") or {}).get("value"))
+        if net is None:
+            return None
+        return {"range": s.get("date_range"), "net_foreign": net,
+                "foreign_buy": _val((s.get("foreign_buy") or {}).get("value")),
+                "foreign_sell": _val((s.get("foreign_sell") or {}).get("value"))}
+    return await _cached(db, "foreign_day", code, fetch)
 
 
 def _holder_date(s: str | None) -> int | None:
