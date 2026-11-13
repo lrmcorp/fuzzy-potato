@@ -9,7 +9,7 @@ import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/Segment
 import {Selector} from '@astryxdesign/core/Selector';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {api, ApiError, type Answer, type Brief, type Calc, type EventItem, type Forecast, type Technique, type Lang, type MarketRow, type RecCard, type Simple, type SimpleCard, type State} from './api';
+import {api, ApiError, type Answer, type Brief, type Calc, type EventItem, type SbTerminal, type Forecast, type Technique, type Lang, type MarketRow, type RecCard, type Simple, type SimpleCard, type State} from './api';
 import {FanChart, LiveChart, MiniFan, ProjectionChart, Spark} from './charts';
 import {AssetLink, Async, Glyph, GradeNote, HorizonStrip, Lines, Reasons, Verdict, VigilanceLine} from './components';
 import {useLoad} from './hooks';
@@ -424,6 +424,60 @@ function usePoll<T>(fn: () => Promise<T>, everyMs: (d: T | null) => number, deps
   return {data, error};
 }
 
+/** Broker and foreign flow, insider filings and busy community posts, from the owner's Stockbit terminal.
+ *  Shown only for Indonesian stocks and indices, and only when Stockbit is set up; otherwise it stays out of the way. */
+function FlowPanel({k}: {k: string}) {
+  const {t, l, num} = useT();
+  const [d, setD] = useState<SbTerminal | null>(null);
+  useEffect(() => {
+    let live = true;
+    api.stockbit(k).then(x => { if (live) setD(x); }).catch(() => { if (live) setD(null); });
+    return () => { live = false; };
+  }, [k]);
+  if (!d || (!d.bandar && !d.foreign && !d.insider?.length && !d.stream?.length)) return null;
+  const rp = (x: number) => `Rp ${num(Math.abs(x) / 1e9, 1)} M`;
+  const side = d.bandar?.side ?? 0;
+  const tone = side > 0 ? 'good' : side < 0 ? 'bad' : 'neutral';
+  const nf = d.foreign?.net_foreign;
+  const recent = (d.insider ?? []).slice(0, 3);
+  return (
+    <section className="block" aria-labelledby="flow-h">
+      <h2 id="flow-h" className="block-h">{t('flow_h')}</h2>
+      <dl className="plan wide">
+        {d.bandar?.label && <div><dt>{t('flow_bandar')}</dt><dd>
+          <span className={`chip chip-${tone}`}>{d.bandar.label}</span>
+          {d.bandar.top5?.label && <span className="muted"> · top 5: {d.bandar.top5.label}</span>}
+          {d.bandar.buyers != null && d.bandar.sellers != null && <span className="muted"> · {t('flow_bs', {b: d.bandar.buyers, s: d.bandar.sellers})}</span>}
+        </dd></div>}
+        {nf != null && <div><dt>{t('flow_foreign')}</dt><dd>
+          <span className={`delta ${nf >= 0 ? 'delta-up' : 'delta-down'}`}>{nf >= 0 ? t('flow_net_buy') : t('flow_net_sell')} {rp(nf)}</span>
+          {d.foreign?.range && <span className="muted"> · {d.foreign.range}</span>}
+        </dd></div>}
+      </dl>
+      {recent.length > 0 && (
+        <>
+          <h3 className="label">{t('flow_insider')}</h3>
+          <ul className="plain">{recent.map((m, i) => (
+            <li key={i}><span className="muted">{m.date}</span> {m.name} · {m.action}
+              {m.change_pct != null && ` (${m.change_pct > 0 ? '+' : ''}${num(m.change_pct, 2)}%)`}
+              {m.now_pct != null && <span className="muted"> → {num(m.now_pct, 2)}%</span>}</li>))}
+          </ul>
+        </>
+      )}
+      {(d.stream ?? []).length > 0 && (
+        <details className="why">
+          <summary>{t('flow_stream')}</summary>
+          <ul className="plain">{(d.stream ?? []).slice(0, 5).map((p, i) => (
+            <li key={i}>{p.text} <span className="muted small">· {p.likes} ♥ · {p.replies} 💬</span></li>))}
+          </ul>
+          <p className="note">{t('flow_stream_note')}</p>
+        </details>
+      )}
+      <p className="note">{l({id: 'Sumber: terminal Stockbit Anda.', en: 'Source: your Stockbit terminal.'})}</p>
+    </section>
+  );
+}
+
 function LivePanel({k, decimals: fallback, klass}: {k: string; decimals: number; klass: string}) {
   const {t, l, num, money, pct, when} = useT();
   const {data, error} = usePoll(() => api.live(k), d => (d?.realtime ? 5000 : 30000), [k]);
@@ -556,6 +610,7 @@ export function AssetPage({onAuth, k}: PageProps & {k: string}) {
         <Heading level={1}>{f ? nm(f) : view ? nm(view) : k}</Heading>
       </header>
       <LivePanel k={k} decimals={decimals} klass={klass} />
+      {(klass === 'stock' || klass === 'index') && <FlowPanel k={k} />}
 
       <section className="block" aria-labelledby="fc-h">
         <div className="live-head">

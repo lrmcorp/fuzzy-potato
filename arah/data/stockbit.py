@@ -220,14 +220,15 @@ class Stockbit:
 
     async def intraday(self, asset_key: str) -> list[dict]:
         """Today's one-minute candles, realtime during the session."""
-        data = await self.get(f"/charts/{self.code(asset_key)}/daily?timeframe=1d&chart_type=PRICE_CHART_TYPE_CANDLE")
+        # "today" carries the session's candles; "1d" answers with an empty list.
+        data = await self.get(f"/charts/{self.code(asset_key)}/daily?timeframe=today&chart_type=PRICE_CHART_TYPE_CANDLE")
         out = []
         for row in data.get("prices") or []:
             close = _num(row.get("value"))
             t = _num(row.get("date"))
             if close is None or not t:
                 continue
-            out.append({"t": int(t / 1000), "o": _num(row.get("open")) or close, "h": _num(row.get("high")) or close,
+            out.append({"t": int(t / 1000 if t > 1e11 else t), "o": _num(row.get("open")) or close, "h": _num(row.get("high")) or close,
                         "l": _num(row.get("low")) or close, "c": close, "v": (_num(row.get("volume")) or 0) * 100})
         return sorted(out, key=lambda b: b["t"])
 

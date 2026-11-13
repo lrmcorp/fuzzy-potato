@@ -10,7 +10,9 @@ import logging
 import time
 
 from .config import Settings
+from .data import sbterm
 from .data.news import COUNTRY_TOPICS, headlines, refresh_ticker_news, top_stories
+from .data.stockbit import Stockbit
 from .db import DB
 from .llm import BudgetExceeded, LLMError, chat_json
 from .service import all_horizons
@@ -283,8 +285,16 @@ async def analyze_asset(db: DB, settings: Settings, asset: Asset) -> dict | None
     nmap = {f"N{i}": n for i, n in enumerate(news, 1)}
     snaps: dict = {}
     block, facts, _ = asset_block(db, asset, snaps)
+    sb_lines: list[tuple[str, str]] = []
+    if asset.country == "ID" and asset.klass in ("stock", "index"):
+        sb = Stockbit(db)
+        if sb.status().get("usable"):
+            sb_lines = sbterm.fact_lines(asset.key, await sbterm.snapshot(db, sb, asset.key))
+    if sb_lines:
+        block += "\n  From the owner's Stockbit terminal (broker flow, foreign flow, insider filings, community posts):\n" \
+            + "\n".join(f"  {k} | {t}" for k, t in sb_lines)
     wlines, tiles = world_lines(db, snaps)
-    valid = set(tiles) | set(nmap) | {f"{asset.key}.{f['id']}" for f in facts}
+    valid = set(tiles) | set(nmap) | {f"{asset.key}.{f['id']}" for f in facts} | {k for k, _ in sb_lines}
     system = (
         "You are a small research team in one voice: first the bull case, then the bear case, then the chief "
         "strategist's single conclusion. The statistical model's P(up) is the starting point; nudge it with 'tilt' "
@@ -296,7 +306,7 @@ async def analyze_asset(db: DB, settings: Settings, asset: Asset) -> dict | None
         + "\n".join(f"{k} | {_by(n)} | {n['title']}" for k, n in nmap.items())
         + "\n\nReturn JSON: {\"bull\": {id,en} (max 45 words), \"bear\": {id,en} (max 45 words), "
         "\"tilt\": {\"short\": n, \"medium\": n, \"long\": n}, \"reasons\": [3 to 5 of {\"text\": {id,en} (max 22 words), "
-        "\"lean\": 1|-1|0, \"refs\": [ids such as \"F2\", \"W7\", \"N3\"]}], \"watch\": {id,en}}"
+        "\"lean\": 1|-1|0, \"refs\": [ids such as \"F2\", \"W7\", \"N3\", \"BBCA.SB1\"]}], \"watch\": {id,en}}"
     )
     try:
         raw = await chat_json(db, settings, f"analyze:{asset.key}", system, user, deep=True, temperature=0.2)
