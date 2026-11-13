@@ -17,6 +17,7 @@ dependencies = [
   "typer>=0.12",
   "defusedxml>=0.7",
   "python-dotenv>=1.0",
+  "pywebpush>=2.0,<3",
 ]
 
 [project.optional-dependencies]

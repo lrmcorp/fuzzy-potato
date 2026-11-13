@@ -1,5 +1,4 @@
 import {useEffect, useRef, useState} from 'react';
-import {Badge} from '@astryxdesign/core/Badge';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
@@ -9,11 +8,12 @@ import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/Segment
 import {Selector} from '@astryxdesign/core/Selector';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {api, ApiError, type Answer, type Brief, type Calc, type EventItem, type SbTerminal, type Forecast, type Technique, type Lang, type MarketRow, type RecCard, type Simple, type SimpleCard, type State} from './api';
+import {api, ApiError, type Answer, type Brief, type Calc, type EventItem, type SbTerminal, type Forecast, type Technique, type Lang, type RecCard, type Simple, type SimpleCard, type State} from './api';
 import {FanChart, LiveChart, MiniFan, ProjectionChart, Spark} from './charts';
-import {AssetLink, Async, Glyph, GradeNote, HorizonStrip, Lines, Reasons, Verdict, VigilanceLine} from './components';
+import {AssetLink, Async, ChipBar, GradeNote, HorizonStrip, Lines, Reasons, VigilanceLine} from './components';
+import {StoryList} from './news';
 import {useLoad} from './hooks';
-import {useT} from './i18n';
+import {useT, type Key} from './i18n';
 
 interface PageProps {onAuth: () => void}
 const HORIZONS = ['1h', '4h', '1d', '1w', '2w', '3w', '1m'];
@@ -230,7 +230,7 @@ function AskBox() {
   );
 }
 
-export function CalcPage({onAuth}: PageProps) {
+export function CalcPage({onAuth, embedded = false}: PageProps & {embedded?: boolean}) {
   const {t, l, num, money, when, lang} = useT();
   const [amount, setAmount] = useState('100000000');
   const [cur, setCur] = useState('USD');
@@ -249,13 +249,14 @@ export function CalcPage({onAuth}: PageProps) {
     SGD: ['Dolar Singapura (SGD)', 'Singapore dollar (SGD)'], JPY: ['Yen Jepang (JPY)', 'Japanese yen (JPY)'], EUR: ['Euro (EUR)', 'Euro (EUR)']};
   return (
     <>
-      <header className="page-head"><Heading level={1}>{t('calc_title')}</Heading><p className="lead">{t('calc_lead')}</p></header>
-      <div className="toolbar">
-        <TextInput label={t('amount')} value={amount} onChange={setAmount} onEnter={run} inputMode="numeric" width={200}
+      {embedded ? <p className="lead">{t('calc_lead')}</p>
+        : <header className="page-head"><Heading level={1}>{t('calc_title')}</Heading><p className="lead">{t('calc_lead')}</p></header>}
+      <div className="form-grid">
+        <TextInput label={t('amount')} value={amount} onChange={setAmount} onEnter={run} inputMode="numeric" width="100%"
           status={err ? {type: 'error', message: err} : undefined} />
-        <Selector label={t('currency')} value={cur} onChange={setCur} width={220}
+        <Selector label={t('currency')} value={cur} onChange={setCur} width="100%"
           options={Object.entries(names).map(([k, v]) => ({value: k, label: v[lang === 'id' ? 0 : 1]}))} />
-        <Button label={t('calc_btn')} variant="primary" onClick={run} isLoading={busy} />
+        <Button label={t('calc_btn')} variant="primary" onClick={run} isLoading={busy} width="100%" />
       </div>
       {c && (
         <section className="answer" aria-live="polite">
@@ -269,82 +270,7 @@ export function CalcPage({onAuth}: PageProps) {
   );
 }
 
-function MarketTable({rows}: {rows: MarketRow[]}) {
-  const {t, nm, num, money, pct} = useT();
-  return (
-    <div className="scroll-x">
-      <table className="market">
-        <thead><tr><th>{t('name')}</th><th>{t('price')}</th><th>{t('today')}</th><th>{t('dir')}</th><th>{t('range90')}</th><th aria-hidden="true" /></tr></thead>
-        <tbody>
-          {rows.map(r => (
-            <tr key={r.key}>
-              <th scope="row"><AssetLink k={r.key}>{nm(r)}</AssetLink>{r.name !== r.key && <span className="muted code"> {r.key}</span>}</th>
-              <td className="nowrap">{money(r.price, r.decimals, r.unit)}</td>
-              <td>{pct(r.chg1d)}</td>
-              <td className="nowrap"><Glyph d={r.direction} /> {Math.round(r.p_up * 100)}% <span className="muted">{t(r.direction)}</span></td>
-              <td className="nowrap">{money(r.q05, r.decimals, r.unit)} - {num(r.q95, r.decimals)}</td>
-              <td><Spark values={r.spark} label={`${nm(r)}: ${t('chart_hist')}`} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function HorizonPicker({value, onChange}: {value: string; onChange: (h: string) => void}) {
-  const {t} = useT();
-  const names: Record<string, [string, string]> = {'1h': ['1 jam', '1 hour'], '4h': ['4 jam', '4 hours'], '1d': ['1 hari', '1 day'],
-    '1w': ['1 minggu', '1 week'], '2w': ['2 minggu', '2 weeks'], '3w': ['3 minggu', '3 weeks'], '1m': ['1 bulan', '1 month']};
-  const {lang} = useT();
-  return (
-    <Selector label={t('horizon')} value={value} onChange={onChange} width={180}
-      options={HORIZONS.map(h => ({value: h, label: names[h][lang === 'id' ? 0 : 1]}))} />
-  );
-}
-
-export function Markets({onAuth, kind}: PageProps & {kind: 'fx' | 'stocks'}) {
-  const {t, l} = useT();
-  const [h, setH] = useState('1w');
-  const [tab, setTab] = useState(kind === 'fx' ? 'fx' : 'recs');
-  const group = tab === 'recs' ? null : tab;
-  const rows = useLoad(() => (group ? api.markets(group, h) : Promise.resolve({rows: []})), [group, h], onAuth);
-  const usd = useLoad(() => (kind === 'fx' ? api.asset('USDIDR', h) : Promise.resolve(null)), [kind, h], onAuth);
-  return (
-    <>
-      <header className="page-head">
-        <Heading level={1}>{t(kind === 'fx' ? 'fx_title' : 'stocks_title')}</Heading>
-        {kind === 'fx' && <p className="lead">{t('fx_lead')}</p>}
-      </header>
-      <div className="toolbar">
-        {kind === 'fx' ? (
-          <SegmentedControl label={t('market')} value={tab} onChange={setTab}>
-            <SegmentedControlItem value="fx" label={t('nav_fx')} />
-            <SegmentedControlItem value="commodity" label={t('tab_comm')} />
-          </SegmentedControl>
-        ) : (
-          <SegmentedControl label={t('market')} value={tab} onChange={setTab}>
-            <SegmentedControlItem value="recs" label={t('tab_recs')} />
-            <SegmentedControlItem value="index" label={t('indices')} />
-            <SegmentedControlItem value="stock_id" label={t('tab_id')} />
-            <SegmentedControlItem value="stock_us" label={t('tab_us')} />
-          </SegmentedControl>
-        )}
-        {group && <HorizonPicker value={h} onChange={setH} />}
-      </div>
-      {kind === 'fx' && tab === 'fx' && usd.data && (
-        <section className="asset first">
-          <header className="asset-head"><h3><AssetLink k="USDIDR">USD/IDR</AssetLink></h3></header>
-          <Verdict view={usd.data} />
-          {usd.data.vigilance && <VigilanceLine v={usd.data.vigilance} decimals={0} horizonName={l(usd.data.horizon_name)} />}
-        </section>
-      )}
-      {group ? <Async state={rows}>{d => <MarketTable rows={d.rows} />}</Async> : <RecsPanel onAuth={onAuth} />}
-    </>
-  );
-}
-
-function RecsPanel({onAuth}: PageProps) {
+export function RecsPanel({onAuth}: PageProps) {
   const {t} = useT();
   const state = useLoad(api.recs, [], onAuth);
   return (
@@ -501,7 +427,7 @@ function LivePanel({k, decimals: fallback, klass}: {k: string; decimals: number;
         <span className="muted small">{t('updated')} {when(data.at)}</span>
       </p>
       {data.note && <p className="note">{l(data.note)}</p>}
-      {data.bars.length > 1 ? <LiveChart bars={data.bars} decimals={decimals} label={t('live_h')} /> : <p className="note">{t('live_closed')}</p>}
+      {data.bars.length > 1 ? <LiveChart bars={data.bars} decimals={decimals} label={t('live_h')} area /> : <p className="note">{t('live_closed')}</p>}
       {data.book && (data.book.bids.length > 0 || data.book.offers.length > 0) && (
         <details className="why">
           <summary>{t('orderbook')}</summary>
@@ -580,10 +506,114 @@ function TechniqueList({f}: {f: Forecast}) {
   );
 }
 
+type Range = '1d' | '1m' | '3m' | '1y' | '5y';
+const RANGES: Range[] = ['1d', '1m', '3m', '1y', '5y'];
+
+/** Daily candles for the longer ranges, with the change over the range in the header. */
+function HistoryPanel({k, range, klass, onAuth}: {k: string; range: Exclude<Range, '1d'>; klass: string; onAuth: () => void}) {
+  const {t, money, pct} = useT();
+  const h = useLoad(() => api.history(k, range), [k, range], onAuth);
+  return (
+    <Async state={h}>
+      {d => {
+        if (d.bars.length < 2) return <p className="note">{t('hist_none')}</p>;
+        const first = d.bars[0].c, last = d.bars[d.bars.length - 1].c;
+        const chg = (last / first - 1) * 100;
+        const good = chg >= 0 ? klass !== 'fx' : klass === 'fx';
+        return (
+          <section className="live">
+            <p className="live-price">
+              <span className="price big">{money(last, d.decimals, d.unit)}</span>
+              <span className={`delta ${good ? 'delta-up' : 'delta-down'}`}>{pct(chg, 2)} <span className="muted">{t(`rng_${range}`)}</span></span>
+            </p>
+            <LiveChart bars={d.bars} decimals={d.decimals} label={t('chart_hist')} area={range !== '1m'} />
+          </section>
+        );
+      }}
+    </Async>
+  );
+}
+
+/** Today's live chart or a longer daily chart, switched by one row of range chips. */
+function PriceBlock({k, decimals, klass, onAuth}: {k: string; decimals: number; klass: string; onAuth: () => void}) {
+  const {t} = useT();
+  const [range, setRange] = useState<Range>('1d');
+  return (
+    <section className="price-block" aria-label={t('price')}>
+      {range === '1d' ? <LivePanel k={k} decimals={decimals} klass={klass} /> : <HistoryPanel k={k} range={range} klass={klass} onAuth={onAuth} />}
+      <ChipBar label={t('range')} value={range} onChange={v => setRange(v as Range)}
+        items={RANGES.map(r => ({key: r, text: t(`rng_short_${r}`)}))} />
+    </section>
+  );
+}
+
+/** Layak / Tunggu / Hindari for a newcomer: one word, the score, and the three reasons behind it. */
+function VerdictCard({k, onAuth}: {k: string; onAuth: () => void}) {
+  const {t, l, num} = useT();
+  const v = useLoad(() => api.verdict(k), [k], onAuth);
+  if (v.error) return null;
+  if (!v.data) return <div className="vcard is-empty" aria-busy="true" />;
+  const d = v.data;
+  return (
+    <section className={`vcard vcard-${d.verdict}`} aria-labelledby="vc-h">
+      <div className="vcard-top">
+        <h2 id="vc-h" className="vcard-word">{l(d.label)}</h2>
+        <div className="vcard-score" aria-label={t('score_of', {n: d.score})}>
+          <span className="vcard-n">{d.score}</span><span className="muted small">/100</span>
+        </div>
+      </div>
+      <div className="meter" aria-hidden="true">
+        <span className="meter-fill" style={{width: `${d.score}%`}} />
+        <span className="meter-mark" style={{left: '45%'}} /><span className="meter-mark" style={{left: '65%'}} />
+      </div>
+      <p className="note">{t(`v_${d.verdict}_means`)}</p>
+      <ul className="vreasons">
+        {d.reasons.map((r, i) => (
+          <li key={i} className={r.good ? 'is-good' : 'is-bad'}>
+            <span className="vmark" aria-label={r.good ? t('plus') : t('minus')}>{r.good ? '+' : '−'}</span>{l(r.text)}
+          </li>
+        ))}
+      </ul>
+      <details className="why small">
+        <summary>{t('how_scored')}</summary>
+        <ul className="plain">{Object.entries(d.parts).map(([key, p]) => (
+          <li key={key}>{t(`part_${key}` as Key)}: {num(p.points, 0)} / {p.max}</li>))}
+        </ul>
+        <p className="note">{t('verdict_rule')}</p>
+      </details>
+      <p className="note">{t('verdict_untested')}</p>
+    </section>
+  );
+}
+
+function TickerNews({k, onAuth}: {k: string; onAuth: () => void}) {
+  const {t} = useT();
+  const f = useLoad(() => api.tickerFeed(k), [k], onAuth);
+  return (
+    <Async state={f}>
+      {d => (
+        <>
+          <StoryList items={d.items} empty={t('no_ticker_news')} />
+          {d.posts.length > 0 && (
+            <>
+              <h3 className="label">{t('flow_stream')}</h3>
+              <ul className="plain">{d.posts.slice(0, 6).map((p, i) => (
+                <li key={i}>{p.text} <span className="muted small">· {p.likes} ♥</span></li>))}
+              </ul>
+              <p className="note">{t('flow_stream_note')}</p>
+            </>
+          )}
+        </>
+      )}
+    </Async>
+  );
+}
+
 export function AssetPage({onAuth, k}: PageProps & {k: string}) {
   const {t, l, nm, money} = useT();
   const [h, setH] = useState<H3>('1m');
   const [hs, setHs] = useState('1w');
+  const [tab, setTab] = useState('analisa');
   const [custom, setCustom] = useState('');
   const [customErr, setCustomErr] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -604,37 +634,53 @@ export function AssetPage({onAuth, k}: PageProps & {k: string}) {
   const f = fc.data;
   const decimals = f?.decimals ?? view?.decimals ?? 2;
   const klass = f?.klass ?? view?.klass ?? '';
+  const country = view?.country ?? '';
+  const flow = country === 'ID' && (klass === 'stock' || klass === 'index');
+  const tabs = [{key: 'analisa', text: t('tab_analysis')}, ...(flow ? [{key: 'bandar', text: t('flow_h')}] : []),
+    {key: 'berita', text: t('nav_news')}, {key: 'detail', text: t('tab_detail')}];
+  const name = f ? nm(f) : view ? nm(view) : k;
   return (
     <>
-      <p className="back"><a href="#/">{t('back')}</a></p>
-      <header className="page-head">
-        <Heading level={1}>{f ? nm(f) : view ? nm(view) : k}</Heading>
+      <p className="back"><a href="#/pasar">{t('back_market')}</a></p>
+      <header className="page-head ahead">
+        <h1 className="page-title">{klass === 'stock' ? k : name}</h1>
+        {klass === 'stock' && <p className="lead">{name}</p>}
       </header>
-      <LivePanel k={k} decimals={decimals} klass={klass} />
-      {(klass === 'stock' || klass === 'index') && <FlowPanel k={k} />}
+      <PriceBlock k={k} decimals={decimals} klass={klass} onAuth={onAuth} />
+      {klass === 'stock' && <VerdictCard k={k} onAuth={onAuth} />}
 
-      <section className="block" aria-labelledby="fc-h">
-        <div className="live-head">
-          <h2 id="fc-h" className="block-h">{t('forecast_h')}</h2>
-          <HorizonTabs value={h} onChange={setH} />
-        </div>
-        <Async state={fc}>
-          {f2 => (
-            <div className={fc.loading ? 'is-loading' : ''}>
-              <Conclusion f={f2} />
-              <ProjectionChart f={f2} />
-              <h3 className="label">{t('techs_h')}</h3>
-              <p className="note">{t('techs_lead')}</p>
-              <TechniqueList f={f2} />
+      <ChipBar label={t('sections')} value={tab} onChange={setTab} items={tabs} />
+      <div className="seg-body">
+        {tab === 'analisa' && (
+          <section aria-labelledby="fc-h">
+            <div className="live-head">
+              <h2 id="fc-h" className="block-h">{t('forecast_h')}</h2>
+              <HorizonTabs value={h} onChange={setH} />
             </div>
-          )}
-        </Async>
-      </section>
-
-      {view && (
-        <>
-          <details className="why">
-            <summary>{t('why_q')}</summary>
+            <Async state={fc}>
+              {f2 => (
+                <div className={fc.loading ? 'is-loading' : ''}>
+                  <Conclusion f={f2} />
+                  <ProjectionChart f={f2} />
+                  <h3 className="label">{t('techs_h')}</h3>
+                  <p className="note">{t('techs_lead')}</p>
+                  <TechniqueList f={f2} />
+                </div>
+              )}
+            </Async>
+            {view?.llm_enabled ? (
+              <div className="actions">
+                <Button label={asking ? t('asking') : t('ask_team')} variant="primary" onClick={ask} isLoading={asking} />
+              </div>
+            ) : view && <p className="note">{t('team_off')}</p>}
+            {askErr && <Banner status="warning" title={askErr} />}
+          </section>
+        )}
+        {tab === 'bandar' && flow && <FlowPanel k={k} />}
+        {tab === 'berita' && <TickerNews k={k} onAuth={onAuth} />}
+        {tab === 'detail' && view && (
+          <>
+            <h2 className="block-h">{t('why_q')}</h2>
             <Reasons items={view.reasons} />
             {view.watch && <p className="watch"><strong>{t('watch')}:</strong> {l(view.watch)}</p>}
             {view.debate && (view.debate.bull || view.debate.bear) && (
@@ -651,9 +697,7 @@ export function AssetPage({onAuth, k}: PageProps & {k: string}) {
                 </ul>
               </>
             )}
-          </details>
-          <details className="why">
-            <summary>{t('short_h')}</summary>
+            <h2 className="block-h">{t('short_h')}</h2>
             {view.horizons && <HorizonStrip rows={view.horizons} selected={view.horizon} onSelect={setHs} />}
             <p className="verdict">{l(view.summary)}</p>
             {view.vigilance && <VigilanceLine v={view.vigilance} decimals={view.decimals} horizonName={l(view.horizon_name)} />}
@@ -667,65 +711,15 @@ export function AssetPage({onAuth, k}: PageProps & {k: string}) {
             <FanChart view={view} />
             <GradeNote v={view.validation} />
             {view.notes.map((n, i) => <p key={i} className="note">{l(n)}</p>)}
-            <div className="toolbar">
+            <div className="form-grid">
               <TextInput label={t('custom_h')} description={t('custom_h_hint')} value={custom} onChange={setCustom} onEnter={applyCustom}
-                width={180} status={customErr ? {type: 'error', message: t('bad_horizon')} : undefined} />
+                width="100%" status={customErr ? {type: 'error', message: t('bad_horizon')} : undefined} />
               <Button label={t('apply')} onClick={applyCustom} />
             </div>
-          </details>
-          {view.llm_enabled ? (
-            <div className="actions">
-              <Button label={asking ? t('asking') : t('ask_team')} variant="primary" onClick={ask} isLoading={asking} />
-            </div>
-          ) : <p className="note">{t('team_off')}</p>}
-          {askErr && <Banner status="warning" title={askErr} />}
-        </>
-      )}
-    </>
-  );
-}
-
-export function World({onAuth}: PageProps) {
-  const {t, l, when} = useT();
-  const state = useLoad(api.brief, [], onAuth);
-  const [c, setC] = useState('ID');
-  return (
-    <>
-      <header className="page-head"><Heading level={1}>{t('world_title')}</Heading><p className="lead">{t('world_lead')}</p></header>
-      <Async state={state}>
-        {({brief}) => !brief ? <EmptyState title={t('no_brief_title')} description={t('no_brief_desc')} /> : (
-          <>
-            <div className="toolbar">
-              <SegmentedControl label={t('country')} value={c} onChange={setC}>
-                {Object.entries(brief.countries).map(([k, v]) => <SegmentedControlItem key={k} value={k} label={l(v.name)} />)}
-              </SegmentedControl>
-            </div>
-            {(() => {
-              const d = brief.countries[c];
-              return (
-                <section>
-                  {d.summary ? <p className="verdict">{l(d.summary)}</p> : <p className="note">{t('desk_off')}</p>}
-                  {d.events.map((e, i) => (
-                    <article key={i} className="event">
-                      <h3>{l(e.what)}</h3>
-                      <p><strong>{t('effect')}:</strong> {l(e.effect)}</p>
-                      <ul className="plain small">{e.sources.map((s, j) => (
-                        <li key={j}><a href={s.url} target="_blank" rel="noopener noreferrer">{s.title}</a> <span className="muted">{s.source}</span></li>))}
-                      </ul>
-                    </article>
-                  ))}
-                  <h2 className="section-h">{t('headlines')}</h2>
-                  {d.headlines.length === 0 ? <p className="note">{t('no_news')}</p> : (
-                    <ul className="plain">{d.headlines.map((n, i) => (
-                      <li key={i}><a href={n.url} target="_blank" rel="noopener noreferrer">{n.title}</a> <span className="muted">{n.source} · {when(n.at)}</span></li>))}
-                    </ul>
-                  )}
-                </section>
-              );
-            })()}
           </>
         )}
-      </Async>
+        {tab === 'detail' && !view && <Lines n={4} />}
+      </div>
     </>
   );
 }
@@ -783,26 +777,17 @@ export function TrackPage({onAuth}: PageProps) {
 }
 
 export function SettingsPage({onAuth, onLang, authRequired}: PageProps & {onLang: (l: Lang) => void; authRequired: boolean}) {
-  const {t, num, money, when, lang} = useT();
+  const {t, num, when, lang} = useT();
   const status = useLoad(api.status, [], onAuth);
   const prefs = useLoad(api.settings, [], onAuth);
-  const alerts = useLoad(api.alerts, [], onAuth);
   const [levels, setLevels] = useState('');
   const [saved, setSaved] = useState(false);
-  const [aKey, setAKey] = useState('USDIDR');
-  const [aOp, setAOp] = useState('>');
-  const [aLevel, setALevel] = useState('');
   useEffect(() => { if (prefs.data) setLevels((prefs.data.levels.USDIDR ?? []).join(', ')); }, [prefs.data]);
   const parse = (s: string) => Number(s.replace(/\s/g, '').replace(lang === 'id' ? /\./g : /,/g, '').replace(',', '.'));
   const saveLevels = async () => {
     const vals = levels.split(/[,;]\s*|\s+/).map(parse).filter(v => v > 0);
     await api.saveSettings({levels: {...(prefs.data?.levels ?? {}), USDIDR: vals}});
     setSaved(true); prefs.reload();
-  };
-  const addAlert = async () => {
-    const v = parse(aLevel);
-    if (!(v > 0)) return;
-    await api.addAlert(aKey, aOp, v); setALevel(''); alerts.reload();
   };
   return (
     <>
@@ -821,26 +806,11 @@ export function SettingsPage({onAuth, onLang, authRequired}: PageProps & {onLang
       </div>
       {saved && <p className="note" role="status">{t('saved')}</p>}
 
-      <h2 className="section-h">{t('alerts')}</h2>
-      <div className="toolbar">
-        <Selector label={t('asset')} value={aKey} onChange={setAKey} hasSearch width={200}
-          options={(prefs.data?.assets ?? []).map(a => ({value: a.key, label: `${a.key} ${a.name === a.key ? '' : a.name}`.trim()}))} />
-        <Selector label={t('dir')} value={aOp} onChange={setAOp} width={130}
-          options={[{value: '>', label: t('above')}, {value: '<', label: t('below')}]} />
-        <TextInput label={t('level')} value={aLevel} onChange={setALevel} onEnter={addAlert} width={140} inputMode="decimal" />
-        <Button label={t('add_alert')} onClick={addAlert} />
-      </div>
-      <Async state={alerts}>
-        {d => d.items.length === 0 ? <p className="note">{t('no_alerts')}</p> : (
-          <ul className="plain alerts">{d.items.map(a => (
-            <li key={a.id}>
-              <span>{a.name} {a.op === '>' ? t('above') : t('below')} {money(a.level, a.decimals, a.unit)}
-                {a.triggered_at && <> <Badge variant="warning" label={t('triggered')} /> <span className="muted">{when(a.triggered_at)}</span></>}</span>
-              <Button label={t('remove')} size="sm" variant="ghost" onClick={async () => { await api.delAlert(a.id); alerts.reload(); }} />
-            </li>))}
-          </ul>
-        )}
-      </Async>
+      <h2 className="section-h">{t('more')}</h2>
+      <ul className="plain">
+        <li><a href="#/peringatan">{t('nav_alerts')}</a></li>
+        <li><a href="#/rekam">{t('nav_track')}</a></li>
+      </ul>
 
       <h2 className="section-h">{t('system')}</h2>
       <Async state={status}>

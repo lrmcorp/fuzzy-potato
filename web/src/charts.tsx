@@ -161,12 +161,13 @@ export function MiniFan({values, range, state, label}: {values: number[]; range?
 
 /** Today's minute bars, Stockbit-style. Candles are ink only: hollow when the minute rose, filled when it fell,
  *  because colour on this site means good or bad for the owner, not up or down. */
-export function LiveChart({bars, decimals, label}: {bars: Bar[]; decimals: number; label: string}) {
+export function LiveChart({bars, decimals, label, area = false}: {bars: Bar[]; decimals: number; label: string; area?: boolean}) {
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const series = useRef<ISeriesApi<'Candlestick'> | ISeriesApi<'Area'> | null>(null);
   const flat = bars.length > 0 && bars.every(b => b.o === b.c && b.h === b.c && b.l === b.c);
-  const kind = flat ? 'area' : 'candle';
+  // Long daily ranges read better as a line: hundreds of candles become noise on a phone.
+  const kind = flat || area ? 'area' : 'candle';
   // Daily closes (the fallback when minute prices are refused) are labelled by date, not by time.
   const daily = bars.length > 1 && bars[1].t - bars[0].t >= 86400;
 

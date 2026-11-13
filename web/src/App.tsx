@@ -5,40 +5,43 @@ import {api, type Lang} from './api';
 import {Lines} from './components';
 import {useHashRoute, useLoad} from './hooks';
 import {LangCtx, useT, type Key} from './i18n';
-import {AssetPage, CalcPage, Login, Markets, SettingsPage, Today, TrackPage, World} from './pages';
+import {AlertsPage} from './alerts';
+import {MarketPage} from './market';
+import {NewsPage} from './news';
+import {AssetPage, Login, SettingsPage, Today, TrackPage} from './pages';
 
-const NAV: {to: string; key: Key}[] = [
-  {to: '/', key: 'nav_today'}, {to: '/hitung', key: 'nav_calc'}, {to: '/saham', key: 'nav_stocks'}, {to: '/dunia', key: 'nav_world'}, {to: '/atur', key: 'nav_settings'},
+// Five destinations, in the order a newcomer uses them. On a phone they sit in a bar at the bottom,
+// within thumb reach; on a wide screen the same five sit in a rail on the left.
+const NAV: {to: string; key: Key; match: (r: string) => boolean}[] = [
+  {to: '/', key: 'nav_today', match: r => r === '/'},
+  {to: '/pasar', key: 'nav_market', match: r => r.startsWith('/pasar') || r.startsWith('/a/')},
+  {to: '/berita', key: 'nav_news', match: r => r.startsWith('/berita')},
+  {to: '/peringatan', key: 'nav_alerts', match: r => r.startsWith('/peringatan')},
+  {to: '/atur', key: 'nav_settings', match: r => r.startsWith('/atur') || r.startsWith('/rekam')},
 ];
-// Reference pages: reachable from the footer so the main row stays at four items.
-const MORE: {to: string; key: Key}[] = [{to: '/kurs', key: 'nav_fx'}, {to: '/rekam', key: 'nav_track'}];
+
+// Old addresses keep working: bookmarks and Telegram links point at them.
+const MOVED: Record<string, string> = {'/saham': '/pasar/saham-id', '/kurs': '/pasar/kurs', '/hitung': '/pasar/hitung', '/dunia': '/berita'};
 
 function Shell({route, children}: {route: string; children: React.ReactNode}) {
   const {t} = useT();
-  const current = route.startsWith('/a/') ? '' : route;
+  const links = NAV.map(n => {
+    const on = n.match(route);
+    return <li key={n.to}><a href={`#${n.to}`} aria-current={on ? 'page' : undefined}>{t(n.key)}</a></li>;
+  });
   return (
-    <>
-      <a className="skip" href="#main">{t('nav_today')}</a>
+    <div className="app">
+      <a className="skip" href="#main">{t('skip')}</a>
       <header className="top">
-        <div className="top-in">
-          <a className="brand" href="#/" aria-label="ARAH by LRM">
-            <span className="lrm-mark icon" aria-hidden="true" /> ARAH <span className="brand-by">by LRM</span>
-          </a>
-          <nav aria-label={t('main_nav')}>
-            <ul>{NAV.map(n => (
-              <li key={n.to}><a href={`#${n.to}`} aria-current={current === n.to ? 'page' : undefined}>{t(n.key)}</a></li>))}
-            </ul>
-          </nav>
-        </div>
+        <a className="brand" href="#/" aria-label="ARAH by LRM">
+          <span className="lrm-mark icon" aria-hidden="true" /> ARAH <span className="brand-by">by LRM</span>
+        </a>
       </header>
-      <main id="main" className="page">{children}</main>
-      <footer className="foot">
-        <nav aria-label={t('more')}>
-          <ul>{MORE.map(n => <li key={n.to}><a href={`#${n.to}`}>{t(n.key)}</a></li>)}</ul>
-        </nav>
-        <p>{t('disclaimer')}</p>
-      </footer>
-    </>
+      <nav className="tabs" aria-label={t('main_nav')}><ul>{links}</ul></nav>
+      <main id="main" className="page">{children}
+        <footer className="foot"><p>{t('disclaimer')}</p></footer>
+      </main>
+    </div>
   );
 }
 
@@ -59,16 +62,16 @@ export default function App() {
     body = <Login onDone={session.reload} />;
   } else {
     const p = {onAuth};
-    const page = route === '/' ? <Today {...p} />
-      : route === '/kurs' ? <Markets {...p} kind="fx" key="fx" />
-      : route === '/hitung' ? <CalcPage {...p} />
-      : route === '/saham' ? <Markets {...p} kind="stocks" key="stocks" />
-      : route === '/dunia' ? <World {...p} />
-      : route === '/rekam' ? <TrackPage {...p} />
-      : route === '/atur' ? <SettingsPage {...p} onLang={changeLang} authRequired={session.data.auth_required} />
-      : route.startsWith('/a/') ? <AssetPage {...p} k={decodeURIComponent(route.slice(3))} key={route} />
+    const r = MOVED[route] ?? route;
+    const page = r === '/' ? <Today {...p} />
+      : r.startsWith('/pasar') ? <MarketPage {...p} seg={r.split('/')[2] ?? 'pilihan'} />
+      : r === '/berita' ? <NewsPage {...p} />
+      : r === '/peringatan' ? <AlertsPage {...p} />
+      : r === '/rekam' ? <TrackPage {...p} />
+      : r === '/atur' ? <SettingsPage {...p} onLang={changeLang} authRequired={session.data.auth_required} />
+      : r.startsWith('/a/') ? <AssetPage {...p} k={decodeURIComponent(r.slice(3))} key={r} />
       : <Today {...p} />;
-    body = <Shell route={route}>{page}</Shell>;
+    body = <Shell route={r}>{page}</Shell>;
   }
   return (
     <Theme theme={neutralTheme} mode="light">

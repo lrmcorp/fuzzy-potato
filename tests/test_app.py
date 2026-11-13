@@ -409,3 +409,37 @@ def test_stockbit_terminal_parsing_and_facts(db):
 def _t_recent():
     import time as _t
     return _t.strftime("%d %b %y", _t.gmtime(_t.time() - 5 * 86400))
+
+
+def test_redesign_endpoints_verdict_history_feed_and_push(db, monkeypatch):
+    from arah import push
+    from arah.data import yahoo
+
+    async def no_fund(db_, symbol, max_age=86400):
+        return {}
+
+    monkeypatch.setattr("arah.api.fetch_fundamentals", no_fund)
+    monkeypatch.setattr(yahoo, "fetch_fundamentals", no_fund)
+    c = TestClient(create_app(Settings(password="", secret="k" * 32, openrouter_key="", claude_bin="/nonexistent"), db, background=False))
+
+    v = c.get("/api/verdict/BBCA").json()
+    assert v["verdict"] in ("layak", "tunggu", "hindari") and 0 <= v["score"] <= 100 and len(v["reasons"]) == 3
+    assert all(r["text"]["id"] and "—" not in r["text"]["id"] for r in v["reasons"]) and v["tested"] is False
+    assert c.get("/api/verdict/USDIDR").status_code == 404  # verdicts are for stocks
+
+    h = c.get("/api/history/BBCA?range=1m").json()
+    assert 20 <= len(h["bars"]) <= 32 and h["unit"] == "Rp"
+    assert c.get("/api/history/BBCA?range=9y").status_code == 422
+
+    f = c.get("/api/feed?scope=ID").json()
+    assert f["items"] and f["items"][0]["outlets"] >= 1 and "id_insider" in f["topics"]
+    assert c.get("/api/feed?scope=ID&topic=us_market").status_code == 400
+
+    key = c.get("/api/push/key").json()
+    assert len(key["key"]) > 80 and key["devices"] == 0
+    assert c.post("/api/push/subscribe", json={"endpoint": "http://not-https"}).status_code == 400
+    sent = []
+    monkeypatch.setattr(push, "_send_one", lambda db_, sub, payload: sent.append(payload) or True)
+    ok = c.post("/api/push/subscribe", json={"endpoint": "https://push.example/abc", "keys": {"p256dh": "x", "auth": "y"}})
+    assert ok.json()["devices"] == 1 and sent  # a welcome notification goes out at once
+    assert c.post("/api/push/unsubscribe", json={"endpoint": "https://push.example/abc"}).json()["devices"] == 0
