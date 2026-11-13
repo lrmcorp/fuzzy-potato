@@ -95,6 +95,23 @@ Deploy selesai bila semua ini benar:
    Ringkasan pertama muncul sekitar satu menit setelah kontainer menyala.
 9. Jika Telegram diisi: kirim /brief ke bot, bot membalas.
 
+RELAY CLOUDFLARE (bila Yahoo menjawab 429 atau Stockbit menolak server)
+Pemilik membuat Cloudflare Worker sesuai deploy/cloudflare/README.md dan memberi dua nilai. Pasang dengan:
+cd /home/ubuntu/arah && git pull --ff-only origin main && bash deploy/server-deploy.sh <<'VALUES'
+ARAH_RELAY_URL=https://arah-relay.<nama-akun>.workers.dev
+ARAH_RELAY_KEY=...
+STOCKBIT_SESSION=...
+VALUES
+(STOCKBIT_SESSION diisi nilai credentialStorage yang baru dari pemilik; biarkan ... bila tidak berubah.)
+Berhasil bila laporan memuat "INFO Yahoo and Stockbit go through the relay", "OK   daily history USDIDR"
+dengan ratusan hari, dan "OK   stock screen: 30 ID and 25 US". Pada jam bursa juga
+"OK   live IHSG: stockbit, realtime".
+[T10] Relay bermasalah:
+     - "the relay refused ARAH's key": ARAH_RELAY_KEY tidak sama dengan RELAY_KEY di Worker. Samakan.
+     - "set but not usable": URL harus diawali https:// dan kunci minimal 24 karakter.
+     - Yahoo lewat relay masih 429 atau Stockbit lewat relay 403: laporkan ke pemilik beserta baris
+       selfcheck-nya. Jangan mencoba relay atau layanan proxy lain.
+
 MASALAH (perbaiki, lalu jalankan ulang LANGKAH 1; baris VALUES boleh dibiarkan ..., nilai tersimpan dipakai)
 [T1] Perintah atau Docker tidak ada / tidak jalan.
      apt-get update && apt-get install -y git curl openssl; systemctl start docker; docker compose version

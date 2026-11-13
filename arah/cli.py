@@ -139,10 +139,16 @@ def selfcheck():
     from .techniques import techniques
     from .universe import BY_KEY
 
+    from .data import relay
     from .data.yahoo import GATE
 
     rt = _rt()
     db = rt.db
+    if relay.ON:
+        typer.echo(f"INFO Yahoo and Stockbit go through the relay at {relay.URL.split('//')[1].split('/')[0]}")
+    elif relay.URL or relay.KEY:
+        typer.echo("WARN ARAH_RELAY_URL / ARAH_RELAY_KEY are set but not usable: the URL must start with https:// "
+                   "and the key be at least 24 characters  [T10]")
     if GATE.paused_until():
         typer.echo("WARN Yahoo refused this server (429) and ARAH is pausing its Yahoo calls until "
                    f"{_time.strftime('%H:%M', _time.localtime(GATE.paused_until()))}. Do not restart to retry: "
@@ -210,9 +216,19 @@ def doctor():
     typer.echo(f"Claude CLI      : {'found' if s.claude_available else 'not found'}")
     typer.echo(f"OpenRouter key  : {'set' if s.openrouter_key else 'not set'}")
     typer.echo(f"Telegram        : {'set' if s.telegram_enabled else 'not set'}")
-    for name, url in (("Yahoo Finance", "https://query1.finance.yahoo.com/v8/finance/chart/IDR=X?range=1d&interval=1h"),
+    from .data import relay
+    from .data.yahoo import BASE, HEADERS
+
+    typer.echo(f"relay           : {relay.URL if relay.ON else 'off'}")
+    try:
+        code = httpx.get(f"{BASE}/v8/finance/chart/IDR=X", params={"range": "1d", "interval": "1h"}, headers=HEADERS, timeout=15).status_code
+    except httpx.HTTPError as e:
+        code = f"failed ({e.__class__.__name__})"
+    typer.echo(f"{'Yahoo (relay)' if relay.ON else 'Yahoo Finance':<16}: {code}")
+    for name, url in (
                       ("Google News", "https://news.google.com/rss/search?q=rupiah&hl=id&gl=ID&ceid=ID:id"),
                       ("BCA rates", "https://www.bca.co.id/id/informasi/kurs"),
+                      ("ECB rates", "https://api.frankfurter.dev/v1/latest?base=USD&symbols=IDR"),
                       ("Event calendar", "https://nfs.faireconomy.media/ff_calendar_thisweek.json"),
                       ("OpenRouter", "https://openrouter.ai/api/v1/models")):
         try:
