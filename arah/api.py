@@ -31,7 +31,7 @@ from .llm import budget_state, claude_calls_today
 from .runtime import Runtime
 from .service import all_horizons, build_view, forecast_asset, horizon_name, record_summary, track_record, validation
 from .signals import snapshot
-from . import notif, panel, push
+from . import fx_focus, notif, panel, push
 from .data import agenda_id
 from . import verdict_rules as rules
 from .signals import id_numbers
@@ -341,6 +341,11 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         """Simulasi modal: today's picks for this capital and the model's ranges in rupiah."""
         r = recs()
         return simulate_capital(db, r, capital, market, r.get("profile"))
+
+    @app.get("/api/kurs", dependencies=[Depends(auth)])
+    def kurs():
+        """USD/IDR and CNY/IDR: the rate, whether the month's move is normal, and what pushed it."""
+        return fx_focus.focus(db)
 
     @app.get("/api/push/prefs", dependencies=[Depends(auth)])
     def push_prefs():

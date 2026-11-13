@@ -711,3 +711,25 @@ def test_push_kinds_quiet_hours_and_one_message_per_event(db):
     p = c.get("/api/push/prefs").json()
     assert p["prefs"]["pasar"] is False and {k["key"] for k in p["kinds"]} == set(notif.KINDS)
     assert c.post("/api/push/prefs", json={"pasar": True}).json()["prefs"]["pasar"] is True
+
+
+def test_kurs_says_whether_the_move_is_normal_and_why(db):
+    from arah import fx_focus
+
+    # One usual month's move or less is normal; up to two is large; beyond that, unusual.
+    assert fx_focus.normal_label(1.0, 1.3)["key"] == "biasa"
+    assert fx_focus.normal_label(-2.0, 1.3)["key"] == "besar" and fx_focus.normal_label(3.0, 1.3)["key"] == "tidak_biasa"
+    assert fx_focus.normal_label(None, 1.3) is None
+
+    sd = fx_focus.typical_month(db, "USDIDR")
+    assert sd and sd > 0
+    c = TestClient(create_app(Settings(password="", secret="k" * 32, openrouter_key="", claude_bin="/nonexistent"), db, background=False))
+    k = c.get("/api/kurs").json()
+    usd, cny = k["usd"], k["cny"]
+    assert usd["price"] > 0 and set(usd["chg"]) == {"1d", "1w", "1m", "3m", "1y"} and usd["normal"]["sd"] == round(sd, 2)
+    assert usd["sentence"].startswith("Dolar terhadap rupiah") and "sebulan" in usd["sentence"]
+    assert {d["key"] for d in k["drivers"]} >= {"dxy", "asia", "yield", "ihsg"} and all(d["push"] in (-1, 0, 1) for d in k["drivers"])
+    assert [p["key"] for p in k["peers"]][0] == "USDIDR" and len(k["peers"]) == 4
+    # CNY/IDR = USD/IDR / USD/CNY: the parts name both legs.
+    assert "terhadap dolar" in cny["parts"]["text"] and "," in cny["parts"]["text"]
+    assert usd["forecast"]["1w"]["q05"] < usd["forecast"]["1w"]["q95"]

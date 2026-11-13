@@ -163,7 +163,7 @@ function MarketCard({c, title, h}: {c: SimpleCard; title: string; h: string}) {
   const fxWord = fx && chg != null && Math.abs(chg) >= 0.05 ? (chg > 0 ? 'rupiah melemah' : 'rupiah menguat') : undefined;
   const dir = c.next.dir ?? 'datar';
   return (
-    <a className="mcard" href={`#/a/${encodeURIComponent(c.key)}`}>
+    <a className="mcard" href={fx ? `#/pasar/kurs/${encodeURIComponent(c.key)}` : `#/a/${encodeURIComponent(c.key)}`}>
       <div className="mcard-top">
         <span className="mcard-name">{title}</span>
         {fxWord && <span className={`caption ${chg! > 0 ? 'chg-down' : 'chg-up'}`} style={{fontWeight: 600}}>{fxWord}</span>}
