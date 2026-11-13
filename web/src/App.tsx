@@ -159,7 +159,7 @@ export default function App() {
     const r = MOVED[route] ?? route;
     const paused = pulse?.state === 'paused';
     const page = r === '/' ? <HomePage {...p} pulse={pulse} />
-      : r.startsWith('/pasar') ? <MarketPage {...p} seg={r.split('/')[2] ?? 'pilihan'} paused={paused} />
+      : r.startsWith('/pasar') ? <MarketPage {...p} seg={r.split('/')[2] ?? 'pilihan'} pick={r.split('/')[3]} paused={paused} key={r.split('/')[3] ?? ''} />
       : r === '/cari' ? <CariPage />
       : r === '/simulasi' ? <SimPage {...p} />
       : r.startsWith('/berita') ? <NewsPage {...p} scope={r.split('/')[2]} key={r} />

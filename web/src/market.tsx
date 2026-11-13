@@ -2,6 +2,7 @@
 import {Fragment, useState} from 'react';
 import {api, type MarketRow, type RecCard, type Simple} from './api';
 import {openAlertSheet} from './alertsheet';
+import {KursFocus} from './kurs';
 import {useLoad} from './hooks';
 import {useT} from './i18n';
 import {ChangeText, Icon, Seg, Skeleton, SourceLine, Sparkline, Term, VerdictTag} from './ui';
@@ -285,7 +286,7 @@ function Quotes({group, onAuth, paused}: {group: string; onAuth: () => void; pau
   return <div className="card" style={{paddingTop: 'var(--s2)', paddingBottom: 'var(--s2)'}}><ul className="wl qrows">{list.map(r => <QuoteRow key={r.key} r={r} paused={paused} />)}</ul></div>;
 }
 
-export function MarketPage({onAuth, seg, paused}: {onAuth: () => void; seg: string; paused: boolean}) {
+export function MarketPage({onAuth, seg, paused, pick}: {onAuth: () => void; seg: string; paused: boolean; pick?: string}) {
   const [mkt, setMkt] = useState<'ID' | 'US'>('ID');
   const b = useLoad(api.brief, [], onAuth);
   const current = SEGS.find(s => s.key === seg) ? seg : seg === 'saham-id' ? 'saham' : seg === 'saham-as' ? 'saham' : 'pilihan';
@@ -304,6 +305,7 @@ export function MarketPage({onAuth, seg, paused}: {onAuth: () => void; seg: stri
       {current === 'saham' && <Seg label="Bursa" value={mkt} onChange={v => setMkt(v as 'ID' | 'US')} options={[{key: 'ID', text: 'Indonesia'}, {key: 'US', text: 'Amerika'}]} />}
       {current === 'pilihan' ? <Picks onAuth={onAuth} paused={paused} />
         : current === 'saham' ? <Quotes key={mkt} group={mkt === 'ID' ? 'stock_id' : 'stock_us'} onAuth={onAuth} paused={paused} />
+        : current === 'kurs' ? <><KursFocus onAuth={onAuth} pick={pick} /><h2 className="picks-head">Semua kurs</h2><Quotes key={current} group={GROUP[current]} onAuth={onAuth} paused={paused} /></>
         : <Quotes key={current} group={GROUP[current]} onAuth={onAuth} paused={paused} />}
     </>
   );

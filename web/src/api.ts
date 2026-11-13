@@ -155,6 +155,16 @@ export interface SimResult {capital: number; market: 'ID' | 'US'; fx: number | n
   invested?: number; horizons: string[]; total?: Record<string, SimOut> | null; loss_at_stops?: number; need?: {key: string; rp: number} | null}
 export interface PushPrefs {prefs: Record<string, boolean>; kinds: {key: string; title: string; text: string}[]; devices: number;
   last: {at: number; title: string; sent: number} | null}
+export interface KursRate {key: string; name: string; price: number; src: SrcInfo | null; decimals: number;
+  chg: {'1d': number | null; '1w': number | null; '1m': number | null; '3m': number | null; '1y': number | null};
+  year: {lo: number; hi: number; pos: number | null; near_high: boolean; near_low: boolean};
+  normal: {key: 'biasa' | 'besar' | 'tidak_biasa'; label: string; z: number; sd: number} | null; spark: number[];
+  forecast: Record<string, {q05: number; q50: number; q95: number; p_up: number}>; sentence: string;
+  parts?: {usd_idr: number; usd_cny: number; text: string} | null}
+export interface KursInfo {usd: KursRate | null; cny: KursRate | null;
+  drivers: {key: string; label: string; value: number; unit: string; push: number; why: string}[];
+  peers: {key: string; name: string; chg1m: number}[];
+  news: {title: string; url: string; sources: string[]; impact?: string; published_at: number}[]}
 export type RiskProfile = 'hati-hati' | 'sedang' | 'berani';
 export interface Factor {label: string; side: number | null; value: number | null; kind: 'pct' | 'idr'; href?: string}
 
@@ -213,6 +223,7 @@ export const api = {
   undoAlerts: (group: string) => call<{items: AlertItem[]}>(`/api/alerts/group/${encodeURIComponent(group)}`, {method: 'DELETE'}),
   pulse: () => call<PulseInfo>('/api/pulse'),
   panel: () => call<PanelInfo>('/api/panel'),
+  kurs: () => call<KursInfo>('/api/kurs'),
   pushPrefs: () => call<PushPrefs>('/api/push/prefs'),
   setPushPrefs: (p: Record<string, boolean>) => call<{prefs: Record<string, boolean>}>('/api/push/prefs', {method: 'POST', body: JSON.stringify(p)}),
   simulate: (capital: number, market: string) => call<SimResult>(`/api/simulate?capital=${Math.round(capital)}&market=${market}`),
