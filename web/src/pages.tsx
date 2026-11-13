@@ -1,4 +1,4 @@
-import {useEffect, useState, type ReactNode} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
@@ -9,58 +9,70 @@ import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/Segment
 import {Selector} from '@astryxdesign/core/Selector';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {api, ApiError, type Answer, type Brief, type Calc, type Lang, type MarketRow, type RecCard, type Simple, type SimpleCard, type State} from './api';
-import {FanChart, Spark} from './charts';
-import {AssetLink, Async, Change, Glyph, GradeNote, HorizonStrip, Reasons, Verdict, VigilanceLine} from './components';
+import {api, ApiError, type Answer, type Brief, type Calc, type Forecast, type Lang, type MarketRow, type RecCard, type Simple, type SimpleCard, type State} from './api';
+import {FanChart, LiveChart, MiniFan, ProjectionChart, Spark} from './charts';
+import {AssetLink, Async, Glyph, GradeNote, HorizonStrip, Lines, Reasons, Verdict, VigilanceLine} from './components';
 import {useLoad} from './hooks';
 import {useT} from './i18n';
 
 interface PageProps {onAuth: () => void}
 const HORIZONS = ['1h', '4h', '1d', '1w', '2w', '3w', '1m'];
 
-function Pill({label, state, name}: {label: string; state: State; name: string}) {
-  return (
-    <span className={`pill pill-${state}`}>
-      <span className="pill-k">{label}</span>
-      <span className="pill-v">{name}</span>
-    </span>
-  );
+function Chip({label, state, name}: {label: string; state: State; name: string}) {
+  return <span className={`chip chip-${state}`}><span className="chip-k">{label}</span> {name}</span>;
 }
 
-/** One question, two answers (now, next month), one reason. "Why?" opens the rest. */
-function Answer({id, title, sub, card, extra}: {id: string; title: string; sub: string; card: SimpleCard; extra?: ReactNode}) {
-  const {t, l, num} = useT();
+/** A rising rupiah rate means a weaker rupiah, so for currencies up is shown as bad. */
+const good = (chg: number | null | undefined, klass: string) => ((chg ?? 0) >= 0) !== (klass === 'fx');
+
+/** One card per question: price, two answers, a chart, one line of numbers. Everything else is on the detail page. */
+function Tile({title, card, h}: {title: string; card: SimpleCard; h: H3}) {
+  const {t, l, num, pct} = useT();
+  const d = card.decimals;
+  const [lo, hi] = card.next.range;
   return (
-    <section className="answer" aria-labelledby={id}>
-      <h2 id={id} className="answer-h">{title}</h2>
-      <p className="note">{sub}</p>
-      <div className="pills">
-        <Pill label={t('now')} state={card.now.state} name={l(card.now.name)} />
-        <Pill label={t('next_month')} state={card.next.state} name={l(card.next.name)} />
+    <a className="tile" href={`#/a/${card.key}`}>
+      <div className="tile-top">
+        <span className="tile-name">{title}</span>
+        {card.chg1d != null && <span className={`delta ${good(card.chg1d, card.klass) ? 'delta-up' : 'delta-down'}`}>{pct(card.chg1d)} <span className="muted">{t('today')}</span></span>}
       </div>
-      <p className="answer-line">{l(card.now.text)}</p>
-      <p className="answer-line">{l(card.next.text)}</p>
-      {card.bca && <p className="note">{t('bca_line', {buy: num(card.bca.buy, card.bca.buy < 1000 ? 2 : 0), sell: num(card.bca.sell, card.bca.sell < 1000 ? 2 : 0)})}</p>}
-      {extra}
-      <WhyBox card={card} />
-    </section>
+      <div className="tile-price">{num(card.price, card.price < 1000 ? 2 : d)}</div>
+      <div className="chips">
+        <Chip label={t('now')} state={card.now.state} name={l(card.now.name)} />
+        <Chip label={t(`in_${h}`)} state={card.next.state} name={l(card.next.name)} />
+      </div>
+      <MiniFan values={card.spark ?? []} range={card.spark?.length ? card.next.range : undefined} state={card.next.state}
+        label={`${title}: ${t('chart_title')}`} />
+      <div className="tile-foot">
+        <span>{t(`range_${h}`)}</span>
+        <strong>{num(lo, lo < 1000 ? 2 : d)} – {num(hi, hi < 1000 ? 2 : d)}</strong>
+      </div>
+    </a>
   );
 }
 
-function WhyBox({card}: {card: SimpleCard}) {
-  const {t, l, num} = useT();
+function AbroadTile({ab, h}: {ab: NonNullable<Simple['abroad']>; h: H3}) {
+  const {t, l, pct} = useT();
   return (
-    <details className="why">
-      <summary>{t('why_q')}</summary>
-      <Reasons items={card.reasons} />
-      {card.watch && <p className="watch"><strong>{t('watch')}:</strong> {l(card.watch)}</p>}
-      {Object.entries(card.touch).length > 0 && (
-        <p className="note">{Object.entries(card.touch).sort((x, y) => Number(x[0]) - Number(y[0])).map(([lv, p]) =>
-          `${t('touch')} ${num(Number(lv), card.decimals)}: ${Math.round(p * 100)}%`).join(' · ')}</p>
-      )}
-      <p className="note">{t(card.from_team ? 'by_team' : 'by_rules')} {card.grade ? t(`g_${card.grade}` as const) : ''}</p>
-      <p className="more"><a href={`#/a/${card.key}`}>{t('open_chart')}</a></p>
-    </details>
+    <div className="tile">
+      <div className="tile-top"><span className="tile-name">{t('q_abroad')}</span></div>
+      <div className="chips">
+        <Chip label={t('now')} state={ab.now.state} name={l(ab.now.name)} />
+        <Chip label={t(`in_${h}`)} state={ab.next.state} name={l(ab.next.name)} />
+      </div>
+      <ul className="rows">
+        {ab.countries.map(c => (
+          <li key={c.key}>
+            <a href={`#/a/${c.key}`}>
+              <span className="row-name">{t(`c_${c.country}` as 'c_US')}</span>
+              <Spark values={c.spark ?? []} label={t(`c_${c.country}` as 'c_US')} />
+              <span className={`delta ${good(c.chg1m, c.klass) ? 'delta-up' : 'delta-down'}`}>{pct(c.chg1m)}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+      <div className="tile-foot"><span>{t('abroad_foot')}</span><span>{t('month')}</span></div>
+    </div>
   );
 }
 
@@ -93,64 +105,66 @@ export function Today({onAuth}: PageProps) {
   );
 }
 
-function Summary({brief, simple, building, rebuild, canAsk}: {brief: Brief; simple: Simple; building: boolean; rebuild: () => void; canAsk: boolean}) {
-  const {t, l, nm, when, lang} = useT();
-  const rep = brief.report;
-  const dayOf = (ts: number) => new Intl.DateTimeFormat(lang === 'id' ? 'id-ID' : 'en-US', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}).format(ts * 1000);
-  const ab = simple.abroad;
+type H3 = '1m' | '2m' | '3m';
+
+function HorizonTabs({value, onChange}: {value: H3; onChange: (h: H3) => void}) {
+  const {t} = useT();
+  return (
+    <SegmentedControl label={t('horizon')} value={value} onChange={v => onChange(v as H3)}>
+      <SegmentedControlItem value="1m" label={t('h_1m')} />
+      <SegmentedControlItem value="2m" label={t('h_2m')} />
+      <SegmentedControlItem value="3m" label={t('h_3m')} />
+    </SegmentedControl>
+  );
+}
+
+function Summary({brief, simple: first, building, rebuild, canAsk}: {brief: Brief; simple: Simple; building: boolean; rebuild: () => void; canAsk: boolean}) {
+  const {t, l, when, lang} = useT();
+  const [h, setH] = useState<H3>('1m');
+  const other = useLoad(() => (h === '1m' ? Promise.resolve(first) : api.simple(h)), [h, first]);
+  const simple = h === '1m' ? first : other.data;
+  const dayOf = (ts: number) => new Intl.DateTimeFormat(lang === 'id' ? 'id-ID' : 'en-US', {weekday: 'short', day: 'numeric', month: 'short'}).format(ts * 1000);
+  const events = (brief.events ?? []).slice(0, 4);
   return (
     <>
-      <header className="lede">
-        <p className="kicker">{t('updated')} {when(brief.at)}</p>
-        <h1 className="headline">{l(brief.headline)}</h1>
-        {brief.outlook && <p className="verdict"><strong>{t('my_view')}:</strong> {l(brief.outlook)}</p>}
+      <header className="dash-head">
+        <div>
+          <p className="kicker">{t('updated')} {when(brief.at)}</p>
+          <h1 className="headline">{l(brief.headline)}</h1>
+        </div>
+        <Button label={building ? t('building') : t('refresh')} size="sm" onClick={rebuild} isLoading={building} />
       </header>
-
-      {simple.indonesia && (
-        <Answer id="q-id" title={t('q_id')} sub={t('sub_id')} card={simple.indonesia} extra={brief.foreign && (
-          <p className="answer-line"><strong>{t(brief.foreign.side === 'buy' ? 'foreign_buy' : 'foreign_sell')}.</strong> {l(brief.foreign.text)}{' '}
-            {brief.foreign.sources[0] && <a className="muted" href={brief.foreign.sources[0].url} target="_blank" rel="noopener noreferrer">{brief.foreign.sources[0].source}</a>}</p>
-        )} />
+      {brief.outlook && (
+        <details className="why why-top">
+          <summary>{t('my_view')}</summary>
+          <p>{l(brief.outlook)}</p>
+        </details>
       )}
-
-      {ab && (
-        <section className="answer" aria-labelledby="q-ab">
-          <h2 id="q-ab" className="answer-h">{t('q_abroad')}</h2>
-          <p className="note">{t('sub_abroad')}</p>
-          <div className="pills">
-            <Pill label={t('now')} state={ab.now.state} name={l(ab.now.name)} />
-            <Pill label={t('next_month')} state={ab.next.state} name={l(ab.next.name)} />
-          </div>
-          <p className="answer-line">{l(ab.now.text)}</p>
-          <ul className="countries">
-            {ab.countries.map(c => (
-              <li key={c.key}>
-                <div className="country-head">
-                  <strong>{t(`c_${c.country}` as 'c_US')}</strong> <span className="muted">{nm(c)}</span>
-                  <span className="pills small">
-                    <Pill label={t('now')} state={c.now.state} name={l(c.now.name)} />
-                    <Pill label={t('next_month')} state={c.next.state} name={l(c.next.name)} />
-                  </span>
-                </div>
-                <WhyBox card={c} />
-              </li>
-            ))}
-          </ul>
-        </section>
+      <div className="filter-row">
+        <span className="filter-label">{t('forecast_for')}</span>
+        <HorizonTabs value={h} onChange={setH} />
+      </div>
+      {!simple ? <Lines n={6} /> : (
+        <div className={`tiles${other.loading && h !== '1m' ? ' is-loading' : ''}`}>
+          {simple.indonesia && <Tile title={t('q_id_short')} card={simple.indonesia} h={h} />}
+          {simple.abroad && <AbroadTile ab={simple.abroad} h={h} />}
+          {simple.usd && <Tile title="USD / IDR" card={simple.usd} h={h} />}
+          {simple.cny && <Tile title="CNY / IDR" card={simple.cny} h={h} />}
+        </div>
       )}
+      <p className="legend-line">
+        <span className="chip chip-good">{t('good')}</span> {t('legend_good')}
+        <span className="chip chip-bad">{t('bad')}</span> {t('legend_bad')}
+      </p>
 
-      {simple.usd && <Answer id="q-usd" title={t('q_usd')} sub={t('sub_fx')} card={simple.usd} />}
-      {simple.cny && <Answer id="q-cny" title={t('q_cny')} sub={t('sub_fx')} card={simple.cny} />}
-
-      <section className="answer" aria-labelledby="q-ev">
-        <h2 id="q-ev" className="answer-h">{t('events_h')}</h2>
-        {(brief.events ?? []).length === 0 ? <p className="note">{t('no_events')}</p> : (
+      <section className="block" aria-labelledby="q-ev">
+        <h2 id="q-ev" className="block-h">{t('events_h')}</h2>
+        {events.length === 0 ? <p className="note">{t('no_events')}</p> : (
           <ul className="events">
-            {(brief.events ?? []).map((e, i) => (
+            {events.map((e, i) => (
               <li key={i}>
-                <span className="event-when">{dayOf(e.at)} · {t(`c_${e.country}` as 'c_US')}</span>
-                <strong>{e.title ?? l(e.what)}</strong>
-                {e.why ? <span>{l(e.why)}</span> : <span className="muted">{t('from_news')}</span>}
+                <span className="event-when">{dayOf(e.at)}<br /><span className="muted">{t(`c_${e.country}` as 'c_US')}</span></span>
+                <span>{e.title ?? l(e.what)}</span>
               </li>
             ))}
           </ul>
@@ -158,14 +172,6 @@ function Summary({brief, simple, building, rebuild, canAsk}: {brief: Brief; simp
       </section>
 
       {canAsk && <AskBox />}
-
-      <p className="note mode">
-        {rep && rep.total > 0 ? t('report_line', {right: rep.right, wrong: rep.wrong}) : t('report_none')}{' '}
-        {t(brief.mode === 'team' ? 'mode_team' : 'mode_rules')}
-      </p>
-      <div className="actions">
-        <Button label={building ? t('building') : t('refresh_brief')} onClick={rebuild} isLoading={building} />
-      </div>
     </>
   );
 }
@@ -182,8 +188,8 @@ function AskBox() {
     try { setA(await api.ask(q.trim())); } catch { setErr(t('ask_fail')); } finally { setBusy(false); }
   };
   return (
-    <section className="answer" aria-labelledby="q-ask">
-      <h2 id="q-ask" className="answer-h">{t('ask_h')}</h2>
+    <section className="block" aria-labelledby="q-ask">
+      <h2 id="q-ask" className="block-h">{t('ask_h')}</h2>
       <div className="toolbar">
         <TextInput label={t('ask_label')} placeholder={t('ask_ph')} value={q} onChange={setQ} onEnter={send} width="100%"
           status={err ? {type: 'error', message: err} : undefined} />
@@ -191,7 +197,7 @@ function AskBox() {
       </div>
       {a && (
         <div aria-live="polite">
-          <div className="pills"><Pill label={`${t('conf')} ${t(`c_${a.confidence}` as const)}`} state={a.verdict} name={t(a.verdict)} /></div>
+          <div className="chips"><Chip label={`${t('conf')} ${t(`c_${a.confidence}` as const)}`} state={a.verdict} name={t(a.verdict)} /></div>
           <p className="verdict">{l(a.answer)}</p>
           <Reasons items={a.points} />
           {a.risk && <p className="watch"><strong>{t('risk_one')}:</strong> {l(a.risk)}</p>}
@@ -367,58 +373,175 @@ function RecCardView({c}: {c: RecCard}) {
   );
 }
 
+function usePoll<T>(fn: () => Promise<T>, everyMs: (d: T | null) => number, deps: unknown[]) {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState(false);
+  const last = useRef<T | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let timer = 0;
+    last.current = null;
+    setData(null);
+    const tick = async () => {
+      if (document.visibilityState === 'visible') {
+        try {
+          const d = await fn();
+          if (alive) { last.current = d; setData(d); setError(false); }
+        } catch { if (alive) setError(true); }
+      }
+      if (alive) timer = window.setTimeout(tick, everyMs(last.current));
+    };
+    void tick();
+    return () => { alive = false; window.clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return {data, error};
+}
+
+function LivePanel({k, decimals: fallback, klass}: {k: string; decimals: number; klass: string}) {
+  const {t, l, num, pct, when} = useT();
+  const {data, error} = usePoll(() => api.live(k), d => (d?.realtime ? 5000 : 30000), [k]);
+  const decimals = data?.decimals ?? fallback;
+  if (!data) return error ? <p className="note">{t('live_off')}</p> : <div className="live-chart is-empty" aria-busy="true" />;
+  const up = (data.chg_pct ?? 0) >= 0;
+  const goodForOwner = up !== (klass === 'fx');
+  return (
+    <section className="live" aria-labelledby="live-h">
+      <div className="live-head">
+        <h2 id="live-h" className="block-h">{t('live_h')}</h2>
+        <span className={`live-badge ${data.realtime ? 'is-live' : ''}`}>
+          {data.realtime ? t('live_rt', {src: data.source === 'stockbit' ? 'Stockbit' : 'Binance'}) : t('live_delay', {m: data.delay_min ?? 15})}
+        </span>
+      </div>
+      <p className="live-price">
+        <span className="price big">{num(data.last, decimals)}</span>
+        {data.chg_pct != null && <span className={`delta ${goodForOwner ? 'delta-up' : 'delta-down'}`}>{pct(data.chg_pct, 2)} <span className="muted">{t('today')}</span></span>}
+        <span className="muted small">{t('updated')} {when(data.at)}</span>
+      </p>
+      {data.note && <p className="note">{l(data.note)}</p>}
+      {data.bars.length > 1 ? <LiveChart bars={data.bars} decimals={decimals} label={t('live_h')} /> : <p className="note">{t('live_closed')}</p>}
+      {data.book && (data.book.bids.length > 0 || data.book.offers.length > 0) && (
+        <details className="why">
+          <summary>{t('orderbook')}</summary>
+          <div className="book">
+            <table><thead><tr><th>{t('bid_lots')}</th><th>{t('bid')}</th><th>{t('offer')}</th><th>{t('offer_lots')}</th></tr></thead>
+              <tbody>{Array.from({length: Math.max(data.book.bids.length, data.book.offers.length)}, (_, i) => (
+                <tr key={i}><td>{data.book!.bids[i] ? num(data.book!.bids[i].lots, 0) : ''}</td><td>{data.book!.bids[i] ? num(data.book!.bids[i].price, 0) : ''}</td>
+                  <td>{data.book!.offers[i] ? num(data.book!.offers[i].price, 0) : ''}</td><td>{data.book!.offers[i] ? num(data.book!.offers[i].lots, 0) : ''}</td></tr>))}
+              </tbody></table>
+          </div>
+          {data.book.foreign_net != null && <p className="note">{t('foreign_net_today')}: {num(data.book.foreign_net, 0)}</p>}
+        </details>
+      )}
+    </section>
+  );
+}
+
+function VoteMark({v}: {v: number}) {
+  const {t} = useT();
+  return <span className="vote">{v > 0 ? '▲' : v < 0 ? '▼' : '–'} {t(v > 0 ? 'v_up' : v < 0 ? 'v_down' : 'v_none')}</span>;
+}
+
+function Conclusion({f}: {f: Forecast}) {
+  const {t, num, lang} = useT();
+  const p = f.conclusion.p_up;
+  const upSide = p >= 0.5;
+  const good = upSide !== (f.up_is < 0);
+  const chance = Math.round((upSide ? p : 1 - p) * 100);
+  const edge = Math.abs(Math.round(p * 100) - 50);
+  const conf = edge >= 10 ? 'c_strong' : edge >= 5 ? 'c_fair' : 'c_thin';
+  const d = f.decimals;
+  const fx = f.klass === 'fx';
+  const side = fx ? (upSide ? t('rupiah_weaker') : t('rupiah_stronger')) : (upSide ? t('v_up_long') : t('v_down_long'));
+  return (
+    <div className={`conclusion conclusion-${good ? 'good' : 'bad'}`}>
+      <p className="conclusion-k">{t('conclusion')} · {f.horizon_name[lang]}</p>
+      <p className="conclusion-v">{good ? t('good') : t('bad')}</p>
+      <p>{t('concl_line', {side, p: chance, conf: t(conf)})}</p>
+      <p>{t('concl_range', {lo: num(f.conclusion.q05, d), hi: num(f.conclusion.q95, d), mid: num(f.conclusion.q50, d)})}</p>
+      <p className="note">{t('concl_votes', {up: f.votes.up, down: f.votes.down, none: f.votes.none})}</p>
+    </div>
+  );
+}
+
+function TechniqueList({f}: {f: Forecast}) {
+  const {t, l, num, pct} = useT();
+  return (
+    <ol className="techs">
+      {f.techniques.map(x => (
+        <li key={x.key} className="tech-row">
+          <div className="tech-top">
+            <strong>{l(x.name)}</strong>
+            <VoteMark v={x.vote} />
+            {x.exp_ret != null && x.target != null && <span className="muted">{num(x.target, f.decimals)} ({pct(x.exp_ret)})</span>}
+          </div>
+          <p>{l(x.reason)}</p>
+          <p className="note">
+            {x.hist && x.hist.hit != null && x.hist.chance != null && x.hist.n_eff >= 12
+              ? t('tested_line', {hit: Math.round(x.hist.hit * 100), chance: Math.round(x.hist.chance * 100), n: x.hist.n_eff})
+              : x.hist ? t('rare') : t('untested')}
+            {' · '}{t('weight_line', {w: Math.round(x.weight * 100)})}
+          </p>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export function AssetPage({onAuth, k}: PageProps & {k: string}) {
   const {t, l, nm, num} = useT();
-  const [h, setH] = useState('1w');
+  const [h, setH] = useState<H3>('1m');
+  const [hs, setHs] = useState('1w');
   const [custom, setCustom] = useState('');
   const [customErr, setCustomErr] = useState(false);
   const [asking, setAsking] = useState(false);
   const [askErr, setAskErr] = useState<string | null>(null);
-  const state = useLoad(() => api.asset(k, h), [k, h], onAuth);
+  const fc = useLoad(() => api.forecast(k, h), [k, h], onAuth);
+  const state = useLoad(() => api.asset(k, hs), [k, hs], onAuth);
   const applyCustom = () => {
     const v = custom.trim().toLowerCase();
-    if (/^[1-9]\d{0,2}[hdwm]$/.test(v)) { setCustomErr(false); setH(v); } else setCustomErr(true);
+    if (/^[1-9]\d{0,2}[hdwm]$/.test(v)) { setCustomErr(false); setHs(v); } else setCustomErr(true);
   };
   const ask = async () => {
     setAsking(true); setAskErr(null);
-    try { await api.analyze(k); state.reload(); }
+    try { await api.analyze(k); state.reload(); fc.reload(); }
     catch (e) { setAskErr(e instanceof ApiError && e.status === 409 ? t('team_off') : t('team_failed')); }
     finally { setAsking(false); }
   };
+  const view = state.data;
+  const f = fc.data;
+  const decimals = f?.decimals ?? view?.decimals ?? 2;
+  const klass = f?.klass ?? view?.klass ?? '';
   return (
     <>
       <p className="back"><a href="#/">{t('back')}</a></p>
-      <Async state={state}>
-        {view => (
-          <>
-            <header className="page-head">
-              <Heading level={1}>{nm(view)}</Heading>
-              <p className="asset-head">
-                <span className="price big">{num(view.forecast.s0, view.decimals)}</span>
-                <Change value={view.snapshot.chg1d} label={t('today')} />
-                <Change value={view.snapshot.chg1w} label={t('week')} />
-                <Change value={view.snapshot.chg1m} label={t('month')} />
-              </p>
-            </header>
-            {view.horizons && <HorizonStrip rows={view.horizons} selected={view.horizon} onSelect={setH} />}
-            <div className="toolbar">
-              <TextInput label={t('custom_h')} description={t('custom_h_hint')} value={custom} onChange={setCustom} onEnter={applyCustom}
-                width={180} status={customErr ? {type: 'error', message: t('bad_horizon')} : undefined} />
-              <Button label={t('apply')} onClick={applyCustom} />
+      <header className="page-head">
+        <Heading level={1}>{f ? nm(f) : view ? nm(view) : k}</Heading>
+      </header>
+      <LivePanel k={k} decimals={decimals} klass={klass} />
+
+      <section className="block" aria-labelledby="fc-h">
+        <div className="live-head">
+          <h2 id="fc-h" className="block-h">{t('forecast_h')}</h2>
+          <HorizonTabs value={h} onChange={setH} />
+        </div>
+        <Async state={fc}>
+          {f2 => (
+            <div className={fc.loading ? 'is-loading' : ''}>
+              <Conclusion f={f2} />
+              <ProjectionChart f={f2} />
+              <h3 className="label">{t('techs_h')}</h3>
+              <p className="note">{t('techs_lead')}</p>
+              <TechniqueList f={f2} />
             </div>
-            <p className="verdict">{l(view.summary)}</p>
-            {view.vigilance && <VigilanceLine v={view.vigilance} decimals={view.decimals} horizonName={l(view.horizon_name)} />}
-            {Object.keys(view.forecast.touch).length > 0 && (
-              <ul className="plain touch">
-                {Object.entries(view.forecast.touch).sort((a, b) => Number(a[0]) - Number(b[0])).map(([lv, p]) => (
-                  <li key={lv}>{t('touch')} {num(Number(lv), view.decimals)}: <strong>{Math.round(p * 100)}%</strong></li>
-                ))}
-              </ul>
-            )}
-            <GradeNote v={view.validation} />
-            {view.notes.map((n, i) => <p key={i} className="note">{l(n)}</p>)}
-            <FanChart view={view} />
-            <h2 className="section-h">{t('why')}</h2>
+          )}
+        </Async>
+      </section>
+
+      {view && (
+        <>
+          <details className="why">
+            <summary>{t('why_q')}</summary>
             <Reasons items={view.reasons} />
             {view.watch && <p className="watch"><strong>{t('watch')}:</strong> {l(view.watch)}</p>}
             {view.debate && (view.debate.bull || view.debate.bear) && (
@@ -430,20 +553,41 @@ export function AssetPage({onAuth, k}: PageProps & {k: string}) {
             {view.sources && view.sources.length > 0 && (
               <>
                 <h3 className="label">{t('sources')}</h3>
-                <ul className="plain">{view.sources.map((s, i) => (
-                  <li key={i}><a href={s.url} target="_blank" rel="noopener noreferrer">{s.title}</a> <span className="muted">{s.source}</span></li>))}
+                <ul className="plain">{view.sources.map((s2, i) => (
+                  <li key={i}><a href={s2.url} target="_blank" rel="noopener noreferrer">{s2.title}</a> <span className="muted">{s2.source}</span></li>))}
                 </ul>
               </>
             )}
-            {view.llm_enabled ? (
-              <div className="actions">
-                <Button label={asking ? t('asking') : t('ask_team')} variant="primary" onClick={ask} isLoading={asking} />
-              </div>
-            ) : <p className="note">{t('team_off')}</p>}
-            {askErr && <Banner status="warning" title={askErr} />}
-          </>
-        )}
-      </Async>
+          </details>
+          <details className="why">
+            <summary>{t('short_h')}</summary>
+            {view.horizons && <HorizonStrip rows={view.horizons} selected={view.horizon} onSelect={setHs} />}
+            <p className="verdict">{l(view.summary)}</p>
+            {view.vigilance && <VigilanceLine v={view.vigilance} decimals={view.decimals} horizonName={l(view.horizon_name)} />}
+            {Object.keys(view.forecast.touch).length > 0 && (
+              <ul className="plain touch">
+                {Object.entries(view.forecast.touch).sort((a2, b2) => Number(a2[0]) - Number(b2[0])).map(([lv, p]) => (
+                  <li key={lv}>{t('touch')} {num(Number(lv), view.decimals)}: <strong>{Math.round(p * 100)}%</strong></li>
+                ))}
+              </ul>
+            )}
+            <FanChart view={view} />
+            <GradeNote v={view.validation} />
+            {view.notes.map((n, i) => <p key={i} className="note">{l(n)}</p>)}
+            <div className="toolbar">
+              <TextInput label={t('custom_h')} description={t('custom_h_hint')} value={custom} onChange={setCustom} onEnter={applyCustom}
+                width={180} status={customErr ? {type: 'error', message: t('bad_horizon')} : undefined} />
+              <Button label={t('apply')} onClick={applyCustom} />
+            </div>
+          </details>
+          {view.llm_enabled ? (
+            <div className="actions">
+              <Button label={asking ? t('asking') : t('ask_team')} variant="primary" onClick={ask} isLoading={asking} />
+            </div>
+          ) : <p className="note">{t('team_off')}</p>}
+          {askErr && <Banner status="warning" title={askErr} />}
+        </>
+      )}
     </>
   );
 }
@@ -545,8 +689,7 @@ export function TrackPage({onAuth}: PageProps) {
   );
 }
 
-export function SettingsPage({onAuth, onLang, themeMode, onTheme, authRequired}: PageProps & {
-  onLang: (l: Lang) => void; themeMode: string; onTheme: (m: string) => void; authRequired: boolean}) {
+export function SettingsPage({onAuth, onLang, authRequired}: PageProps & {onLang: (l: Lang) => void; authRequired: boolean}) {
   const {t, num, when, lang} = useT();
   const status = useLoad(api.status, [], onAuth);
   const prefs = useLoad(api.settings, [], onAuth);
@@ -575,11 +718,6 @@ export function SettingsPage({onAuth, onLang, themeMode, onTheme, authRequired}:
         <SegmentedControl label={t('language')} value={lang} onChange={v => onLang(v as Lang)}>
           <SegmentedControlItem value="id" label="Bahasa Indonesia" />
           <SegmentedControlItem value="en" label="English" />
-        </SegmentedControl>
-        <SegmentedControl label={t('theme')} value={themeMode} onChange={onTheme}>
-          <SegmentedControlItem value="system" label={t('theme_system')} />
-          <SegmentedControlItem value="light" label={t('theme_light')} />
-          <SegmentedControlItem value="dark" label={t('theme_dark')} />
         </SegmentedControl>
       </section>
 
@@ -618,6 +756,7 @@ export function SettingsPage({onAuth, onLang, themeMode, onTheme, authRequired}:
             <div><dt>{t('data_at')}</dt><dd>{when(s.data_at) || '-'}</dd></div>
             <div><dt>{t('ai_team')}</dt><dd>{s.llm_enabled ? `${t('on')}: ${s.models.provider} (${s.models.quick}, ${s.models.deep})` : t('off')}{s.models.fallback ? ` · ${t('fallback')}: ${s.models.fallback}` : ''}{s.llm_last ? ` · ${t('last_used')}: ${s.llm_last.provider}` : ''}{s.claude_calls_today ? ` · ${s.claude_calls_today} ${t('calls_today')}` : ''}</dd></div>
             <div><dt>{t('budget')}</dt><dd>${num(s.budget.month, 2)} / ${num(s.budget.cap_month, 0)}</dd></div>
+            <div><dt>Stockbit</dt><dd>{!s.stockbit?.configured ? t('sb_off') : s.stockbit.usable ? t('sb_on', {d: when(s.stockbit.refresh_until ?? null)}) : t('sb_expired')}</dd></div>
             <div><dt>{t('telegram')}</dt><dd>{s.telegram_enabled ? t('on') : t('off')}</dd></div>
             <div><dt>{t('schedule')} ({s.timezone})</dt><dd>{s.schedule.map(x => x.time).join(' · ')}</dd></div>
             {Object.keys(s.data_errors).length > 0 && <div><dt>{t('data_errors')}</dt><dd>{Object.keys(s.data_errors).join(', ')}</dd></div>}

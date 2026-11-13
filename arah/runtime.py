@@ -132,7 +132,7 @@ class Runtime:
         self.status["validating"] = True
         try:
             for a in MACRO:
-                for h in DEFAULT_HORIZONS:
+                for h in DEFAULT_HORIZONS + ["2m", "3m"]:
                     try:
                         await asyncio.to_thread(validation, self.db, a, h, True)
                     except Exception:
@@ -150,7 +150,8 @@ class Runtime:
             if not self.db.latest_report("brief", max_age=6 * 3600):
                 await self.run_brief("startup", push=False)
             await self.tick()
-            if time.time() - self.db.get("validated_at", 0) > 7 * 86400:
+            # Also when the 2 and 3-month tests have never run (added after the first install).
+            if time.time() - self.db.get("validated_at", 0) > 7 * 86400 or self.db.get("bt:IHSG:3m") is None:
                 await self.validate_all()
         except Exception:
             log.exception("bootstrap failed")

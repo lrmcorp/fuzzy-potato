@@ -218,3 +218,22 @@ def test_session_slides_and_password_change_signs_out(db):
     c2 = TestClient(create_app(Settings(password="second-password-2", secret="k" * 32), db, background=False))
     c2.cookies.set("arah_session", cookie)
     assert c2.get("/api/brief").status_code == 401 and not c2.get("/api/session").json()["authed"]
+
+
+def test_forecast_and_summary_horizons(db):
+    from arah.techniques import techniques
+
+    c = TestClient(create_app(Settings(password="", secret="k" * 32), db, background=False))
+    for h in ("1m", "2m", "3m"):
+        r = c.get(f"/api/forecast/IHSG?h={h}")
+        assert r.status_code == 200
+        j = r.json()
+        assert len(j["techniques"]) == 7 and j["votes"]["up"] + j["votes"]["down"] + j["votes"]["none"] == 7
+        cc = j["conclusion"]
+        assert cc["q05"] < cc["q50"] < cc["q95"] and abs(j["tilt"]) <= 0.08
+    assert c.get("/api/forecast/IHSG?h=1h").status_code == 422  # hourly horizons are not offered here
+    s = c.get("/api/simple?h=3m").json()
+    assert s["horizon"] == "3m" and s["indonesia"]["next"]["state"] in ("good", "bad")
+    assert "3 bulan" in s["indonesia"]["next"]["text"]["id"]
+    assert c.get("/api/simple?h=5m").status_code == 422
+    assert techniques(db, BY_KEY["SPX"], "2m")["steps"] == 42
