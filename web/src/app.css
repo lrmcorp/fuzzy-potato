@@ -655,3 +655,7 @@ th .term-pop, .num .term-pop { left: auto; right: 0; }
 .nbar-z2 { background: #DCE1E8; }
 .nbar-z1 { background: #BFE3CC; }
 .nb1 { background: #BFE3CC; } .nb2 { background: #DCE1E8; } .nb3 { background: #F6CDB8; }
+
+/* Tiles: the number on top, its change in percent underneath */
+.tile-sub { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .tile-sub { font-size: 13px; } .tile-val { font-size: 18px; } }

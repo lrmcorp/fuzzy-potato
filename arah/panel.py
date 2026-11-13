@@ -118,7 +118,8 @@ def gauge_factors(db: DB) -> dict:
         s = snapshot(db, a)
         if not s or s.get(period) is None:
             return {"label": label, "side": None, "value": None, "kind": "pct", "href": f"#/a/{key}"}
-        return {"label": label, "side": price_now(s, a) * good_when_up, "value": s[period], "kind": "pct", "href": f"#/a/{key}"}
+        return {"label": label, "side": price_now(s, a) * good_when_up, "value": s[period], "kind": "pct", "href": f"#/a/{key}",
+                "level": s["price"], "decimals": 2 if key == "US10Y" else a.decimals, "unit": "%" if key == "US10Y" else ""}
 
     flow = (db.get("sbt:foreign_day:IHSG") or {}).get("v") or {}
     net = flow.get("net_foreign")
@@ -129,10 +130,11 @@ def gauge_factors(db: DB) -> dict:
     return {
         "ID": [moved("IHSG", "IHSG 1 bln", 1), moved("USDIDR", "USD/IDR 1 bln", -1),
                {"label": "Asing hari ini", "side": None if net is None else (1 if net > 0 else -1 if net < 0 else 0),
-                "value": net, "kind": "idr", "href": "#/a/IHSG"}],
+                "value": net, "kind": "idr", "href": "#/a/IHSG",
+                "buy": flow.get("foreign_buy") if net is not None else None, "sell": flow.get("foreign_sell") if net is not None else None}],
         "US": [moved("SPX", "S&P 500 1 bln", 1),
                # Fear falling is good for stocks; a move under 10% in a week is ordinary for the VIX.
                {"label": "VIX 1 mgg", "side": None if v1w is None else (-1 if v1w > 10 else 1 if v1w < -10 else 0),
-                "value": v1w, "kind": "pct", "href": "#/a/VIX"},
+                "value": v1w, "kind": "pct", "href": "#/a/VIX", "level": vix["price"] if vix else None, "decimals": 2, "unit": ""},
                moved("US10Y", "Yield AS 10 thn 1 bln", -1)],
     }

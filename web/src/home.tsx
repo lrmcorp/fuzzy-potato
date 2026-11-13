@@ -54,15 +54,17 @@ function GaugeLegend({now, next}: {now: number; next: number}) {
   );
 }
 
-interface TileData {label: string; value: string | null; side: Side | null; href: string}
+// value: the number itself (index level, rate, rupiah); sub: its change in percent underneath.
+interface TileData {label: string; value: string | null; sub?: string | null; side: Side | null; href: string}
 
 function Tile({t}: {t: TileData}) {
   const tag = t.side ? SIDE_TAG[t.side] : null;
   return (
     <a className="tile" href={t.href}>
       <span className="tile-lbl">{t.label}</span>
+      {t.value != null ? <span className="tile-val">{t.value}</span> : <span className="tile-val none">Belum ada data</span>}
       <span className="tile-row">
-        {t.value != null ? <span className="tile-val">{t.value}</span> : <span className="tile-val none">Belum ada data</span>}
+        {t.sub && <span className={`tile-sub ${t.side === 'menekan' ? 'chg-down' : t.side === 'mendukung' ? 'chg-up' : ''}`}>{t.sub}</span>}
         {tag && <span className={`tag tag-${tag.tone}`}><Mark icon={tag.icon} />{tag.label}</span>}
       </span>
     </a>
@@ -366,15 +368,28 @@ export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo 
   if (!brief) return <><div className="card"><Skeleton lines={3} /></div><div className="card"><Skeleton lines={4} /></div></>;
   const pickRegion = (r: 'ID' | 'US') => { setRegion(r); try { localStorage.setItem('arah.region', r); } catch { /* private mode */ } };
   const us = simple?.abroad?.countries.find(c => c.country === 'US');
-  const {pct} = tFmt;
+  const {pct, num} = tFmt;
   const tilesOf = (c: 'ID' | 'US', card?: SimpleCard | null): TileData[] => {
-    const f = (pn.data?.factors[c] ?? []).map(x => ({
-      label: x.label.replace(/ (1 bln|1 mgg|hari ini)$/, ' · $1'),
-      value: x.value == null || (x.kind === 'idr' && !x.value) ? null
-        : x.kind === 'idr' ? `${x.value > 0 ? 'Beli' : 'Jual'} ${compact(Math.abs(x.value))}` : pct(x.value, 1),
-      side: SIDE_OF(x.side), href: x.href ?? '#/'}));
+    const lvl = (v: number, d = 2) => num(v, v >= 1000 ? Math.min(d, 2) : d);
+    const f = (pn.data?.factors[c] ?? []).map((x): TileData => {
+      const label = x.label.replace(/ (1 bln|1 mgg|hari ini)$/, ' · $1');
+      const base = {label, side: SIDE_OF(x.side), href: x.href ?? '#/'};
+      if (x.kind === 'idr') {
+        if (!x.value) return {...base, value: null};
+        // Net foreign flow: the net on top, what foreign investors bought and sold underneath.
+        const both = x.buy && x.sell ? `beli ${compact(x.buy)} · jual ${compact(x.sell)}` : null;
+        return {...base, value: `${x.value > 0 ? 'Beli' : 'Jual'} ${compact(Math.abs(x.value))}`, sub: both};
+      }
+      if (x.value == null) return {...base, value: null};
+      return {...base, value: x.level != null ? `${lvl(x.level, x.decimals ?? 2)}${x.unit ?? ''}` : pct(x.value, 1),
+        sub: x.level != null ? pct(x.value, 1) : null};
+    });
+    // The model: its 9-in-10 range as numbers, and how far that is from today's level in percent.
     const dir = card?.next?.dir;
-    const model: TileData = {label: `Model ARAH · ${H_LABEL[h]}`, value: dir ? (dir === 'belum_jelas' ? 'Belum jelas' : DIRTAG[dir].label) : null,
+    const rg = card?.next?.range, p0 = card?.price;
+    const model: TileData = {label: `Model ARAH · ${H_LABEL[h]}`,
+      value: rg ? `${num(rg[0], rg[0] >= 1000 ? 0 : 2)}–${num(rg[1], rg[1] >= 1000 ? 0 : 2)}` : dir ? DIRTAG[dir].label : null,
+      sub: rg && p0 ? `${pct((rg[0] / p0 - 1) * 100, 1)} s/d ${pct((rg[1] / p0 - 1) * 100, 1)}` : null,
       side: card?.gauge ? zone(card.gauge.next) : null, href: c === 'ID' ? '#/a/IHSG' : '#/a/SPX'};
     return [...f, model];
   };
