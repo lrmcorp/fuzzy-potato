@@ -360,3 +360,49 @@ def test_ecb_fallback_fills_missing_fx_history(db, monkeypatch):
     out = asyncio.run(frankfurter.fill(db, ["SGD=X", "BTC-USD"]))
     assert out == {"SGD=X": 90} and len(load_bars(db, "SGD=X", "1d")["c"]) == 90
     assert asyncio.run(frankfurter.fill(db, ["SGD=X"])) == {}  # no second try within 30 minutes
+
+
+def test_stockbit_terminal_parsing_and_facts(db):
+    import asyncio
+
+    from arah.data import sbterm
+
+    answers = {
+        "/marketdetectors/BBCA": {"bandar_detector": {"broker_accdist": "Big Acc", "avg": {"accdist": "Acc", "percent": 12.5, "amount": 10},
+                                                      "top5": {"accdist": "Big Acc", "percent": 30.1, "amount": 5}, "total_buyer": 41, "total_seller": 28, "value": 900}},
+        "/findata-view/foreign-domestic/v1/chart-data/BBCA?market_type=MARKET_TYPE_REGULAR&period=PERIOD_RANGE_1M":
+            {"summary": {"date_range": "13 Oct - 13 Nov", "net_foreign": {"label": "Net", "value": {"raw": 2.5e12, "formatted": "2.5T"}},
+                         "foreign_buy": {"value": {"raw": 9e12}}, "foreign_sell": {"value": {"raw": 6.5e12}}}},
+        "/insider/company/majorholder?symbols=BBCA&page=1&limit=10": {"movement": [
+            {"name": "PT Dwimuria", "date": _t_recent(), "action_type": "Buy", "changes": {"value": "1000", "percentage": "0.05"},
+             "current": {"percentage": "54.94"}, "price_formatted": "9,000"}]},
+        "/stream/v3/symbol/BBCA?category=STREAM_CATEGORY_ALL&limit=20": {"stream": [
+            {"title": "<b>$BBCA</b> akumulasi asing kencang", "total_likes": 12, "total_replies": 3, "created_at": "2026-11-13 10:00:00"},
+            {"title": "", "content": "", "total_likes": 99}]},
+    }
+
+    class FakeSB:
+        async def get(self, path):
+            return answers[path]
+
+    s = asyncio.run(sbterm.snapshot(db, FakeSB(), "BBCA"))
+    assert s["bandar"]["side"] == 2 and s["bandar"]["buyers"] == 41
+    assert s["foreign"]["net_foreign"] == 2.5e12
+    assert s["insider"][0]["change_pct"] == 0.05 and s["insider"][0]["now_pct"] == 54.94
+    assert len(s["stream"]) == 1 and "$BBCA" not in s["stream"][0]["text"] and "<b>" not in s["stream"][0]["text"]
+    lines = dict(sbterm.fact_lines("BBCA", s))
+    assert "Big Acc" in lines["BBCA.SB1"] and "net bought" in lines["BBCA.SB2"] and "PT Dwimuria" in lines["BBCA.SB3"]
+    assert "unverified" in lines["BBCA.SB6"]
+
+    class Down:
+        async def get(self, path):
+            raise sbterm.StockbitError("HTTP 500")
+
+    # Cached answers survive a later failure; nothing cached means None, never an exception.
+    assert asyncio.run(sbterm.bandar(db, Down(), "BBCA"))["side"] == 2
+    assert asyncio.run(sbterm.bandar(db, Down(), "BBRI")) is None
+
+
+def _t_recent():
+    import time as _t
+    return _t.strftime("%d %b %y", _t.gmtime(_t.time() - 5 * 86400))

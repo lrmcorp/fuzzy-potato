@@ -10,6 +10,8 @@ import logging
 import math
 import time
 
+from .data import sbterm
+from .data.stockbit import Stockbit
 from .data.yahoo import fetch_fundamentals
 from .db import DB
 from .service import forecast_asset
@@ -44,7 +46,7 @@ def _growth(series: list[dict] | None) -> float | None:
     return (series[-1]["value"] / series[-2]["value"] - 1) * 100
 
 
-def evaluate(db: DB, asset: Asset, fund: dict, bench: dict | None) -> dict | None:
+def evaluate(db: DB, asset: Asset, fund: dict, bench: dict | None, sbt: dict | None = None) -> dict | None:
     s = snapshot(db, asset)
     if not s or s["ma50"] is None or s["ma200"] is None or s["atr"] is None:
         return None
@@ -93,6 +95,21 @@ def evaluate(db: DB, asset: Asset, fund: dict, bench: dict | None) -> dict | Non
                f"Latest annual net profit grew {fmt_pct(g_ni, 'en')} and revenue {fmt_pct(g_rev, 'en')}.")
     elif g_ni is not None and g_ni < -10:
         risk(0.8, f"Laba bersih tahunan terakhir turun {fmt_pct(g_ni)}.", f"Latest annual net profit fell {fmt_pct(g_ni, 'en')}.")
+    # What brokers and foreign investors are doing, from the owner's Stockbit terminal.
+    b, fr = (sbt or {}).get("bandar") or {}, (sbt or {}).get("foreign") or {}
+    if b.get("side", 0) > 0:
+        strong(0.7 + 0.15 * (b["side"] - 1), f"Bandar detector Stockbit: {b['label']} (broker besar sedang mengakumulasi).",
+               f"Stockbit bandar detector: {b['label']} (large brokers are accumulating).")
+    elif b.get("side", 0) < 0:
+        risk(0.7 + 0.15 * (-b["side"] - 1), f"Bandar detector Stockbit: {b['label']} (broker besar sedang mendistribusi).",
+             f"Stockbit bandar detector: {b['label']} (large brokers are distributing).")
+    nf = fr.get("net_foreign")
+    if nf is not None and s.get("avg_value"):
+        # A month's net foreign flow counts when it exceeds 40% of one normal day's trading value.
+        if nf > 0.4 * s["avg_value"]:
+            strong(0.6, f"Asing beli bersih Rp {nf:,.0f} sebulan terakhir.", f"Foreign investors net bought Rp {nf:,.0f} over the last month.")
+        elif nf < -0.4 * s["avg_value"]:
+            risk(0.6, f"Asing jual bersih Rp {abs(nf):,.0f} sebulan terakhir.", f"Foreign investors net sold Rp {abs(nf):,.0f} over the last month.")
     if s["rsi"] is not None:
         if 40 <= s["rsi"] <= 62 and p > s["ma50"]:
             strong(0.5, f"Belum terlalu panas: RSI {fmt_num(s['rsi'], 0)}, masih ada ruang sebelum jenuh beli.",
@@ -164,10 +181,17 @@ async def build_recs(db: DB, top: int = 5) -> dict:
             return await fetch_fundamentals(db, a.symbol)
 
     funds = await asyncio.gather(*(fund(a) for a in STOCKS))
+    # Broker and foreign flow for Indonesian stocks, when the owner's Stockbit session is set up.
+    sbts: dict[str, dict] = {}
+    sb = Stockbit(db)
+    if sb.status().get("usable"):
+        for a in STOCKS:
+            if a.country == "ID":
+                sbts[a.key] = {"bandar": await sbterm.bandar(db, sb, a.key), "foreign": await sbterm.foreign(db, sb, a.key)}
     out: dict = {"at": int(time.time()), "ID": [], "US": [], "screened": {"ID": 0, "US": 0}, "missing": {"ID": 0, "US": 0}}
     for a, fd in zip(STOCKS, funds):
         try:
-            card = evaluate(db, a, fd, snaps.get(BENCHMARK[a.country]))
+            card = evaluate(db, a, fd, snaps.get(BENCHMARK[a.country]), sbts.get(a.key))
         except Exception:  # one odd stock must not empty the whole screen
             log.exception("screen failed for %s", a.key)
             card = None

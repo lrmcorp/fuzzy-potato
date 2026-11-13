@@ -50,6 +50,16 @@ export interface Forecast {
   conclusion: {p_up: number; q05: number; q25: number; q50: number; q75: number; q95: number; band: Band[]};
   tested: number; used: string[]; history: {t: number; c: number}[];
 }
+export interface SbPart {label: string | null; pct: number | null; amount: number | null}
+export interface SbTerminal {
+  bandar: {label: string | null; side: number; avg: SbPart; top1: SbPart; top3: SbPart; top5: SbPart; top10: SbPart;
+    buyers: number | null; sellers: number | null; value: number | null} | null;
+  foreign: {range: string | null; net_foreign: number | null; foreign_buy: number | null; foreign_sell: number | null; net_domestic: number | null} | null;
+  insider: {name: string; date: string; at: number | null; action: string; nationality: string; change_shares: number | null;
+    change_pct: number | null; now_pct: number | null; price: string}[] | null;
+  stream: {text: string; at: string; likes: number; replies: number; type: string; url: string}[] | null;
+  at: number;
+}
 export interface Bar {t: number; o: number; h: number; l: number; c: number; v: number}
 export interface LiveData {
   key: string; source: 'stockbit' | 'binance' | 'yahoo' | 'daily'; realtime: boolean; bars: Bar[]; last: number; prev: number | null;
@@ -123,6 +133,7 @@ export const api = {
   recs: () => call<Recs>('/api/recs'),
   forecast: (key: string, h: string) => call<Forecast>(`/api/forecast/${encodeURIComponent(key)}?h=${h}`),
   live: (key: string) => call<LiveData>(`/api/live/${encodeURIComponent(key)}`),
+  stockbit: (key: string) => call<SbTerminal>(`/api/stockbit/${encodeURIComponent(key)}`),
   simple: (h: string) => call<Simple>(`/api/simple?h=${h}`),
   track: () => call<Track>('/api/track'),
   status: () => call<Status>('/api/status'),

@@ -14,6 +14,7 @@ from .brief import build_brief
 from .config import BRIEF_SCHEDULE, DEFAULT_HORIZONS, WEEKLY_OUTLOOK, Settings
 from .data.bca import refresh_bca
 from .data.calendar import refresh_calendar
+from .data import sbterm
 from .data.frankfurter import fill as fill_fx
 from .data.news import refresh_news
 from .extras import flips
@@ -24,7 +25,7 @@ from .recommend import build_recs, recs_ok
 from .service import record_forecasts, score_forecasts, validation
 from .signals import fmt_price
 from .telegram import Bot, format_brief, format_report
-from .universe import SYNTHETIC, BY_KEY, DEFAULT_LEVELS, GAUGES, MACRO, STOCKS
+from .universe import INDICES, SYNTHETIC, BY_KEY, DEFAULT_LEVELS, GAUGES, MACRO, STOCKS
 
 log = logging.getLogger("arah.runtime")
 
@@ -46,6 +47,11 @@ class Runtime:
             if stocks:
                 errors |= await refresh_many(self.db, [a.symbol for a in STOCKS], intervals=("1d",), force=force)
             await refresh_bca(self.db)
+            # Indonesian stocks and indices Yahoo refused: a year of daily candles from Stockbit instead.
+            try:
+                await self._fill_from_stockbit()
+            except Exception:
+                log.exception("Stockbit history fallback failed")
             # Currencies Yahoo refused: daily history from the ECB instead, so the cards keep their charts.
             try:
                 await fill_fx(self.db, symbols)
@@ -56,6 +62,42 @@ class Runtime:
             self.status["data_errors"] = errors
             self.status["last_refresh"] = int(time.time())
             self.db.set("data_status", {"at": self.status["last_refresh"], "errors": errors})
+
+    async def _fill_from_stockbit(self) -> None:
+        if time.time() - self.db.get("sb_fill_at", 0) < 6 * 3600:
+            return
+        sb = self.live_stockbit()
+        if not sb.status().get("usable"):
+            return
+        todo = []
+        for a in INDICES + STOCKS:
+            if a.country != "ID":
+                continue
+            r = self.db.one("SELECT COUNT(*) n, MAX(ts) m FROM bars WHERE symbol=? AND interval='1d'", (a.symbol,))
+            if r["n"] < 200 or r["m"] is None or time.time() - r["m"] > 4 * 86400:
+                todo.append(a)
+        if not todo:
+            return
+        self.db.set("sb_fill_at", int(time.time()))
+        filled = {}
+        for a in todo:
+            try:
+                rows = await sbterm.daily_history(self.db, sb, sb.code(a.key))
+            except Exception as e:  # one stock failing must not stop the rest
+                log.info("Stockbit history %s failed: %s", a.key, e)
+                continue
+            if rows:
+                with self.db.tx() as c:
+                    # Only the days Yahoo has not given: Yahoo stays the reference where it answers.
+                    c.executemany("INSERT OR IGNORE INTO bars (symbol, interval, ts, o, h, l, c, v) VALUES (?,?,?,?,?,?,?,?)",
+                                  [(a.symbol, "1d", *r) for r in rows])
+                filled[a.key] = len(rows)
+        if filled:
+            log.info("filled daily history from Stockbit for %d assets", len(filled))
+
+    def live_stockbit(self):
+        from .data.stockbit import Stockbit
+        return Stockbit(self.db)
 
     async def tick(self) -> None:
         """Every 15 minutes: fresh prices, new ledger rows, scores for finished horizons, alerts."""

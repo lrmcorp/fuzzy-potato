@@ -295,6 +295,18 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
                 "stockbit": live.stockbit.status(),
                 "schedule": [{"slot": s, "time": t} for s, t in BRIEF_SCHEDULE], "timezone": settings.timezone}
 
+    @app.get("/api/stockbit/{key}", dependencies=[Depends(auth)])
+    async def stockbit_terminal(key: str):
+        """Bandar detector, foreign flow, insider filings and stream posts for one Indonesian stock."""
+        from .data import sbterm
+
+        a = asset_or_404(key)
+        if a.country != "ID" or a.klass not in ("stock", "index"):
+            raise HTTPException(404, "only for Indonesian stocks")
+        if not live.stockbit.status().get("usable"):
+            raise HTTPException(409, "Stockbit is not configured")
+        return await sbterm.snapshot(db, live.stockbit, a.key)
+
     @app.get("/api/probe/stockbit", dependencies=[Depends(auth)])
     async def stockbit_probe(path: str | None = Query(None, max_length=300)):
         """Shapes of Stockbit's answers (no values), for the signed-in owner, to choose parameters.
