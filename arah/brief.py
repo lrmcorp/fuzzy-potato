@@ -106,7 +106,7 @@ async def build_brief(db: DB, settings: Settings, slot: str = "manual", use_llm:
     world = (team or {}).get("world") or rule_world(snaps)
     world["name"] = STANCE_NAMES[world["stance"]]
     usd = next((v for v in assets if v["key"] == "USDIDR"), None)
-    tiles = [{"key": k, "name": BY_KEY[k].name, "name_en": BY_KEY[k].nm("en"), "decimals": BY_KEY[k].decimals, "price": s["price"],
+    tiles = [{"key": k, "name": BY_KEY[k].name, "name_en": BY_KEY[k].nm("en"), "decimals": BY_KEY[k].decimals, "unit": BY_KEY[k].unit, "price": s["price"],
               "chg1d": s["chg1d"], "chg1w": s["chg1w"]} for k in WORLD_KEYS if (s := snaps.get(k))]
     countries = {}
     for c, info in COUNTRIES.items():
@@ -133,7 +133,7 @@ async def build_brief(db: DB, settings: Settings, slot: str = "manual", use_llm:
         "foreign": (((team or {}).get("desks") or {}).get("ID") or {}).get("foreign"),
         "report": weekly_report(db),
         "world": world, "tiles": tiles, "assets": assets, "countries": countries,
-        "recs": {c: [{k: r[k] for k in ("key", "name", "price", "decimals", "strengths", "p_up_1m")} for r in recs.get(c, [])[:3]]
+        "recs": {c: [{k: r[k] for k in ("key", "name", "price", "decimals", "unit", "strengths", "p_up_1m")} for r in recs.get(c, [])[:3]]
                  for c in ("ID", "US")},
         "recs_screened": recs.get("screened"),
     }

@@ -12,7 +12,7 @@ import time
 from .data.yahoo import fetch_fundamentals
 from .db import DB
 from .service import forecast_asset
-from .signals import both, fmt_num, fmt_pct, snapshot
+from .signals import both, fmt_num, fmt_pct, fmt_price, snapshot
 from .universe import BENCHMARK, BY_KEY, STOCKS, Asset
 
 # Minimum average daily value traded, in the stock's own currency.
@@ -128,10 +128,10 @@ def evaluate(db: DB, asset: Asset, fund: dict, bench: dict | None) -> dict | Non
     target2 = round_price(asset, entry_hi + 2.5 * risk_per, down=False)
     why = both(lambda lang: (
         f"Tren jangka panjang masih naik dan harga berada {fmt_pct(p / s['ma50'] * 100 - 100)} dari rata-rata 50 hari, "
-        f"dengan batas rugi yang jelas di {fmt_num(stop, d)}. Jika turun ke batas itu, alasan masuk gugur."
+        f"dengan batas rugi yang jelas di {fmt_price(asset, stop)}. Jika turun ke batas itu, alasan masuk gugur."
         if lang == "id" else
         f"The long-term trend is still up and price sits {fmt_pct(p / s['ma50'] * 100 - 100, 'en')} from its 50-day average, "
-        f"with a clear stop at {fmt_num(stop, d, 'en')}. If it falls there, the case for entering is void."))
+        f"with a clear stop at {fmt_price(asset, stop, 'en')}. If it falls there, the case for entering is void."))
     ext = (p / s["ma50"] - 1) * 100
     if ext > 10:
         risk(0.7, f"Harga sudah {fmt_pct(ext)} di atas rata-rata 50 hari, rawan koreksi sebelum lanjut naik.",
@@ -139,10 +139,10 @@ def evaluate(db: DB, asset: Asset, fund: dict, bench: dict | None) -> dict | Non
         risks.sort(key=lambda x: -x[0])
     loss = (stop / entry_hi - 1) * 100
     # Always true and specific to this plan, so the card never needs a filler risk.
-    risks.append((0.0, {"id": f"Jika batas rugi di {fmt_num(stop, d)} tersentuh, kerugiannya sekitar {fmt_pct(loss)} dari harga masuk.",
-                        "en": f"If the stop at {fmt_num(stop, d, 'en')} is hit, the loss is about {fmt_pct(loss, 'en')} from the entry price."}))
+    risks.append((0.0, {"id": f"Jika batas rugi di {fmt_price(asset, stop)} tersentuh, kerugiannya sekitar {fmt_pct(loss)} dari harga masuk.",
+                        "en": f"If the stop at {fmt_price(asset, stop, 'en')} is hit, the loss is about {fmt_pct(loss, 'en')} from the entry price."}))
     return {
-        "key": asset.key, "name": asset.name, "country": asset.country, "decimals": d,
+        "key": asset.key, "name": asset.name, "country": asset.country, "decimals": d, "unit": asset.unit,
         "price": p, "chg1d": s["chg1d"], "chg1m": s["chg1m"], "score": round(score, 2), "ok": ok,
         "liquid": liquid, "p_up_1m": f.p_up, "range_1m": [f.q05, f.q95],
         "strengths": [t for _, t in strengths[:3]], "risks": [t for _, t in risks[:2]],

@@ -11,7 +11,7 @@ export interface Vigilance {code: 'aman' | 'waspada' | 'siaga' | 'bahaya'; name:
 export interface Validation {grade: 'validated' | 'range_only' | 'experimental' | 'insufficient'; n?: number; hit_rate?: number; cover90?: number}
 export interface Band {step: number; q05: number; q25: number; q50: number; q75: number; q95: number}
 export interface AssetView {
-  key: string; name: string; name_en: string; klass: string; country: string; decimals: number; up_is: number;
+  key: string; name: string; name_en: string; klass: string; country: string; decimals: number; unit?: string; up_is: number;
   horizon: string; horizon_name: L; direction: Direction; summary: L; reasons: Reason[]; watch: L | null;
   snapshot: {price: number; chg1d: number | null; chg1w: number | null; chg1m: number | null; trend: string; ts: number};
   forecast: {s0: number; p_up: number; p_up_quant: number; q05: number; q25: number; q50: number; q75: number; q95: number;
@@ -21,15 +21,15 @@ export interface AssetView {
   sources?: {title: string; source: string; url: string}[]; insight_at?: number | null; llm_enabled?: boolean;
   meta: {interval: string; steps: number; base_ts: number};
 }
-export interface Tile {key: string; name: string; name_en: string; decimals: number; price: number; chg1d: number | null; chg1w: number | null}
+export interface Tile {key: string; name: string; name_en: string; decimals: number; unit?: string; price: number; chg1d: number | null; chg1w: number | null}
 export interface DeskEvent {what: L; effect: L; sources: {title: string; source: string; url: string}[]}
 export interface Country {name: L; summary: L | null; mood: number | null; events: DeskEvent[];
   headlines: {title: string; source: string; url: string; at: number}[]}
-export type State = 'good' | 'bad';
+export type State = 'good' | 'neutral' | 'bad';
 export interface SimpleCard {
-  key: string; name: string; name_en: string; decimals: number; klass: string; country?: string; price: number;
+  key: string; name: string; name_en: string; decimals: number; unit?: string; klass: string; country?: string; price: number;
   chg1d?: number | null; chg1m?: number | null; spark?: number[];
-  now: {state: State; name: L; text: L}; next: {state: State; name: L; text: L; p_up: number; range: [number, number]};
+  now: {state: State; name: L; text: L}; next: {state: State; name: L; text: L; p_up: number; p_good?: number; range: [number, number]};
   why: L | null; reasons: Reason[]; watch: L | null; from_team: boolean; grade: Validation['grade'] | null;
   votes?: {up: number; down: number; none: number} | null; horizon?: string;
   touch: Record<string, number>; bca: {currency: string; buy: number; sell: number; at: number} | null;
@@ -46,20 +46,20 @@ export interface Technique {
 }
 export interface Forecast {
   key: string; name: string; name_en: string; klass: string; up_is: number; horizon: string; horizon_name: L; steps: number;
-  s0: number; decimals: number; techniques: Technique[]; votes: {up: number; down: number; none: number}; tilt: number;
+  s0: number; decimals: number; unit?: string; techniques: Technique[]; votes: {up: number; down: number; none: number}; tilt: number;
   conclusion: {p_up: number; q05: number; q25: number; q50: number; q75: number; q95: number; band: Band[]};
   tested: number; used: string[]; history: {t: number; c: number}[];
 }
 export interface Bar {t: number; o: number; h: number; l: number; c: number; v: number}
 export interface LiveData {
   key: string; source: 'stockbit' | 'binance' | 'yahoo'; realtime: boolean; bars: Bar[]; last: number; prev: number | null;
-  chg_pct: number | null; delay_min?: number; at: number; note?: L; decimals?: number;
+  chg_pct: number | null; delay_min?: number; at: number; note?: L; decimals?: number; unit?: string;
   book?: {bids: {price: number; lots: number}[]; offers: {price: number; lots: number}[]; foreign_net: number | null};
 }
 export interface Simple {
   horizon?: string;
   indonesia: SimpleCard | null; usd: SimpleCard | null; cny: SimpleCard | null;
-  abroad?: {now: {state: State; name: L; text: L}; next: {state: State; name: L}; countries: SimpleCard[]};
+  abroad?: {now: {state: State; name: L; text: L}; next: {state: State; name: L; p_good?: number}; countries: SimpleCard[]};
 }
 export interface Brief {
   at: number; mode: 'team' | 'rules'; headline: L; outlook: L | null; simple?: Simple;
@@ -68,13 +68,13 @@ export interface Brief {
   tiles: Tile[]; assets: AssetView[]; countries: Record<string, Country>;
 }
 export interface RecCard {
-  key: string; name: string; country: string; decimals: number; price: number; chg1d: number | null;
+  key: string; name: string; country: string; decimals: number; unit?: string; price: number; chg1d: number | null;
   strengths: L[]; risks: L[]; why: L; p_up_1m: number; pe: number | null;
   plan: {entry: [number, number]; stop: number; targets: [number, number]; rr: number}; spark: number[];
 }
 export interface Recs {at: number | null; ID: RecCard[]; US: RecCard[]; screened: {ID: number; US: number}}
 export interface MarketRow {
-  key: string; name: string; name_en: string; decimals: number; price: number; chg1d: number | null; chg1w: number | null;
+  key: string; name: string; name_en: string; decimals: number; unit?: string; price: number; chg1d: number | null; chg1w: number | null;
   direction: Direction; p_up: number; q05: number; q95: number; vigilance: Vigilance | null; spark: number[];
 }
 export interface TrackRow {horizon: string; name: L; n: number; calls: number; call_hits: number; brier: number | null;
@@ -91,7 +91,7 @@ export interface Status {
   telegram_enabled: boolean; stockbit?: {configured: boolean; usable?: boolean; refresh_until?: number | null; error?: {kind: string} | null};
   schedule: {slot: string; time: string}[]; timezone: string;
 }
-export interface AlertItem {id: number; asset: string; name: string; decimals: number; op: string; level: number;
+export interface AlertItem {id: number; asset: string; name: string; decimals: number; unit?: string; op: string; level: number;
   triggered_at: number | null; last_price: number | null}
 
 export class ApiError extends Error {

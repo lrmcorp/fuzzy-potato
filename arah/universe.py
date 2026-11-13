@@ -17,6 +17,17 @@ class Asset:
     up_is: int = 0
     name_en: str = ""
 
+    @property
+    def unit(self) -> str:
+        """Currency a price is quoted in, as shown before it. Index levels and gauges have none."""
+        if self.klass == "fx":
+            return {"USDJPY": "¥", "USDSGD": "S$", "USDCNY": "CN¥", "DXY": ""}.get(self.key, "Rp")
+        if self.klass == "stock":
+            return "Rp" if self.country == "ID" else "$"
+        if self.klass in ("commodity", "crypto"):
+            return "$"
+        return ""
+
     def nm(self, lang: str = "id") -> str:
         return self.name_en if lang == "en" and self.name_en else self.name
 

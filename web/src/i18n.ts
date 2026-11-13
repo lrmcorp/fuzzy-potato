@@ -5,6 +5,9 @@ const S = {
   refresh: ['Perbarui', 'Refresh'], q_id_short: ['Saham Indonesia (IHSG)', 'Indonesian stocks (IHSG)'],
   range_next: ['Kisaran bulan depan', 'Next month range'], abroad_foot: ['Bursa AS, Jepang, Singapura, China', 'US, Japan, Singapore, China markets'],
   legend_good: ['= menguntungkan Anda', '= works for you'], legend_bad: ['= kurang menguntungkan', '= works against you'],
+  legend_neutral: ['= peluang di bawah 60%, belum ada sisi yang unggul', '= under a 60% chance, neither side is ahead'],
+  neutral: ['Netral', 'Neutral'],
+  concl_neutral: ['Di bawah 60%, jadi belum layak disebut bagus atau kurang bagus.', 'Below 60%, so not enough to call either way.'],
   more_detail: ['Data lain', 'More data'],
   nav_today: ['Ringkasan', 'Summary'], nav_fx: ['Kurs', 'Currencies'], nav_stocks: ['Saham', 'Stocks'],
   nav_world: ['Dunia', 'World'], nav_track: ['Rekam jejak', 'Track record'], nav_settings: ['Atur', 'Settings'],
@@ -186,11 +189,14 @@ export function useT() {
   const l = (text: L | null | undefined) => (text ? text[lang] : '');
   const nm = (x: {name: string; name_en?: string}) => (lang === 'en' && x.name_en ? x.name_en : x.name);
   const locale = lang === 'id' ? 'id-ID' : 'en-US';
+  // Numbers read 1,234.56 in both languages: the owner's choice, and the way bank and broker apps show them.
   const num = (x: number, decimals = 2) =>
-    new Intl.NumberFormat(locale, {minimumFractionDigits: decimals, maximumFractionDigits: decimals}).format(x);
+    new Intl.NumberFormat('en-US', {minimumFractionDigits: decimals, maximumFractionDigits: decimals}).format(x);
+  /** A price with its currency in front: "Rp 18,228", "$ 181.50". Index points have no unit. */
+  const money = (x: number, decimals = 2, unit?: string) => (unit ? `${unit} ${num(x, decimals)}` : num(x, decimals));
   const pct = (x: number | null | undefined, digits = 1) =>
-    x == null ? '' : `${x > 0 ? '+' : ''}${new Intl.NumberFormat(locale, {minimumFractionDigits: digits, maximumFractionDigits: digits}).format(x)}%`;
+    x == null ? '' : `${x > 0 ? '+' : ''}${new Intl.NumberFormat('en-US', {minimumFractionDigits: digits, maximumFractionDigits: digits}).format(x)}%`;
   const when = (ts: number | null | undefined) =>
     ts ? new Intl.DateTimeFormat(locale, {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}).format(ts * 1000) : '';
-  return {t, l, nm, num, pct, when, lang};
+  return {t, l, nm, num, money, pct, when, lang};
 }

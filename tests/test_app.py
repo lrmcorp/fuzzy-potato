@@ -166,15 +166,22 @@ async def test_openrouter_first_then_claude_fallback(db, tmp_path, monkeypatch):
     assert len(calls) == 1
 
 
-def test_answers_are_yes_or_no_and_calculator_uses_bank_rate(db):
+def test_answers_have_three_states_and_calculator_uses_bank_rate(db):
     from arah.extras import calc, flips, weekly_report
     from arah.outlook import build_simple
 
     db.set("bca_rates", {"at": int(time.time()), "rates": {"USD": {"buy": 990.0, "sell": 1010.0}}})
     s = build_simple(db, {})
     cards = [s["indonesia"], s["usd"], s["cny"], *s["abroad"]["countries"]]
-    assert all(c["now"]["state"] in ("good", "bad") and c["next"]["state"] in ("good", "bad") for c in cards)
-    assert s["abroad"]["now"]["state"] in ("good", "bad") and s["abroad"]["next"]["state"] in ("good", "bad")
+    states = ("good", "neutral", "bad")
+    assert all(c["now"]["state"] in states and c["next"]["state"] in states for c in cards)
+    assert s["abroad"]["now"]["state"] in states and s["abroad"]["next"]["state"] in states
+    # The 60/40 rule on the owner's side: "good" needs at least 60%, "bad" at most 40%.
+    for c in cards:
+        pg = round(c["next"]["p_good"], 2)
+        assert c["next"]["state"] == ("good" if pg >= 0.6 else "bad" if pg <= 0.4 else "neutral")
+    assert s["usd"]["unit"] == "Rp" and s["indonesia"]["unit"] == ""
+    assert "Rp " in s["usd"]["next"]["text"]["id"]
     usd = s["usd"]
     assert usd["price"] == 1000.0 and usd["bca"]["sell"] == 1010.0
     lo, hi = usd["next"]["range"]
@@ -192,7 +199,7 @@ def test_answers_are_yes_or_no_and_calculator_uses_bank_rate(db):
     import copy
     new = copy.deepcopy(old)
     assert flips(old, new, "id") == []
-    new["simple"]["usd"]["next"]["state"] = "good" if usd["next"]["state"] == "bad" else "bad"
+    new["simple"]["usd"]["next"]["state"] = "good" if usd["next"]["state"] != "good" else "bad"
     out = flips(old, new, "en")
     assert len(out) == 1 and "Rupiah vs US dollar" in out[0]
     assert flips(None, new, "id") == []
@@ -236,7 +243,24 @@ def test_forecast_and_summary_horizons(db):
         assert all(x["key"] == "sim" or (x["vote"] != 0 and x["weight"] > 0) for x in j["techniques"] if x["status"]["used"])
     assert c.get("/api/forecast/IHSG?h=1h").status_code == 422  # hourly horizons are not offered here
     s = c.get("/api/simple?h=3m").json()
-    assert s["horizon"] == "3m" and s["indonesia"]["next"]["state"] in ("good", "bad")
+    assert s["horizon"] == "3m" and s["indonesia"]["next"]["state"] in ("good", "neutral", "bad")
     assert "3 bulan" in s["indonesia"]["next"]["text"]["id"]
     assert c.get("/api/simple?h=5m").status_code == 422
     assert techniques(db, BY_KEY["SPX"], "2m")["steps"] == 42
+
+
+def test_number_format_and_units():
+    from arah.outlook import next_state
+    from arah.signals import fmt_num, fmt_pct, fmt_price
+    from arah.universe import BY_KEY
+
+    assert fmt_num(18228.4, 0, "id") == "18,228" and fmt_num(1234.5, 2, "en") == "1,234.50"
+    assert fmt_pct(-1.25, "id") == "-1.2%" or fmt_pct(-1.25, "id") == "-1.3%"
+    assert fmt_price(BY_KEY["USDIDR"], 18228) == "Rp 18,228"
+    assert fmt_price(BY_KEY["BBCA"], 9875) == "Rp 9,875"
+    assert fmt_price(BY_KEY["NVDA"], 181.5) == "$ 181.50"
+    assert fmt_price(BY_KEY["IHSG"], 5115.04) == "5,115.04"
+    assert fmt_price(BY_KEY["USDJPY"], 154.2) == "¥ 154.20"
+    # 62% up for IHSG is good; 62% up for USD/IDR (rupiah weakening) is not good; 55% is neutral.
+    assert next_state(0.62, BY_KEY["IHSG"]) == "good" and next_state(0.62, BY_KEY["USDIDR"]) == "bad"
+    assert next_state(0.55, BY_KEY["IHSG"]) == "neutral" and next_state(0.40, BY_KEY["IHSG"]) == "bad"

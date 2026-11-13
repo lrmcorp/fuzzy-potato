@@ -61,6 +61,7 @@ class Live:
             out["note"] = note
         out["at"] = int(time.time())
         out["decimals"] = asset.decimals
+        out["unit"] = asset.unit
         self._cache[asset.key] = (time.time(), out)
         return out
 

@@ -27,8 +27,9 @@ const good = (chg: number | null | undefined, klass: string) => ((chg ?? 0) >= 0
 
 /** One card per question: price, two answers, a chart, one line of numbers. Everything else is on the detail page. */
 function Tile({title, card, h}: {title: string; card: SimpleCard; h: H3}) {
-  const {t, l, num, pct} = useT();
+  const {t, l, money, pct} = useT();
   const d = card.decimals;
+  const u = card.unit;
   const [lo, hi] = card.next.range;
   return (
     <a className="tile" href={`#/a/${card.key}`}>
@@ -36,7 +37,7 @@ function Tile({title, card, h}: {title: string; card: SimpleCard; h: H3}) {
         <span className="tile-name">{title}</span>
         {card.chg1d != null && <span className={`delta ${good(card.chg1d, card.klass) ? 'delta-up' : 'delta-down'}`}>{pct(card.chg1d)} <span className="muted">{t('today')}</span></span>}
       </div>
-      <div className="tile-price">{num(card.price, card.price < 1000 ? 2 : d)}</div>
+      <div className="tile-price">{money(card.price, card.price < 1000 ? 2 : d, u)}</div>
       <div className="chips">
         <Chip label={t('now')} state={card.now.state} name={l(card.now.name)} />
         <Chip label={t(`in_${h}`)} state={card.next.state} name={l(card.next.name)} />
@@ -45,7 +46,7 @@ function Tile({title, card, h}: {title: string; card: SimpleCard; h: H3}) {
         label={`${title}: ${t('chart_title')}`} />
       <div className="tile-foot">
         <span>{t(`range_${h}`)}</span>
-        <strong>{num(lo, lo < 1000 ? 2 : d)} – {num(hi, hi < 1000 ? 2 : d)}</strong>
+        <strong>{money(lo, lo < 1000 ? 2 : d, u)} – {money(hi, hi < 1000 ? 2 : d, u)}</strong>
       </div>
     </a>
   );
@@ -154,6 +155,7 @@ function Summary({brief, simple: first, building, rebuild, canAsk}: {brief: Brie
       )}
       <p className="legend-line">
         <span className="chip chip-good">{t('good')}</span> {t('legend_good')}
+        <span className="chip chip-neutral">{t('neutral')}</span> {t('legend_neutral')}
         <span className="chip chip-bad">{t('bad')}</span> {t('legend_bad')}
       </p>
 
@@ -208,7 +210,7 @@ function AskBox() {
 }
 
 export function CalcPage({onAuth}: PageProps) {
-  const {t, l, num, when, lang} = useT();
+  const {t, l, num, money, when, lang} = useT();
   const [amount, setAmount] = useState('100000000');
   const [cur, setCur] = useState('USD');
   const [busy, setBusy] = useState(false);
@@ -237,7 +239,7 @@ export function CalcPage({onAuth}: PageProps) {
       {c && (
         <section className="answer" aria-live="polite">
           <p className="verdict">{l(c.summary)}</p>
-          <p className="answer-line">{t('rate')}: {num(c.rate, 2)} ({t(c.source === 'bca' ? 'rate_bca' : 'rate_market')}{c.rate_at ? `, ${when(c.rate_at)}` : ''})</p>
+          <p className="answer-line">{t('rate')}: {money(c.rate, 2, 'Rp')} ({t(c.source === 'bca' ? 'rate_bca' : 'rate_market')}{c.rate_at ? `, ${when(c.rate_at)}` : ''})</p>
           <p className="answer-line">{t('in_month')} {num(c.next_low, 2)} {t('to')} {num(c.next_high, 2)} {c.currency}.</p>
           <p className="answer-line"><strong>{l(c.advice)}</strong></p>
         </section>
@@ -247,7 +249,7 @@ export function CalcPage({onAuth}: PageProps) {
 }
 
 function MarketTable({rows}: {rows: MarketRow[]}) {
-  const {t, nm, num, pct} = useT();
+  const {t, nm, num, money, pct} = useT();
   return (
     <div className="scroll-x">
       <table className="market">
@@ -256,10 +258,10 @@ function MarketTable({rows}: {rows: MarketRow[]}) {
           {rows.map(r => (
             <tr key={r.key}>
               <th scope="row"><AssetLink k={r.key}>{nm(r)}</AssetLink>{r.name !== r.key && <span className="muted code"> {r.key}</span>}</th>
-              <td>{num(r.price, r.decimals)}</td>
+              <td className="nowrap">{money(r.price, r.decimals, r.unit)}</td>
               <td>{pct(r.chg1d)}</td>
               <td className="nowrap"><Glyph d={r.direction} /> {Math.round(r.p_up * 100)}% <span className="muted">{t(r.direction)}</span></td>
-              <td className="nowrap">{num(r.q05, r.decimals)} - {num(r.q95, r.decimals)}</td>
+              <td className="nowrap">{money(r.q05, r.decimals, r.unit)} - {num(r.q95, r.decimals)}</td>
               <td><Spark values={r.spark} label={`${nm(r)}: ${t('chart_hist')}`} /></td>
             </tr>
           ))}
@@ -346,14 +348,15 @@ function RecsPanel({onAuth}: PageProps) {
 }
 
 function RecCardView({c}: {c: RecCard}) {
-  const {t, l, num, pct} = useT();
+  const {t, l, num, money, pct} = useT();
   const d = c.decimals;
+  const u = c.unit;
   return (
     <Card>
       <article className="rec">
         <header className="asset-head">
           <h3><AssetLink k={c.key}>{c.key}</AssetLink> <span className="muted">{c.name}</span></h3>
-          <span className="price">{num(c.price, d)}</span>
+          <span className="price">{money(c.price, d, u)}</span>
           <span className="change">{pct(c.chg1d)} <span className="muted">{t('today')}</span></span>
         </header>
         <h4 className="label">{t('strengths')}</h4>
@@ -363,9 +366,9 @@ function RecCardView({c}: {c: RecCard}) {
         <h4 className="label">{t('risks')}</h4>
         <ul className="plain">{c.risks.map((s, i) => <li key={i}>{l(s)}</li>)}</ul>
         <dl className="plan">
-          <div><dt>{t('entry')}</dt><dd>{num(c.plan.entry[0], d)} - {num(c.plan.entry[1], d)}</dd></div>
-          <div><dt>{t('target')}</dt><dd>{num(c.plan.targets[0], d)} / {num(c.plan.targets[1], d)}</dd></div>
-          <div><dt>{t('stop')}</dt><dd>{num(c.plan.stop, d)}</dd></div>
+          <div><dt>{t('entry')}</dt><dd>{money(c.plan.entry[0], d, u)} - {num(c.plan.entry[1], d)}</dd></div>
+          <div><dt>{t('target')}</dt><dd>{money(c.plan.targets[0], d, u)} / {num(c.plan.targets[1], d)}</dd></div>
+          <div><dt>{t('stop')}</dt><dd>{money(c.plan.stop, d, u)}</dd></div>
           <div><dt>{t('rr')}</dt><dd>{num(c.plan.rr, 1)} : 1</dd></div>
         </dl>
       </article>
@@ -399,7 +402,7 @@ function usePoll<T>(fn: () => Promise<T>, everyMs: (d: T | null) => number, deps
 }
 
 function LivePanel({k, decimals: fallback, klass}: {k: string; decimals: number; klass: string}) {
-  const {t, l, num, pct, when} = useT();
+  const {t, l, num, money, pct, when} = useT();
   const {data, error} = usePoll(() => api.live(k), d => (d?.realtime ? 5000 : 30000), [k]);
   const decimals = data?.decimals ?? fallback;
   if (!data) return error ? <p className="note">{t('live_off')}</p> : <div className="live-chart is-empty" aria-busy="true" />;
@@ -414,7 +417,7 @@ function LivePanel({k, decimals: fallback, klass}: {k: string; decimals: number;
         </span>
       </div>
       <p className="live-price">
-        <span className="price big">{num(data.last, decimals)}</span>
+        <span className="price big">{money(data.last, decimals, data.unit)}</span>
         {data.chg_pct != null && <span className={`delta ${goodForOwner ? 'delta-up' : 'delta-down'}`}>{pct(data.chg_pct, 2)} <span className="muted">{t('today')}</span></span>}
         <span className="muted small">{t('updated')} {when(data.at)}</span>
       </p>
@@ -443,10 +446,12 @@ function VoteMark({v}: {v: number}) {
 }
 
 function Conclusion({f}: {f: Forecast}) {
-  const {t, num, lang} = useT();
+  const {t, money, lang} = useT();
   const p = f.conclusion.p_up;
   const upSide = p >= 0.5;
-  const good = upSide !== (f.up_is < 0);
+  // Same rule as the home page: at least 60% on the owner's side is good, at most 40% is not good.
+  const pGood = Math.round((f.up_is < 0 ? 1 - p : p) * 100);
+  const state = pGood >= 60 ? 'good' : pGood <= 40 ? 'bad' : 'neutral';
   const chance = Math.round((upSide ? p : 1 - p) * 100);
   const edge = Math.abs(Math.round(p * 100) - 50);
   const conf = edge >= 10 ? 'c_strong' : edge >= 5 ? 'c_fair' : 'c_thin';
@@ -454,18 +459,18 @@ function Conclusion({f}: {f: Forecast}) {
   const fx = f.klass === 'fx';
   const side = fx ? (upSide ? t('rupiah_weaker') : t('rupiah_stronger')) : (upSide ? t('v_up_long') : t('v_down_long'));
   return (
-    <div className={`conclusion conclusion-${good ? 'good' : 'bad'}`}>
+    <div className={`conclusion conclusion-${state}`}>
       <p className="conclusion-k">{t('conclusion')} · {f.horizon_name[lang]}</p>
-      <p className="conclusion-v">{good ? t('good') : t('bad')}</p>
-      <p>{t('concl_line', {side, p: chance, conf: t(conf)})}</p>
-      <p>{t('concl_range', {lo: num(f.conclusion.q05, d), hi: num(f.conclusion.q95, d), mid: num(f.conclusion.q50, d)})}</p>
+      <p className="conclusion-v">{t(state)}</p>
+      <p>{t('concl_line', {side, p: chance, conf: t(conf)})}{state === 'neutral' ? ` ${t('concl_neutral')}` : ''}</p>
+      <p>{t('concl_range', {lo: money(f.conclusion.q05, d, f.unit), hi: money(f.conclusion.q95, d, f.unit), mid: money(f.conclusion.q50, d, f.unit)})}</p>
       <p className="note">{t('concl_votes', {up: f.votes.up, down: f.votes.down, none: f.votes.none})}</p>
     </div>
   );
 }
 
 function TechniqueList({f}: {f: Forecast}) {
-  const {t, l, num, pct} = useT();
+  const {t, l, money, pct} = useT();
   const used = f.techniques.filter(x => x.status.used);
   const shown = f.techniques.filter(x => !x.status.used);
   const row = (x: Technique) => (
@@ -474,7 +479,7 @@ function TechniqueList({f}: {f: Forecast}) {
         <strong>{l(x.name)}</strong>
         <span className={`use-tag${x.status.used ? ' is-used' : ''}`}>{t(x.status.used ? 'tag_used' : 'tag_shown')}</span>
         <VoteMark v={x.vote} />
-        {x.exp_ret != null && x.target != null && <span className="muted">{num(x.target, f.decimals)} ({pct(x.exp_ret)})</span>}
+        {x.exp_ret != null && x.target != null && <span className="muted">{money(x.target, f.decimals, f.unit)} ({pct(x.exp_ret)})</span>}
       </div>
       <p><span className="row-k">{t('says_now')}:</span> {l(x.reason)}</p>
       <p><span className="row-k">{t('why_tech')}:</span> {l(x.purpose)}</p>
@@ -497,7 +502,7 @@ function TechniqueList({f}: {f: Forecast}) {
 }
 
 export function AssetPage({onAuth, k}: PageProps & {k: string}) {
-  const {t, l, nm, num} = useT();
+  const {t, l, nm, money} = useT();
   const [h, setH] = useState<H3>('1m');
   const [hs, setHs] = useState('1w');
   const [custom, setCustom] = useState('');
@@ -575,7 +580,7 @@ export function AssetPage({onAuth, k}: PageProps & {k: string}) {
             {Object.keys(view.forecast.touch).length > 0 && (
               <ul className="plain touch">
                 {Object.entries(view.forecast.touch).sort((a2, b2) => Number(a2[0]) - Number(b2[0])).map(([lv, p]) => (
-                  <li key={lv}>{t('touch')} {num(Number(lv), view.decimals)}: <strong>{Math.round(p * 100)}%</strong></li>
+                  <li key={lv}>{t('touch')} {money(Number(lv), view.decimals, view.unit)}: <strong>{Math.round(p * 100)}%</strong></li>
                 ))}
               </ul>
             )}
@@ -698,7 +703,7 @@ export function TrackPage({onAuth}: PageProps) {
 }
 
 export function SettingsPage({onAuth, onLang, authRequired}: PageProps & {onLang: (l: Lang) => void; authRequired: boolean}) {
-  const {t, num, when, lang} = useT();
+  const {t, num, money, when, lang} = useT();
   const status = useLoad(api.status, [], onAuth);
   const prefs = useLoad(api.settings, [], onAuth);
   const alerts = useLoad(api.alerts, [], onAuth);
@@ -749,7 +754,7 @@ export function SettingsPage({onAuth, onLang, authRequired}: PageProps & {onLang
         {d => d.items.length === 0 ? <p className="note">{t('no_alerts')}</p> : (
           <ul className="plain alerts">{d.items.map(a => (
             <li key={a.id}>
-              <span>{a.name} {a.op === '>' ? t('above') : t('below')} {num(a.level, a.decimals)}
+              <span>{a.name} {a.op === '>' ? t('above') : t('below')} {money(a.level, a.decimals, a.unit)}
                 {a.triggered_at && <> <Badge variant="warning" label={t('triggered')} /> <span className="muted">{when(a.triggered_at)}</span></>}</span>
               <Button label={t('remove')} size="sm" variant="ghost" onClick={async () => { await api.delAlert(a.id); alerts.reload(); }} />
             </li>))}

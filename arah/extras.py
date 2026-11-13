@@ -28,14 +28,8 @@ def calc(db: DB, amount_idr: float, currency: str) -> dict | None:
     spread = rate / c["price"] if c["price"] else 1.0
     lo_rate, hi_rate = c["next"]["range"][0] * spread, c["next"]["range"][1] * spread
     now_amt = amount_idr / rate
-    weaker = c["next"]["state"] == "bad"
-    strength = c["next"]["strength"]["key"]
-    if weaker and strength != "thin":
-        plan = "now"
-    elif not weaker and strength != "thin":
-        plan = "wait"
-    else:
-        plan = "split"
+    # "bad" for a currency pair means the rupiah is likely to weaken; neutral means no side reaches 60%.
+    plan = {"bad": "now", "good": "wait"}.get(c["next"]["state"], "split")
     nid, nen = CUR_NAMES[currency]
     texts = {
         "now": ("Tukar sekarang lebih masuk akal: rupiah lebih mungkin melemah sebulan ke depan.",
@@ -50,7 +44,7 @@ def calc(db: DB, amount_idr: float, currency: str) -> dict | None:
         "rate_at": bca["at"] if bca else None, "now": now_amt,
         # A higher rate buys less, so the low end of the amount comes from the high end of the rate.
         "next_low": amount_idr / hi_rate, "next_high": amount_idr / lo_rate,
-        "plan": plan, "advice": {"id": texts[0], "en": texts[1]}, "next": c["next"],
+        "plan": plan, "advice": {"id": texts[0], "en": texts[1]}, "next": c["next"], "unit": c["unit"],
         "summary": both(lambda lang: (
             f"Rp {fmt_num(amount_idr, 0, lang)} hari ini menjadi sekitar {fmt_num(now_amt, 2, lang)} {nid}."
             if lang == "id" else
@@ -82,7 +76,7 @@ def simple_states(brief: dict | None) -> dict[str, tuple]:
 
 TITLES = {"indonesia": ("Indonesia", "Indonesia"), "abroad": ("Luar negeri", "Abroad"),
           "usd": ("Rupiah vs dolar AS", "Rupiah vs US dollar"), "cny": ("Rupiah vs yuan", "Rupiah vs yuan")}
-WORDS = {"good": ("Bagus", "Good"), "bad": ("Kurang bagus", "Not good")}
+WORDS = {"good": ("Bagus", "Good"), "neutral": ("Netral", "Neutral"), "bad": ("Kurang bagus", "Not good")}
 
 
 def flips(old: dict | None, new: dict, lang: str) -> list[str]:

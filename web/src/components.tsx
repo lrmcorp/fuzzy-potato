@@ -58,12 +58,12 @@ export function Reasons({items}: {items: Reason[]}) {
   );
 }
 
-export function VigilanceLine({v, decimals, horizonName}: {v: Vigilance; decimals: number; horizonName: string}) {
-  const {t, l, num} = useT();
+export function VigilanceLine({v, decimals, horizonName, unit = 'Rp'}: {v: Vigilance; decimals: number; horizonName: string; unit?: string}) {
+  const {t, l, money} = useT();
   return (
     <p className={`vigil vigil-${v.code}`}>
       <span className="vigil-tag">{t('watch_level')}: {l(v.name)}</span>
-      <span>{t('touch')} {num(v.level, decimals)} {t('within')} {horizonName}: <strong>{Math.round(v.p * 100)}%</strong></span>
+      <span>{t('touch')} {money(v.level, decimals, unit)} {t('within')} {horizonName}: <strong>{Math.round(v.p * 100)}%</strong></span>
     </p>
   );
 }
@@ -75,13 +75,13 @@ export function GradeNote({v}: {v: Validation | null}) {
 }
 
 export function Verdict({view}: {view: AssetView}) {
-  const {l, t, num} = useT();
+  const {l, t, money} = useT();
   return (
     <>
       <p className="verdict">{l(view.summary)}</p>
       {Object.keys(view.forecast.touch).length > 0 && !view.vigilance && (
         <p className="note">{Object.entries(view.forecast.touch).map(([lv, p]) =>
-          `${t('touch')} ${num(Number(lv), view.decimals)}: ${Math.round(p * 100)}%`).join(' · ')}</p>
+          `${t('touch')} ${money(Number(lv), view.decimals, view.unit)}: ${Math.round(p * 100)}%`).join(' · ')}</p>
       )}
     </>
   );
