@@ -167,6 +167,8 @@ export function LiveChart({bars, decimals, label}: {bars: Bar[]; decimals: numbe
   const series = useRef<ISeriesApi<'Candlestick'> | ISeriesApi<'Area'> | null>(null);
   const flat = bars.length > 0 && bars.every(b => b.o === b.c && b.h === b.c && b.l === b.c);
   const kind = flat ? 'area' : 'candle';
+  // Daily closes (the fallback when minute prices are refused) are labelled by date, not by time.
+  const daily = bars.length > 1 && bars[1].t - bars[0].t >= 86400;
 
   useEffect(() => {
     if (!box.current) return;
@@ -174,7 +176,7 @@ export function LiveChart({bars, decimals, label}: {bars: Bar[]; decimals: numbe
     const ink = css.getPropertyValue('--color-text-primary').trim() || '#0a1317';
     const muted = css.getPropertyValue('--color-text-secondary').trim() || '#4e606f';
     const grid = css.getPropertyValue('--color-border').trim() || '#e5e9ee';
-    const fmtTime = (ts: number) => new Intl.DateTimeFormat(undefined, {hour: '2-digit', minute: '2-digit'}).format(ts * 1000);
+    const fmtTime = (ts: number) => new Intl.DateTimeFormat(undefined, daily ? {day: 'numeric', month: 'short'} : {hour: '2-digit', minute: '2-digit'}).format(ts * 1000);
     const c = createChart(box.current, {
       autoSize: true,
       layout: {background: {type: ColorType.Solid, color: 'transparent'}, textColor: muted, fontSize: 11, attributionLogo: false},
@@ -191,7 +193,7 @@ export function LiveChart({bars, decimals, label}: {bars: Bar[]; decimals: numbe
       : c.addSeries(AreaSeries, {lineColor: ink, lineWidth: 2, topColor: 'rgba(15,107,99,0.18)', bottomColor: 'rgba(15,107,99,0.02)', priceLineColor: ink});
     chart.current = c;
     return () => { c.remove(); chart.current = null; series.current = null; };
-  }, [kind, decimals]);
+  }, [kind, decimals, daily]);
 
   useEffect(() => {
     const s = series.current;

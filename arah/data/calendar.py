@@ -84,6 +84,9 @@ async def refresh_calendar(db: DB, max_age: int = 6 * 3600) -> bool:
     cached = db.get("calendar") or {}
     if time.time() - cached.get("at", 0) < max_age:
         return True
+    # The feed allows only a few requests per hour per address; after a refusal, wait an hour.
+    if time.time() - db.get("calendar_fail_at", 0) < 3600:
+        return False
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.get(URL, headers={"User-Agent": "Mozilla/5.0"})
@@ -91,15 +94,17 @@ async def refresh_calendar(db: DB, max_age: int = 6 * 3600) -> bool:
             events = pick(r.json())
     except (httpx.HTTPError, ValueError) as e:
         log.warning("calendar fetch failed: %s", e)
+        db.set("calendar_fail_at", int(time.time()))
         return False
     db.set("calendar", {"at": int(time.time()), "events": events})
     return True
 
 
 def upcoming(db: DB, limit: int = 30) -> list[dict]:
-    """Events from now on. Empty when the feed is older than two days, so stale dates are never shown."""
+    """Events from now on. Every event carries its own date, so a feed a few days old is still right about
+    what is ahead; past a week it is dropped."""
     data = db.get("calendar") or {}
-    if time.time() - data.get("at", 0) > 2 * 86400:
+    if time.time() - data.get("at", 0) > 7 * 86400:
         return []
     now = time.time()
     return [e for e in data.get("events", []) if e["at"] >= now - 3600][:limit]

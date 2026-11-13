@@ -14,9 +14,10 @@ from .brief import build_brief
 from .config import BRIEF_SCHEDULE, DEFAULT_HORIZONS, WEEKLY_OUTLOOK, Settings
 from .data.bca import refresh_bca
 from .data.calendar import refresh_calendar
+from .data.frankfurter import fill as fill_fx
 from .data.news import refresh_news
 from .extras import flips
-from .data.yahoo import build_synthetic, refresh_many
+from .data.yahoo import GATE, build_synthetic, refresh_many
 from .db import DB
 from .outlook import SIMPLE_V, build_simple
 from .recommend import build_recs, recs_ok
@@ -31,6 +32,7 @@ log = logging.getLogger("arah.runtime")
 class Runtime:
     def __init__(self, db: DB, settings: Settings):
         self.db, self.settings = db, settings
+        GATE.attach(db)
         self.bot = Bot(db, settings, on_brief=lambda: self.run_brief("manual", push=False))
         self.scheduler = AsyncIOScheduler(timezone=settings.timezone)
         self._lock = asyncio.Lock()
@@ -44,6 +46,11 @@ class Runtime:
             if stocks:
                 errors |= await refresh_many(self.db, [a.symbol for a in STOCKS], intervals=("1d",), force=force)
             await refresh_bca(self.db)
+            # Currencies Yahoo refused: daily history from the ECB instead, so the cards keep their charts.
+            try:
+                await fill_fx(self.db, symbols)
+            except Exception:
+                log.exception("ECB fallback failed")
             for key, (num, den) in SYNTHETIC.items():
                 build_synthetic(self.db, BY_KEY[key].symbol, BY_KEY[num].symbol, BY_KEY[den].symbol)
             self.status["data_errors"] = errors

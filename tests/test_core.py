@@ -182,3 +182,12 @@ def test_technique_helpers_vote_sensibly():
     assert _weight({"n_eff": 5, "hit": 0.9, "chance": 0.5}, 0) == 0
     assert _weight(None, 0.25) == 0.25
 
+
+
+def test_frankfurter_parse_keeps_valid_days():
+    from arah.data.frankfurter import parse
+
+    data = {"rates": {"2026-11-11": {"IDR": 18210.5}, "2026-11-10": {"IDR": 18190}, "bad": {"IDR": 1}, "2026-11-12": {"IDR": None}}}
+    rows = parse(data, "IDR")
+    assert [v for _, v in rows] == [18190.0, 18210.5]
+    assert rows[1][0] - rows[0][0] == 86400 and rows[0][0] % 86400 == 0

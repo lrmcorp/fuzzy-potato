@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from urllib.parse import quote
 
@@ -12,7 +13,9 @@ from ..db import DB
 
 log = logging.getLogger("arah.yahoo")
 
-BASE = "https://query1.finance.yahoo.com"
+BASE = os.environ.get("ARAH_YAHOO_BASE", "https://query1.finance.yahoo.com").rstrip("/")
+# Yahoo serves the same API from a second host; a 429 on one is tried once on the other.
+ALT_BASE = "https://query2.finance.yahoo.com" if "query1.finance.yahoo.com" in BASE else BASE
 # Yahoo answers 429 to detailed browser user agents but serves a bare one.
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 FIRST_RANGE = {"1h": "730d", "1d": "10y"}
@@ -25,16 +28,74 @@ class YahooError(Exception):
     pass
 
 
+class Gate:
+    """One shared brake for every Yahoo call.
+
+    Yahoo blocks an address that asks too often (HTTP 429), and retrying straight away only keeps the
+    block going. So: at most two requests at a time with a short gap, no retry on 429, and after a 429
+    on both hosts every Yahoo call pauses (15 minutes, doubling up to 2 hours while it persists).
+    The pause is kept in the database so a restart does not start hammering again."""
+
+    def __init__(self) -> None:
+        self.db: DB | None = None
+        self.sem = asyncio.Semaphore(2)
+        self.gap = 0.4
+        self._last = 0.0
+        self._until = 0.0
+        self._step = 0
+
+    def attach(self, db: DB) -> None:
+        self.db = db
+        st = db.get("yahoo_pause") or {}
+        self._until, self._step = float(st.get("until", 0)), int(st.get("step", 0))
+
+    def paused_until(self) -> float:
+        return self._until if self._until > time.time() else 0.0
+
+    def pause(self) -> None:
+        self._step = min(self._step + 1, 4)
+        self._until = time.time() + 900 * 2 ** (self._step - 1)
+        log.warning("Yahoo answered 429: pausing Yahoo calls until %s", time.strftime("%H:%M", time.localtime(self._until)))
+        if self.db:
+            self.db.set("yahoo_pause", {"until": int(self._until), "step": self._step})
+
+    def ok(self) -> None:
+        if self._step:
+            self._step = 0
+            if self.db:
+                self.db.set("yahoo_pause", {"until": 0, "step": 0})
+
+
+GATE = Gate()
+
+
+class RateLimited(YahooError):
+    pass
+
+
 async def _get_json(client: httpx.AsyncClient, url: str, params: dict) -> dict:
     last: Exception | None = None
     for attempt in range(3):
+        if GATE.paused_until():
+            raise RateLimited(f"Yahoo paused after a 429 until {time.strftime('%H:%M', time.localtime(GATE.paused_until()))}")
         try:
-            r = await client.get(url, params=params, headers=HEADERS, timeout=25)
+            async with GATE.sem:
+                wait = GATE._last + GATE.gap - time.monotonic()
+                if wait > 0:
+                    await asyncio.sleep(wait)
+                GATE._last = time.monotonic()
+                r = await client.get(url, params=params, headers=HEADERS, timeout=25)
+                if r.status_code == 429 and ALT_BASE != BASE and url.startswith(BASE):
+                    r = await client.get(ALT_BASE + url[len(BASE):], params=params, headers=HEADERS, timeout=25)
+            if r.status_code == 429:
+                GATE.pause()
+                raise RateLimited("Yahoo answered 429 (too many requests from this server)")
             if r.status_code == 404:
                 raise YahooError(f"not found: {url}")
-            if r.status_code == 429 or r.status_code >= 500:
+            if r.status_code >= 500:
                 raise httpx.HTTPStatusError("retryable", request=r.request, response=r)
             r.raise_for_status()
+            GATE.ok()
             return r.json()
         except YahooError:
             raise
@@ -117,6 +178,8 @@ async def refresh_many(db: DB, symbols: list[str], intervals: tuple[str, ...] = 
         async with sem:
             try:
                 await refresh_symbol(db, client, sym, iv, force)
+            except RateLimited as e:  # expected while paused: one line, not one per symbol
+                errors[sym] = str(e)[:160]
             except Exception as e:  # one bad symbol must not stop the batch
                 errors[sym] = str(e)[:160]
                 log.warning("refresh %s %s failed: %s", sym, iv, e)
@@ -235,6 +298,8 @@ async def fetch_fundamentals(db: DB, symbol: str, max_age: int = 86400) -> dict:
                 out[name] = [
                     {"date": p["asOfDate"], "value": p["reportedValue"]["raw"]} for p in points
                 ]
+    except RateLimited:
+        return cached or {}  # paused: try again later instead of remembering "no data" for a day
     except YahooError as e:
         log.info("no fundamentals for %s: %s", symbol, e)
     db.set(key, out)

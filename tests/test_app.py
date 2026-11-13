@@ -300,3 +300,63 @@ def test_events_split_into_indonesia_and_world_ten_each(db):
     assert sum(e["side"] == "world" for e in ev) == 10 and sum(e["side"] == "id" for e in ev) == 10
     assert [e["at"] for e in ev] == sorted(e["at"] for e in ev)
     assert all(e["source"] == "news" for e in ev if e["side"] == "id")
+
+
+def test_yahoo_429_pauses_all_calls_and_live_falls_back_to_daily(db, monkeypatch):
+    import asyncio
+
+    import httpx
+
+    from arah.data import yahoo
+    from arah.live import Live
+    from arah.universe import BY_KEY
+
+    gate = yahoo.Gate()
+    gate.attach(db)
+    monkeypatch.setattr(yahoo, "GATE", gate)
+    calls = []
+
+    def handler(request):
+        calls.append(str(request.url))
+        return httpx.Response(429)
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as c:
+            for _ in range(3):
+                try:
+                    await yahoo.fetch_chart(c, "IDR=X", "1d", "5d")
+                except yahoo.YahooError:
+                    pass
+
+    asyncio.run(run())
+    # One try on each host, then everything waits: no hammering.
+    assert len(calls) == 2 and "query2" in calls[1]
+    assert gate.paused_until() > time.time() + 800 and db.get("yahoo_pause")["step"] == 1
+    again = yahoo.Gate()
+    again.attach(db)
+    assert again.paused_until()  # survives a restart
+
+    out = asyncio.run(Live(db).get(BY_KEY["USDIDR"]))
+    assert out["source"] == "daily" and len(out["bars"]) > 30 and out["note"]["id"]
+
+
+def test_ecb_fallback_fills_missing_fx_history(db, monkeypatch):
+    import asyncio
+
+    import httpx
+
+    from arah.data import frankfurter
+    from arah.data.yahoo import load_bars
+
+    db.x("DELETE FROM bars WHERE symbol='SGD=X'")
+    real = httpx.AsyncClient
+
+    def fake_client(*a, **k):
+        days = {f"2026-0{m}-1{d}": {"SGD": 1.3 + d / 100} for m in range(1, 10) for d in range(0, 10)}
+        k["transport"] = httpx.MockTransport(lambda req: httpx.Response(200, json={"rates": days}))
+        return real(*a, **k)
+
+    monkeypatch.setattr(frankfurter.httpx, "AsyncClient", fake_client)
+    out = asyncio.run(frankfurter.fill(db, ["SGD=X", "BTC-USD"]))
+    assert out == {"SGD=X": 90} and len(load_bars(db, "SGD=X", "1d")["c"]) == 90
+    assert asyncio.run(frankfurter.fill(db, ["SGD=X"])) == {}  # no second try within 30 minutes
