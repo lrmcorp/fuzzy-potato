@@ -374,11 +374,12 @@ def test_stockbit_terminal_parsing_and_facts(db):
             {"summary": {"date_range": "13 Oct - 13 Nov", "net_foreign": {"label": "Net", "value": {"raw": 2.5e12, "formatted": "2.5T"}},
                          "foreign_buy": {"value": {"raw": 9e12}}, "foreign_sell": {"value": {"raw": 6.5e12}}}},
         "/insider/company/majorholder?symbols=BBCA&page=1&limit=10": {"movement": [
-            {"name": "PT Dwimuria", "date": _t_recent(), "action_type": "Buy", "changes": {"value": "1000", "percentage": "0.05"},
+            {"name": "PT Dwimuria", "date": _t_recent(), "action_type": "ACTION_TYPE_BUY", "changes": {"value": "1000", "percentage": "0.05"},
              "current": {"percentage": "54.94"}, "price_formatted": "9,000"}]},
         "/stream/v3/symbol/BBCA?category=STREAM_CATEGORY_ALL&limit=20": {"stream": [
-            {"title": "<b>$BBCA</b> akumulasi asing kencang", "total_likes": 12, "total_replies": 3, "created_at": "2026-11-13 10:00:00"},
-            {"title": "", "content": "", "total_likes": 99}]},
+            {"title": "[%ab1x%] <b>$BBCA</b> akumulasi asing kencang", "total_likes": 12, "total_replies": 3, "created_at": "2026-11-13 10:00:00"},
+            {"title": "", "content": "", "total_likes": 99},
+            {"title": "Pejabat itu harus mundur secara terhormat", "total_likes": 50}]},
     }
 
     class FakeSB:
@@ -389,7 +390,9 @@ def test_stockbit_terminal_parsing_and_facts(db):
     assert s["bandar"]["side"] == 2 and s["bandar"]["buyers"] == 41
     assert s["foreign"]["net_foreign"] == 2.5e12
     assert s["insider"][0]["change_pct"] == 0.05 and s["insider"][0]["now_pct"] == 54.94
+    # Tags stripped; political chatter dropped however many likes it has.
     assert len(s["stream"]) == 1 and "$BBCA" not in s["stream"][0]["text"] and "<b>" not in s["stream"][0]["text"]
+    assert "%" not in s["stream"][0]["text"] and s["insider"][0]["side"] == 1 and s["insider"][0]["action"] == "Buy"
     lines = dict(sbterm.fact_lines("BBCA", s))
     assert "Big Acc" in lines["BBCA.SB1"] and "net bought" in lines["BBCA.SB2"] and "PT Dwimuria" in lines["BBCA.SB3"]
     assert "unverified" in lines["BBCA.SB6"]

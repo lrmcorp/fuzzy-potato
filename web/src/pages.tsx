@@ -435,7 +435,8 @@ function FlowPanel({k}: {k: string}) {
     return () => { live = false; };
   }, [k]);
   if (!d || (!d.bandar && !d.foreign && !d.insider?.length && !d.stream?.length)) return null;
-  const rp = (x: number) => `Rp ${num(Math.abs(x) / 1e9, 1)} M`;
+  // Rupiah in words people use: T for trillion (triliun), M for billion (miliar).
+  const rp = (x: number) => (Math.abs(x) >= 1e12 ? `Rp ${num(Math.abs(x) / 1e12, 2)} T` : `Rp ${num(Math.abs(x) / 1e9, 1)} M`);
   const side = d.bandar?.side ?? 0;
   const tone = side > 0 ? 'good' : side < 0 ? 'bad' : 'neutral';
   const nf = d.foreign?.net_foreign;
@@ -458,7 +459,7 @@ function FlowPanel({k}: {k: string}) {
         <>
           <h3 className="label">{t('flow_insider')}</h3>
           <ul className="plain">{recent.map((m, i) => (
-            <li key={i}><span className="muted">{m.date}</span> {m.name} · {m.action}
+            <li key={i}><span className="muted">{m.date}</span> {m.name} · <span className={m.side > 0 ? 'delta-up' : m.side < 0 ? 'delta-down' : ''}>{m.side > 0 ? t('flow_buy') : m.side < 0 ? t('flow_sell') : m.action}</span>
               {m.change_pct != null && ` (${m.change_pct > 0 ? '+' : ''}${num(m.change_pct, 2)}%)`}
               {m.now_pct != null && <span className="muted"> → {num(m.now_pct, 2)}%</span>}</li>))}
           </ul>
@@ -468,7 +469,7 @@ function FlowPanel({k}: {k: string}) {
         <details className="why">
           <summary>{t('flow_stream')}</summary>
           <ul className="plain">{(d.stream ?? []).slice(0, 5).map((p, i) => (
-            <li key={i}>{p.text} <span className="muted small">· {p.likes} ♥ · {p.replies} 💬</span></li>))}
+            <li key={i}>{p.text} <span className="muted small">· {p.likes} ♥</span></li>))}
           </ul>
           <p className="note">{t('flow_stream_note')}</p>
         </details>

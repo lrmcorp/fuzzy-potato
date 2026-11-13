@@ -50,7 +50,7 @@ const S = {
   live_h: ['Hari ini', 'Today'], live_rt: ['Realtime · {src}', 'Realtime · {src}'],
   flow_h: ['Bandar & asing', 'Brokers & foreign flow'], flow_bandar: ['Bandar detector', 'Bandar detector'],
   flow_bs: ['{b} broker beli vs {s} jual', '{b} buying vs {s} selling brokers'], flow_foreign: ['Asing 1 bulan', 'Foreign, 1 month'],
-  flow_net_buy: ['Beli bersih', 'Net buy'], flow_net_sell: ['Jual bersih', 'Net sell'],
+  flow_net_buy: ['Beli bersih', 'Net buy'], flow_buy: ['Beli', 'Buy'], flow_sell: ['Jual', 'Sell'], flow_net_sell: ['Jual bersih', 'Net sell'],
   flow_insider: ['Pemegang saham besar & orang dalam', 'Major holders & insiders'],
   flow_stream: ['Ramai dibahas di Stockbit', 'Busy on Stockbit'],
   flow_stream_note: ['Postingan komunitas: opini, belum tentu benar.', 'Community posts: opinions, not verified.'],
