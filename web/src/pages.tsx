@@ -9,7 +9,7 @@ import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/Segment
 import {Selector} from '@astryxdesign/core/Selector';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {api, ApiError, type Answer, type Brief, type Calc, type Forecast, type Technique, type Lang, type MarketRow, type RecCard, type Simple, type SimpleCard, type State} from './api';
+import {api, ApiError, type Answer, type Brief, type Calc, type EventItem, type Forecast, type Technique, type Lang, type MarketRow, type RecCard, type Simple, type SimpleCard, type State} from './api';
 import {FanChart, LiveChart, MiniFan, ProjectionChart, Spark} from './charts';
 import {AssetLink, Async, Glyph, GradeNote, HorizonStrip, Lines, Reasons, Verdict, VigilanceLine} from './components';
 import {useLoad} from './hooks';
@@ -125,7 +125,6 @@ function Summary({brief, simple: first, building, rebuild, canAsk}: {brief: Brie
   const other = useLoad(() => (h === '1m' ? Promise.resolve(first) : api.simple(h)), [h, first]);
   const simple = h === '1m' ? first : other.data;
   const dayOf = (ts: number) => new Intl.DateTimeFormat(lang === 'id' ? 'id-ID' : 'en-US', {weekday: 'short', day: 'numeric', month: 'short'}).format(ts * 1000);
-  const events = (brief.events ?? []).slice(0, 4);
   return (
     <>
       <header className="dash-head">
@@ -159,22 +158,44 @@ function Summary({brief, simple: first, building, rebuild, canAsk}: {brief: Brie
         <span className="chip chip-bad">{t('bad')}</span> {t('legend_bad')}
       </p>
 
-      <section className="block" aria-labelledby="q-ev">
-        <h2 id="q-ev" className="block-h">{t('events_h')}</h2>
-        {events.length === 0 ? <p className="note">{t('no_events')}</p> : (
-          <ul className="events">
-            {events.map((e, i) => (
-              <li key={i}>
-                <span className="event-when">{dayOf(e.at)}<br /><span className="muted">{t(`c_${e.country}` as 'c_US')}</span></span>
-                <span>{e.title ?? l(e.what)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <Events items={brief.events ?? []} dayOf={dayOf} />
 
       {canAsk && <AskBox />}
     </>
+  );
+}
+
+/** Coming events, Indonesia or the world in one tap; the five soonest first, up to ten on request. */
+function Events({items, dayOf}: {items: EventItem[]; dayOf: (ts: number) => string}) {
+  const {t, l} = useT();
+  const [side, setSide] = useState<'world' | 'id'>('world');
+  const [all, setAll] = useState(false);
+  // Briefs made before the split carry no side: Indonesia is its own side, every other country is the world.
+  const list = items.filter(e => (e.side ?? (e.country === 'ID' ? 'id' : 'world')) === side).slice(0, 10);
+  const shown = all ? list : list.slice(0, 5);
+  return (
+    <section className="block" aria-labelledby="q-ev">
+      <div className="block-top">
+        <h2 id="q-ev" className="block-h">{t('events_h')}</h2>
+        <SegmentedControl label={t('ev_side')} value={side} onChange={v => { setSide(v as 'world' | 'id'); setAll(false); }}>
+          <SegmentedControlItem value="world" label={t('ev_world')} />
+          <SegmentedControlItem value="id" label={t('ev_id')} />
+        </SegmentedControl>
+      </div>
+      {shown.length === 0 ? <p className="note">{t(side === 'id' ? 'no_events_id' : 'no_events')}</p> : (
+        <ul className="events">
+          {shown.map((e, i) => (
+            <li key={i}>
+              <span className="event-when">{dayOf(e.at)}<br /><span className="muted">{t(`c_${e.country}` as 'c_US')}</span></span>
+              <span>{e.title ?? l(e.what)}{e.source === 'news' && <span className="muted small"> · {t('from_news')}</span>}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {list.length > 5 && (
+        <Button label={all ? t('ev_less') : t('ev_more', {n: list.length})} size="sm" variant="ghost" onClick={() => setAll(!all)} />
+      )}
+    </section>
   );
 }
 

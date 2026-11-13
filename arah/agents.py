@@ -95,7 +95,7 @@ async def run_desk(db: DB, settings: Settings, country: str, wlines: list[str]) 
         "\"mood\": integer -2..2 for local stocks and currency (-2 clearly negative, 2 clearly positive), "
         "\"events\": [up to 4 of {\"refs\": [headline ids], \"what\": {id,en}, \"effect\": {id,en} "
         "(one sentence: which asset it moves and which way)}], "
-        "\"ahead\": [up to 2 of {\"refs\": [headline ids], \"date\": \"YYYY-MM-DD\", \"what\": {id,en}} for scheduled "
+        f"\"ahead\": [up to {6 if country == 'ID' else 3} of {{\"refs\": [headline ids], \"date\": \"YYYY-MM-DD\", \"what\": {{id,en}}}} for scheduled "
         "events in the next 30 days whose date a headline states outright; leave empty when no headline gives a date]"
         + (", \"foreign\": {\"side\": \"buy\"|\"sell\"|\"none\", \"date\": \"YYYY-MM-DD\", \"refs\": [headline ids], "
            "\"text\": {id,en}} (from the foreign-flow reports only: were foreign investors net buyers or net sellers of "
@@ -122,7 +122,7 @@ async def run_desk(db: DB, settings: Settings, country: str, wlines: list[str]) 
     src = lambda refs: [{"title": nmap[r]["title"], "source": nmap[r]["source"], "url": nmap[r]["url"]} for r in refs[:2]]
     ahead = []
     today = time.strftime("%Y-%m-%d")
-    for ev in raw.get("ahead", [])[:2] if isinstance(raw.get("ahead"), list) else []:
+    for ev in raw.get("ahead", [])[:6] if isinstance(raw.get("ahead"), list) else []:
         refs, what, date = _refs(ev.get("refs"), set(nmap)), _text(ev.get("what")), str(ev.get("date") or "")
         try:
             at = int(time.mktime(time.strptime(date, "%Y-%m-%d")))

@@ -294,3 +294,6 @@ a.tile:hover { border-color: var(--arah-accent); color: var(--arah-ink); box-sha
 .use-tag { font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid var(--arah-line); color: var(--color-text-secondary); }
 .use-tag.is-used { border-color: var(--arah-accent); color: var(--arah-accent); }
 .tech-row:not(.is-used) > p:not(.note) { color: var(--color-text-secondary); }
+
+.block-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.block-top .block-h { margin: 0; }

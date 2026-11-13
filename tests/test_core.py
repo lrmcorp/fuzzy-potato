@@ -127,12 +127,15 @@ def test_calendar_keeps_high_impact_and_merges_twins():
         {"title": "Core CPI m/m", "country": "USD", "date": "2026-11-10T08:30:00-05:00", "impact": "High"},
         {"title": "Fed speaker", "country": "USD", "date": "2026-11-11T08:30:00-05:00", "impact": "Medium"},
         {"title": "BOJ Policy Rate", "country": "JPY", "date": "2026-11-12T00:00:00-05:00", "impact": "Medium"},
-        {"title": "Something", "country": "EUR", "date": "2026-11-12T00:00:00-05:00", "impact": "High"},
+        {"title": "ECB Main Refinancing Rate", "country": "EUR", "date": "2026-11-12T00:00:00-05:00", "impact": "High"},
+        {"title": "German ZEW", "country": "EUR", "date": "2026-11-12T01:00:00-05:00", "impact": "Medium"},
+        {"title": "Something", "country": "AUD", "date": "2026-11-12T00:00:00-05:00", "impact": "High"},
         {"title": "Broken date", "country": "USD", "date": "soon", "impact": "High"},
         "not a dict",
     ]
     events = pick(raw)
-    assert [e["title"] for e in events] == ["CPI m/m, Core CPI m/m", "BOJ Policy Rate"]
+    assert [e["title"] for e in events] == ["CPI m/m, Core CPI m/m", "BOJ Policy Rate", "ECB Main Refinancing Rate"]
+    assert events[2]["country"] == "EU"
     assert events[0]["country"] == "US" and "inflasi" in events[0]["why"]["id"].lower()
     assert pick({"oops": 1}) == []
 
@@ -178,3 +181,4 @@ def test_technique_helpers_vote_sensibly():
     assert _weight({"n_eff": 40, "hit": 0.75, "chance": 0.75}, 0) == 0  # right only as often as luck
     assert _weight({"n_eff": 5, "hit": 0.9, "chance": 0.5}, 0) == 0
     assert _weight(None, 0.25) == 0.25
+
