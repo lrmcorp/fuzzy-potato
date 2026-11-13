@@ -37,6 +37,79 @@ NAMES = {
 }
 
 
+# What each technique looks at, and why it belongs in a one to three-month read. Fundamentals and news
+# depend on the kind of asset, so they are filled in per asset in `_purpose`.
+PURPOSE = {
+    "sim": ("Memakai naik-turun harian aset ini selama bertahun-tahun untuk membuat ribuan kemungkinan jalur harga. "
+            "Dipakai sebagai titik awal karena kisaran harganya lolos uji historis. Tebakan arahnya sendiri belum tentu "
+            "lebih baik dari kebetulan, karena itu teknik lain dipakai untuk menggeser arahnya.",
+            "Uses this asset's daily ups and downs over many years to build thousands of possible price paths. It is the "
+            "starting point because its price range passed the historical test. Its own direction call is not always better "
+            "than chance, which is why other techniques are used to nudge the direction."),
+    "trend": ("Melihat posisi harga terhadap rata-rata 50 dan 200 hari. Harga yang sedang dalam tren sering bertahan "
+              "searah selama beberapa minggu sampai bulan, jadi cocok untuk rentang 1 sampai 3 bulan.",
+              "Looks at price against its 50 and 200-day averages. A trending price often keeps its direction for weeks "
+              "to months, which suits a one to three-month horizon."),
+    "revert": ("Mencari harga yang sudah lari terlalu jauh dari rata-rata 50 harinya. Lonjakan atau jatuh yang berlebihan "
+               "sering ditarik kembali; teknik ini menahan kesimpulan agar tidak ikut euforia atau panik.",
+               "Looks for a price that has run too far from its 50-day average. Overdone jumps and drops are often pulled "
+               "back; this keeps the conclusion from following euphoria or panic."),
+    "season": ("Membandingkan dengan minggu-minggu yang sama di sepuluh tahun terakhir. Sebagian pasar punya pola "
+               "berulang, misalnya arus dividen, akhir tahun, atau kebutuhan dolar musiman.",
+               "Compares with the same weeks in each of the last ten years. Some markets repeat, for example around "
+               "dividends, year end, or seasonal dollar demand."),
+    "analog": ("Mencari 20 momen di masa lalu yang pola harga sebulan terakhirnya paling mirip dengan sekarang, lalu "
+               "melihat apa yang terjadi setelahnya. Berguna saat situasi sekarang pernah terjadi sebelumnya.",
+               "Finds the 20 past moments whose last month of prices looked most like now, then looks at what came "
+               "next. Useful when the current situation has happened before."),
+}
+
+
+def _purpose(key: str, asset: Asset) -> dict:
+    if key in PURPOSE:
+        return {"id": PURPOSE[key][0], "en": PURPOSE[key][1]}
+    if key == "fund" and asset.klass == "stock":
+        return {"id": "Membandingkan valuasi (P/E) dengan rata-ratanya sendiri dan melihat pertumbuhan laba. Dalam 1 sampai 3 "
+                      "bulan, saham yang murah dengan laba tumbuh lebih mungkin dilirik investor.",
+                "en": "Compares valuation (P/E) with its own average and checks profit growth. Over one to three months, a "
+                      "cheap stock with growing profit is more likely to draw buyers."}
+    if key == "fund" and asset.klass == "fx":
+        return {"id": "Untuk kurs, fundamentalnya adalah penggerak makro: kekuatan dolar AS, imbal hasil obligasi AS, "
+                      "kecemasan pasar global, harga minyak, dan arus dana asing di bursa Indonesia.",
+                "en": "For a currency, the fundamentals are macro drivers: US dollar strength, US bond yields, global "
+                      "market anxiety, oil prices, and foreign money flows in Indonesian stocks."}
+    if key == "fund":
+        return {"id": "Untuk indeks, komoditas dan kripto, fundamentalnya adalah penggerak makro: dolar AS, imbal hasil "
+                      "obligasi AS, kecemasan pasar global, dan arah bursa yang berkaitan.",
+                "en": "For indices, commodities and crypto, the fundamentals are macro drivers: the US dollar, US bond "
+                      "yields, global market anxiety, and related markets."}
+    return {"id": "Membaca berita dua hari terakhir dan kesimpulan tim analis AI (meja negara, debat naik dan turun). "
+                  "Menangkap peristiwa yang belum terlihat di harga, seperti kebijakan, politik, atau keputusan bank sentral.",
+            "en": "Reads the last two days of news and the AI analyst team's view (country desks, a bull and bear debate). "
+                  "Catches events not yet in the price, such as policy, politics or central-bank decisions."}
+
+
+def _status(key: str, hist: dict | None, weight: float, vote: int) -> dict:
+    """Whether the technique moved the conclusion, and why or why not."""
+    if key == "sim":
+        return {"used": True, "id": "Dasar kesimpulan: kisaran dan peluang awal berasal dari sini.",
+                "en": "Base of the conclusion: the range and the starting odds come from here."}
+    if vote == 0:
+        return {"used": False, "id": "Tidak ikut menggeser kesimpulan: teknik ini tidak memberi arah saat ini.",
+                "en": "Did not move the conclusion: this technique has no view right now."}
+    if weight > 0 and hist:
+        return {"used": True, "id": f"Ikut menentukan kesimpulan (bobot {weight * 100:.0f}%): pada aset ini terbukti lebih sering benar daripada kebetulan.",
+                "en": f"Helps decide the conclusion (weight {weight * 100:.0f}%): on this asset it was right more often than chance."}
+    if weight > 0:
+        return {"used": True, "id": f"Ikut menentukan kesimpulan dengan bobot kecil ({weight * 100:.0f}%): tidak bisa diuji pada data lama, jadi suaranya dibatasi.",
+                "en": f"Helps decide the conclusion with a small weight ({weight * 100:.0f}%): it cannot be replayed on past data, so its say is capped."}
+    if hist and hist.get("n_eff", 0) < 12:
+        return {"used": False, "id": "Ditampilkan saja: teknik ini jarang memberi sinyal pada aset ini, kejadiannya terlalu sedikit untuk diuji.",
+                "en": "Shown only: this technique rarely signals on this asset, too few cases to test."}
+    return {"used": False, "id": "Ditampilkan saja: pada aset ini teknik ini tidak lebih baik dari kebetulan, jadi tidak diberi bobot.",
+            "en": "Shown only: on this asset it did no better than chance, so it gets no weight."}
+
+
 def _ma(c: np.ndarray, n: int) -> np.ndarray:
     """Trailing mean; NaN until n values exist."""
     out = np.full(len(c), np.nan)
@@ -194,7 +267,9 @@ def techniques(db: DB, asset: Asset, horizon: str = "1m") -> dict:
             "strength": round(float(strength), 2), "exp_ret": None if exp_ret is None else round(exp_ret * 100, 2),
             "target": None if exp_ret is None else s0 * (1 + exp_ret), "reason": reason,
             "hist": hist, "weight": round(_weight(hist, default_w), 2), "path": path,
+            "purpose": _purpose(key, asset),
         })
+        out[-1]["status"] = _status(key, hist, out[-1]["weight"], int(vote))
 
     # 1. Statistical simulation: the model's own odds, already tested by the walk-forward check.
     sim = simulate(c, steps, n_paths=3000, seed=int(ts[-1]) % (2**31), mean_shrink=MEAN_SHRINK)
@@ -207,6 +282,7 @@ def techniques(db: DB, asset: Asset, horizon: str = "1m") -> dict:
         _text(f"Dari ribuan jalur harga yang disimulasikan, {p * 100:.0f}% berakhir lebih tinggi.",
               f"Of thousands of simulated price paths, {p * 100:.0f}% end higher."), sim_hist)
 
+    pw, pw_e = ("Kurs", "The rate") if asset.klass == "fx" else ("Harga", "Price")
     # 2. Trend: where price sits against its 50 and 200-day averages; the slope of the last
     #    60 days, halved, gives the line drawn on the chart.
     tv, ts_ = _trend_votes(c)
@@ -215,11 +291,11 @@ def techniques(db: DB, asset: Asset, horizon: str = "1m") -> dict:
     trend_path = [s0 * math.exp(slope * 0.5 * k) for k in range(steps + 1)]
     ma200 = float(np.mean(c[-200:]))
     if tv[-1] > 0:
-        r = _text(f"Harga {fmt_pct((s0 / ma200 - 1) * 100)} di atas rata-rata 200 hari dan rata-rata 50 hari ikut di atasnya: tren naik.",
-                  f"Price is {fmt_pct((s0 / ma200 - 1) * 100, 'en')} above its 200-day average with the 50-day above it too: an uptrend.")
+        r = _text(f"{pw} {fmt_pct((s0 / ma200 - 1) * 100)} di atas rata-rata 200 hari dan rata-rata 50 hari ikut di atasnya: tren naik.",
+                  f"{pw_e} is {fmt_pct((s0 / ma200 - 1) * 100, 'en')} above its 200-day average with the 50-day above it too: an uptrend.")
     elif tv[-1] < 0:
-        r = _text(f"Harga {fmt_pct((s0 / ma200 - 1) * 100)} dari rata-rata 200 hari dan rata-rata 50 hari ikut di bawahnya: tren turun.",
-                  f"Price is {fmt_pct((s0 / ma200 - 1) * 100, 'en')} from its 200-day average with the 50-day below it too: a downtrend.")
+        r = _text(f"{pw} {fmt_pct((s0 / ma200 - 1) * 100)} dari rata-rata 200 hari dan rata-rata 50 hari ikut di bawahnya: tren turun.",
+                  f"{pw_e} is {fmt_pct((s0 / ma200 - 1) * 100, 'en')} from its 200-day average with the 50-day below it too: a downtrend.")
     else:
         r = _text("Rata-rata 50 dan 200 hari tidak searah: belum ada tren yang tegas.",
                   "The 50 and 200-day averages disagree: no firm trend.")
@@ -230,12 +306,12 @@ def techniques(db: DB, asset: Asset, horizon: str = "1m") -> dict:
     ma50 = float(np.mean(c[-50:]))
     gap = (s0 / ma50 - 1) * 100
     if rv[-1]:
-        r = _text(f"Harga {fmt_pct(gap)} dari rata-rata 50 hari, jauh di luar kebiasaan: cenderung kembali ke {fmt_num(ma50, d)}.",
-                  f"Price is {fmt_pct(gap, 'en')} from its 50-day average, far outside its usual range: it tends to drift back toward {fmt_num(ma50, d, 'en')}.")
+        r = _text(f"{pw} {fmt_pct(gap)} dari rata-rata 50 hari, jauh di luar kebiasaan: cenderung kembali ke {fmt_num(ma50, d)}.",
+                  f"{pw_e} is {fmt_pct(gap, 'en')} from its 50-day average, far outside its usual range: it tends to drift back toward {fmt_num(ma50, d, 'en')}.")
         exp = ma50 / s0 - 1
     else:
-        r = _text(f"Harga {fmt_pct(gap)} dari rata-rata 50 hari, masih dalam batas wajar: tidak ada tarikan balik.",
-                  f"Price is {fmt_pct(gap, 'en')} from its 50-day average, within its usual range: no pull back.")
+        r = _text(f"{pw} {fmt_pct(gap)} dari rata-rata 50 hari, masih dalam batas wajar: tidak ada tarikan balik.",
+                  f"{pw_e} is {fmt_pct(gap, 'en')} from its 50-day average, within its usual range: no pull back.")
         exp = None
     add("revert", int(rv[-1]), float(rs[-1]), exp, r, bt.get("revert"))
 
@@ -342,5 +418,6 @@ def techniques(db: DB, asset: Asset, horizon: str = "1m") -> dict:
         "conclusion": {"p_up": final.p_up, "q05": final.q05, "q25": final.q25, "q50": final.q50,
                        "q75": final.q75, "q95": final.q95, "band": final.band},
         "tested": len(tested),
+        "used": [t["key"] for t in out if t["status"]["used"]],
         "history": [{"t": int(t), "c": float(x)} for t, x in zip(ts[-130:], c[-130:])],
     }

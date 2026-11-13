@@ -283,3 +283,9 @@ a.tile:hover { border-color: var(--arah-accent); color: var(--arah-ink); box-sha
 .vote { font-size: 0.8125rem; font-weight: 600; white-space: nowrap; }
 .proj .proj-svg { display: block; width: 100%; height: auto; aspect-ratio: auto; }
 .proj .chart-wrap { width: 100%; }
+.tech-summary { margin: 0.25rem 0 0.5rem; padding: 0.6rem 0.75rem; background: var(--arah-soft); border-radius: 8px; }
+.tech-summary p { margin: 0.15rem 0; }
+.row-k { font-weight: 600; }
+.use-tag { font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid var(--arah-line); color: var(--color-text-secondary); }
+.use-tag.is-used { border-color: var(--arah-accent); color: var(--arah-accent); }
+.tech-row:not(.is-used) > p:not(.note) { color: var(--color-text-secondary); }

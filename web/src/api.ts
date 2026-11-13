@@ -42,12 +42,13 @@ export interface Calc {currency: string; amount_idr: number; rate: number; sourc
 export interface Technique {
   key: string; name: L; vote: number; strength: number; exp_ret: number | null; target: number | null; reason: L;
   hist: {n: number; n_eff: number; hit: number | null; chance: number | null} | null; weight: number; path: number[] | null;
+  purpose: L; status: L & {used: boolean};
 }
 export interface Forecast {
   key: string; name: string; name_en: string; klass: string; up_is: number; horizon: string; horizon_name: L; steps: number;
   s0: number; decimals: number; techniques: Technique[]; votes: {up: number; down: number; none: number}; tilt: number;
   conclusion: {p_up: number; q05: number; q25: number; q50: number; q75: number; q95: number; band: Band[]};
-  tested: number; history: {t: number; c: number}[];
+  tested: number; used: string[]; history: {t: number; c: number}[];
 }
 export interface Bar {t: number; o: number; h: number; l: number; c: number; v: number}
 export interface LiveData {

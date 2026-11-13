@@ -9,7 +9,7 @@ import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/Segment
 import {Selector} from '@astryxdesign/core/Selector';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {api, ApiError, type Answer, type Brief, type Calc, type Forecast, type Lang, type MarketRow, type RecCard, type Simple, type SimpleCard, type State} from './api';
+import {api, ApiError, type Answer, type Brief, type Calc, type Forecast, type Technique, type Lang, type MarketRow, type RecCard, type Simple, type SimpleCard, type State} from './api';
 import {FanChart, LiveChart, MiniFan, ProjectionChart, Spark} from './charts';
 import {AssetLink, Async, Glyph, GradeNote, HorizonStrip, Lines, Reasons, Verdict, VigilanceLine} from './components';
 import {useLoad} from './hooks';
@@ -466,25 +466,33 @@ function Conclusion({f}: {f: Forecast}) {
 
 function TechniqueList({f}: {f: Forecast}) {
   const {t, l, num, pct} = useT();
+  const used = f.techniques.filter(x => x.status.used);
+  const shown = f.techniques.filter(x => !x.status.used);
+  const row = (x: Technique) => (
+    <li key={x.key} className={`tech-row${x.status.used ? ' is-used' : ''}`}>
+      <div className="tech-top">
+        <strong>{l(x.name)}</strong>
+        <span className={`use-tag${x.status.used ? ' is-used' : ''}`}>{t(x.status.used ? 'tag_used' : 'tag_shown')}</span>
+        <VoteMark v={x.vote} />
+        {x.exp_ret != null && x.target != null && <span className="muted">{num(x.target, f.decimals)} ({pct(x.exp_ret)})</span>}
+      </div>
+      <p><span className="row-k">{t('says_now')}:</span> {l(x.reason)}</p>
+      <p><span className="row-k">{t('why_tech')}:</span> {l(x.purpose)}</p>
+      <p className="note">
+        {l(x.status)}{' '}
+        {x.hist && x.hist.hit != null && x.hist.chance != null && x.hist.n_eff >= 12 &&
+          t('tested_line', {hit: Math.round(x.hist.hit * 100), chance: Math.round(x.hist.chance * 100), n: x.hist.n_eff})}
+      </p>
+    </li>
+  );
   return (
-    <ol className="techs">
-      {f.techniques.map(x => (
-        <li key={x.key} className="tech-row">
-          <div className="tech-top">
-            <strong>{l(x.name)}</strong>
-            <VoteMark v={x.vote} />
-            {x.exp_ret != null && x.target != null && <span className="muted">{num(x.target, f.decimals)} ({pct(x.exp_ret)})</span>}
-          </div>
-          <p>{l(x.reason)}</p>
-          <p className="note">
-            {x.hist && x.hist.hit != null && x.hist.chance != null && x.hist.n_eff >= 12
-              ? t('tested_line', {hit: Math.round(x.hist.hit * 100), chance: Math.round(x.hist.chance * 100), n: x.hist.n_eff})
-              : x.hist ? t('rare') : t('untested')}
-            {' · '}{t('weight_line', {w: Math.round(x.weight * 100)})}
-          </p>
-        </li>
-      ))}
-    </ol>
+    <>
+      <div className="tech-summary">
+        <p><span className="row-k">{t('used_h')}:</span> {used.map(x => l(x.name)).join(', ')}.</p>
+        {shown.length > 0 && <p className="muted"><span className="row-k">{t('shown_h')}:</span> {shown.map(x => l(x.name)).join(', ')}.</p>}
+      </div>
+      <ol className="techs">{used.map(row)}{shown.map(row)}</ol>
+    </>
   );
 }
 
