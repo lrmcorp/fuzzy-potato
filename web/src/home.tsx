@@ -4,8 +4,8 @@ import {api, type EventItem, type FlowRow, type PanelInfo, type PanelRow, type P
 import {compact} from './market';
 import {useLoad} from './hooks';
 import {useT} from './i18n';
-import {ChangeText, Mark, Seg, Skeleton, SourceLine, Sparkline, Term, VerdictTag} from './ui';
-import type {Factor, RiskProfile} from './api';
+import {ChangeText, Icon, Mark, Seg, Sheet, Skeleton, SourceLine, Sparkline, Term, VerdictTag} from './ui';
+import type {RiskProfile} from './api';
 
 const DIRTAG = {
   naik: {key: 'naik', label: 'Naik', icon: 'up', tone: 'green'},
@@ -18,51 +18,114 @@ const H_KEYS = ['1d', '1w', '1m', '2m', '3m'];
 // Foreign markets by the name of their index, the way the news writes them.
 const INDEX_NAME: Record<string, string> = {SPX: 'S&P 500', N225: 'Nikkei 225', STI: 'STI', SSE: 'Shanghai Composite'};
 
-function Gauge({now, next, h}: {now: number; next: number; h: string}) {
-  // The "Sekarang" dot takes the colour of where it sits: pressing (orange), balanced (grey), supportive (green).
+type Side = 'menekan' | 'mendukung' | 'seimbang';
+const SIDE_OF = (x: number | null | undefined): Side | null => (x == null ? null : x > 0 ? 'mendukung' : x < 0 ? 'menekan' : 'seimbang');
+const SIDE_TAG: Record<Side, {label: string; icon: string; tone: 'green' | 'orange' | 'grey'}> = {
+  mendukung: {label: 'Mendukung', icon: 'up', tone: 'green'},
+  menekan: {label: 'Menekan', icon: 'down', tone: 'orange'},
+  seimbang: {label: 'Seimbang', icon: 'square', tone: 'grey'},
+};
+const zone = (x: number): Side => (x < 0.4 ? 'menekan' : x > 0.6 ? 'mendukung' : 'seimbang');
+
+/** Menekan to Mendukung: a filled dot for now, a ring for the forecast, a line joining them. */
+function HeroGauge({now, next, h}: {now: number; next: number; h: string}) {
+  const pos = (x: number) => Math.min(0.97, Math.max(0.03, x)) * 100;
   const tone = now < 0.4 ? 'var(--down)' : now > 0.6 ? 'var(--up)' : 'var(--ink-2)';
-  const pos = (x: number) => `${Math.round(Math.min(0.97, Math.max(0.03, x)) * 100)}%`;
-  const word = (x: number) => (x < 0.4 ? 'menekan' : x > 0.6 ? 'mendukung' : 'seimbang');
-  // Near either end a centred label would spill out of the card; anchor it to the dot's side instead.
-  const edge = (x: number) => (x < 0.12 ? {transform: 'translateX(-8px)'} : x > 0.88 ? {transform: 'translateX(calc(-100% + 8px))'} : {});
+  const a = Math.min(pos(now), pos(next)), b = Math.max(pos(now), pos(next));
   return (
-    <div className="gauge" role="img" aria-label={`Sekarang ${word(now)}, ${H_LABEL[h]} lagi ${word(next)}`}>
-      <div className="gauge-track" />
-      <div className="gauge-mid" style={{left: '50%'}} />
-      <div className="gauge-lbl" style={{left: pos(now), color: tone, ...edge(now)}}>Sekarang</div>
-      <div className="gauge-dot" style={{left: pos(now), background: tone}} />
-      <div className="gauge-dot hollow" style={{left: pos(next)}} />
-      {/* When the two dots sit close together, the forecast label moves under the track so the labels never collide. */}
-      <div className="gauge-lbl" style={{left: pos(next), ...edge(next), ...(Math.abs(now - next) < 0.15 ? {top: 38} : {})}}>{H_LABEL[h]}</div>
-      <div className="gauge-end" style={{left: 0}}>Menekan</div>
-      <div className="gauge-end" style={{right: 0}}>Mendukung</div>
+    <div className="hg" role="img" aria-label={`Sekarang ${zone(now)}, prakiraan ${H_LABEL[h]} ${zone(next)}`}>
+      <div className="hg-track">
+        <span className="hg-mid" />
+        <span className="hg-link" style={{left: `${a}%`, width: `${b - a}%`}} />
+        <span className="hg-dot" style={{left: `${pos(now)}%`, background: tone}} />
+        <span className="hg-ring" style={{left: `${pos(next)}%`}} />
+      </div>
+      <div className="hg-ends"><span>Menekan</span><span>Seimbang</span><span>Mendukung</span></div>
     </div>
   );
 }
 
-const SIDE = {
-  1: {word: 'Mendukung', icon: 'up', cls: 'chg-up'},
-  [-1]: {word: 'Menekan', icon: 'down', cls: 'chg-down'},
-  0: {word: 'Seimbang', icon: 'square', cls: 'chg-flat'},
-} as Record<number, {word: string; icon: string; cls: string}>;
-
-/** The factors behind the gauge, each with the way it pushes: the gauge is never a black box. */
-function Factors({items, next, h}: {items: Factor[]; next?: number; h: string}) {
-  const {pct} = useT();
-  const model: Factor = {label: `Prakiraan model ${H_LABEL[h]}`, value: null, kind: 'pct',
-    side: next == null ? null : next >= 0.6 ? 1 : next <= 0.4 ? -1 : 0};
+function GaugeLegend({now, next}: {now: number; next: number}) {
   return (
-    <ul className="factors" aria-label="Faktor yang menggerakkan arah pasar">
-      {[...items, model].map(f => {
-        const s = f.side == null ? null : SIDE[f.side];
-        return (
-          <li key={f.label}>
-            <span>{f.label}{f.value != null && <span className="muted"> {f.kind === 'idr' ? compact(Math.abs(f.value)) : pct(f.value, 1)}</span>}</span>
-            {s ? <span className={`${s.cls} factor-side`}><Mark icon={s.icon} />{s.word}</span> : <span className="muted">—</span>}
-          </li>
-        );
-      })}
-    </ul>
+    <div className="hg-legend">
+      <span><i className="lg-dot" style={{background: now < 0.4 ? 'var(--down)' : now > 0.6 ? 'var(--up)' : 'var(--ink-2)'}} />Sekarang: {zone(now)}</span>
+      <span><i className="lg-ring" />Prakiraan: {zone(next)}</span>
+    </div>
+  );
+}
+
+interface TileData {label: string; value: string | null; side: Side | null; href: string}
+
+function Tile({t}: {t: TileData}) {
+  const tag = t.side ? SIDE_TAG[t.side] : null;
+  return (
+    <a className="tile" href={t.href}>
+      <span className="tile-lbl">{t.label}</span>
+      {t.value != null ? <span className="tile-val">{t.value}</span> : <span className="tile-val none">Belum ada data</span>}
+      {tag && <span className={`tag tag-${tag.tone}`}><Mark icon={tag.icon} />{tag.label}</span>}
+    </a>
+  );
+}
+
+function NewsRow({n, compact: small}: {n?: PanelInfo['news']['ID']; compact?: boolean}) {
+  if (!n) return null;
+  const top = n.top;
+  const tag = top ? SIDE_TAG[top.direction as Side] ?? SIDE_TAG.seimbang : null;
+  return (
+    <div className={`hero-news${small ? ' small' : ''}`}>
+      {!small && <h3 className="hero-sub">Berita penyebab</h3>}
+      {top && tag && (
+        <a className="news-row" href={n.href}>
+          <span className={`news-ic tag-${tag.tone}`} aria-label={tag.label}><Mark icon={tag.icon} /></span>
+          <span className="news-txt">{top.text}</span>
+          {small && <span className="news-n">{n.count} berita</span>}
+        </a>
+      )}
+      {!small && (
+        <a className="news-row more" href={n.href}><span>Lihat {n.count} berita</span><Icon name="chevron" className="chev-r" /></a>
+      )}
+    </div>
+  );
+}
+
+/** "Akurasi ARAH": a small button instead of a line of jargon; the sheet says what is being waited for. */
+function Accuracy({r}: {r?: RecordInfo}) {
+  const [open, setOpen] = useState(false);
+  if (!r) return null;
+  const text = r.enough ? `Akurasi ARAH: ${r.pct}% tepat` : 'Akurasi ARAH: belum cukup data';
+  return (
+    <>
+      <button type="button" className="acc-btn" onClick={() => setOpen(true)}><Icon name="info" size={16} />{text}</button>
+      {open && (
+        <Sheet title="Akurasi ARAH" onClose={() => setOpen(false)}>
+          <p className="body">
+            {r.enough
+              ? `Dari ${r.n} prakiraan 1 bulan terakhir yang sudah dinilai, ${r.hits} tepat (${r.pct}%). Tepat berarti harga akhir ada di rentang 9 dari 10 kemungkinan dan bergerak ke arah yang disebut.`
+              : `${r.pending} prakiraan sedang menunggu hasil 1 bulan. Skor akurasi muncul setelah ada yang selesai dinilai${r.n ? ` (baru ${r.n} dinilai)` : ''}.`}
+          </p>
+        </Sheet>
+      )}
+    </>
+  );
+}
+
+function RegionCol({id, title, href, sentence, card, tiles, news, h, hidden, controls}: {
+  id: string; title: string; href: string; sentence?: string | null; card?: SimpleCard | null; tiles: TileData[];
+  news?: PanelInfo['news']['ID']; h: string; hidden: boolean; controls: React.ReactNode}) {
+  return (
+    <section className={`region${hidden ? ' off' : ''}`} id={`region-${id}`} role="tabpanel" aria-labelledby={`tab-${id}`}>
+      <a className="region-lbl d-only" href={href}>{title}</a>
+      <h2 className="hero-h">{sentence ?? <Skeleton lines={2} />}</h2>
+      {card?.gauge ? <HeroGauge now={card.gauge.now} next={card.gauge.next} h={h} /> : <Skeleton lines={1} />}
+      <div className="hero-ctl m-only">
+        {card?.gauge && <GaugeLegend now={card.gauge.now} next={card.gauge.next} />}
+        {controls}
+      </div>
+      <h3 className="hero-sub m-only">Yang menggerakkan</h3>
+      <div className="tiles">{tiles.map(t => <Tile key={t.label} t={t} />)}</div>
+      <span className="m-only"><NewsRow n={news} /></span>
+      <span className="d-only"><NewsRow n={news} compact /></span>
+    </section>
   );
 }
 
@@ -287,42 +350,12 @@ function Agenda({events}: {events: EventItem[]}) {
   );
 }
 
-/** One market in one punch: the sentence, why in two short lines, and where to read more. */
-function RecordLine({r}: {r?: RecordInfo}) {
-  if (!r) return null;
-  return (
-    <span className="caption record">
-      {r.enough ? `Prediksi 1 bln tepat ${r.pct}% (${r.n} prediksi terakhir)` : `Rekam jejak belum cukup (${r.n} dinilai, ${r.pending} menunggu 1 bln)`}
-    </span>
-  );
-}
-
-function MarketPunch({place, sentence, why, causes, news, asset, assetLabel, gauge, h, big, record, factors, children}: {
-  place: React.ReactNode; sentence: string | null | undefined; why: string[]; causes: number; news: string; asset: string; assetLabel: string;
-  gauge?: {now: number; next: number}; h: string; big?: boolean; record?: RecordInfo; factors?: Factor[]; children?: React.ReactNode}) {
-  return (
-    <div className={`punch${big ? ' big' : ''}`}>
-      <div className="hero-text">
-        <span className="caption">{place}</span>
-        {big ? <h1 className="h1">{sentence}</h1> : <h2 className="h2">{sentence}</h2>}
-        {why.length > 0 && <p className="why-line"><b>Kenapa:</b> {why.join(' ')}</p>}
-        <p className="punch-links">
-          <a href={news}>{causes ? `${causes} berita penyebab` : 'Berita penyebab'}</a>
-          <a href={`#/a/${asset}`}>Lihat {assetLabel}</a>
-        </p>
-        <RecordLine r={record} />
-      </div>
-      <div className="gauge-box">
-        {children}
-        {gauge ? <Gauge now={gauge.now} next={gauge.next} h={h} /> : <Skeleton lines={1} />}
-        {factors && <Factors items={factors} next={gauge?.next} h={h} />}
-      </div>
-    </div>
-  );
-}
-
 export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo | null}) {
   const [h, setH] = useState('1m');
+  const tFmt = useT();
+  const [region, setRegion] = useState<'ID' | 'US'>(() => {
+    try { return localStorage.getItem('arah.region') === 'US' ? 'US' : 'ID'; } catch { return 'ID'; }
+  });
   const b = useLoad(api.brief, [], onAuth);
   const pn = useLoad(api.panel, [], onAuth);
   const other = useLoad(() => (h === '1m' ? Promise.resolve(null) : api.simple(h)), [h], onAuth);
@@ -331,36 +364,45 @@ export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo 
   const ind = simple?.indonesia;
   if (b.error && !brief) return <p className="err">Data gagal dimuat. Muat ulang halaman.</p>;
   if (!brief) return <><div className="card"><Skeleton lines={3} /></div><div className="card"><Skeleton lines={4} /></div></>;
-  const causes = (c: string) => (brief.countries?.[c]?.events ?? []).length;
+  const pickRegion = (r: 'ID' | 'US') => { setRegion(r); try { localStorage.setItem('arah.region', r); } catch { /* private mode */ } };
   const us = simple?.abroad?.countries.find(c => c.country === 'US');
-  // Why: the analyst desk's own summary when the AI team ran, else the strongest reasons on the market's card.
-  const whyOf = (c: string, card?: SimpleCard | null): string[] => {
-    const desk = brief.countries?.[c]?.summary?.id;
-    if (desk) return [desk.split(/(?<=\.)\s/)[0]];
-    // Reasons that point the same way as the sentence come first: "tertekan" is explained by what presses.
-    const g = card?.gauge?.now ?? 0.5;
-    const want = g < 0.4 ? -1 : g > 0.6 ? 1 : 0;
-    const up = (card?.up_is ?? 1) >= 0 ? 1 : -1;
-    const score = (lean: number) => (want === 0 ? 0 : lean * up === want ? -1 : lean === 0 ? 0 : 1);
-    // A reason pointing against the sentence is left out rather than shown second: it would read as a contradiction.
-    return [...(card?.reasons ?? [])].filter(r => score(r.lean) <= 0).sort((x, y) => score(x.lean) - score(y.lean)).slice(0, 2).map(r => r.text.id);
+  const {pct} = tFmt;
+  const tilesOf = (c: 'ID' | 'US', card?: SimpleCard | null): TileData[] => {
+    const f = (pn.data?.factors[c] ?? []).map(x => ({
+      label: x.label.replace(/ (1 bln|1 mgg|hari ini)$/, ' · $1'),
+      value: x.value == null || (x.kind === 'idr' && !x.value) ? null
+        : x.kind === 'idr' ? `${x.value > 0 ? 'Beli' : 'Jual'} ${compact(Math.abs(x.value))}` : pct(x.value, 1),
+      side: SIDE_OF(x.side), href: x.href ?? '#/'}));
+    const dir = card?.next?.dir;
+    const model: TileData = {label: `Model ARAH · ${H_LABEL[h]}`, value: dir ? (dir === 'belum_jelas' ? 'Belum jelas' : DIRTAG[dir].label) : null,
+      side: card?.gauge ? zone(card.gauge.next) : null, href: c === 'ID' ? '#/a/IHSG' : '#/a/SPX'};
+    return [...f, model];
   };
+  const seg = <Seg label="Rentang prakiraan" value={h} onChange={setH} options={H_KEYS.map(k => ({key: k, text: H_LABEL[k]}))} />;
   const events = importantEvents([...(brief.events ?? [])].sort((a, c) => a.at - c.at));
   return (
     <>
-      {pn.data && !pn.data.profile && <RiskQuestion onDone={pn.reload} />}
-      <section className="card hero-stack" aria-label="Arah pasar hari ini">
-        <MarketPunch place={<>Indonesia · <Term k="ihsg" /></>} big sentence={simple?.headline ?? brief.headline.id} why={whyOf('ID', ind)} causes={causes('ID')}
-          news="#/berita/ID" asset="IHSG" assetLabel="IHSG" gauge={ind?.gauge} h={h} record={b.data?.record} factors={pn.data?.factors.ID}>
-          <div className="gauge-head">
-            <span>Arah pasar</span>
-            <Seg label="Rentang prakiraan" value={h} onChange={setH} options={H_KEYS.map(k => ({key: k, text: H_LABEL[k]}))} />
+      <section className="card hero2" aria-label="Arah pasar hari ini">
+        <div className="hero-tabs m-only" role="tablist" aria-label="Wilayah">
+          {(['ID', 'US'] as const).map(r => (
+            <button key={r} id={`tab-${r}`} type="button" role="tab" aria-selected={region === r} aria-controls={`region-${r}`}
+              onClick={() => pickRegion(r)}>{r === 'ID' ? 'Indonesia' : 'Amerika Serikat'}</button>
+          ))}
+        </div>
+        <div className="hero-bar d-only">
+          <Accuracy r={b.data?.record} />
+          <div className="hero-bar-r">
+            <span className="hg-legend inline"><span><i className="lg-dot" />Sekarang</span><span><i className="lg-ring" />Prakiraan</span></span>
+            {seg}
           </div>
-        </MarketPunch>
-        {simple?.headline_us && (
-          <MarketPunch place="Amerika Serikat" sentence={simple.headline_us} why={whyOf('US', us)} causes={causes('US')}
-            news="#/berita/US" asset="SPX" assetLabel="S&P 500" gauge={us?.gauge} h={h} factors={pn.data?.factors.US} />
-        )}
+        </div>
+        <div className="regions">
+          <RegionCol id="ID" title="Indonesia · IHSG" href="#/a/IHSG" sentence={simple?.headline ?? brief.headline.id} card={ind}
+            tiles={tilesOf('ID', ind)} news={pn.data?.news.ID} h={h} hidden={region !== 'ID'} controls={seg} />
+          <RegionCol id="US" title="Amerika Serikat · S&P 500" href="#/a/SPX" sentence={simple?.headline_us} card={us}
+            tiles={tilesOf('US', us)} news={pn.data?.news.US} h={h} hidden={region !== 'US'} controls={seg} />
+        </div>
+        <div className="m-only hero-acc"><Accuracy r={b.data?.record} /></div>
       </section>
 
       <section className="mcards" aria-label="Pasar utama">
@@ -375,6 +417,8 @@ export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo 
         {pn.data && <ValueCard title="Komoditas" rows={pn.data.commodities} period="harga · 1 bln" />}
         {pn.data && <ValueCard title="Makro" rows={pn.data.macro} period="nilai · 1 bln" />}
       </section>
+
+      {pn.data && !pn.data.profile && <RiskQuestion onDone={pn.reload} />}
 
       <div className={events.length ? 'home-grid' : ''}>
         <Watchlist />
