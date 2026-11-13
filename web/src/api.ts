@@ -85,7 +85,8 @@ export interface Track {
   validating: boolean; validated_at: number | null;
 }
 export interface Status {
-  version: string; data_at: number | null; data_errors: Record<string, string>; news_at: number | null;
+  version: string; revision?: string;
+  recs?: {at: number | null; screened: {ID: number; US: number} | null; missing?: {ID: number; US: number} | null}; data_at: number | null; data_errors: Record<string, string>; news_at: number | null;
   llm_enabled: boolean; llm_error: {kind: string} | null; models: {provider: string; quick: string; deep: string; fallback: string | null}; llm_last: {provider: string; fallback: boolean; at: number} | null; claude_calls_today: number;
   budget: {day: number; month: number; cap_day: number; cap_month: number; over: boolean};
   telegram_enabled: boolean; stockbit?: {configured: boolean; usable?: boolean; refresh_until?: number | null; error?: {kind: string} | null};

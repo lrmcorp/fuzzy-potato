@@ -7,6 +7,8 @@ services:
       dockerfile: deploy/Dockerfile
     restart: unless-stopped
     env_file: ../.env.vps
+    environment:
+      ARAH_REVISION: ${ARAH_REVISION:-unknown}
     volumes:
       - arah_data:/data
     networks:
