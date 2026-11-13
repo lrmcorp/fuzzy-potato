@@ -9,7 +9,8 @@ services:
     env_file: ../.env.vps
     environment:
       ARAH_REVISION: ${ARAH_REVISION:-unknown}
-      ARAH_PUBLIC_URL: https://arah.lnint.xyz
+      # Override with ARAH_PUBLIC_URL in .env.vps; deploy/vps-up.sh passes it through.
+      ARAH_PUBLIC_URL: ${ARAH_PUBLIC_URL:-https://arah.hasseedev.com}
     volumes:
       - arah_data:/data
     networks:
@@ -18,7 +19,7 @@ services:
     # No published ports: only the Caddy container on lnint-edge reaches arah:8787.
 
 networks:
-  # Shared with the Caddy container from lrmcorp/ln, which serves arah.lnint.xyz.
+  # Shared with the Caddy container from lrmcorp/ln, which serves arah.hasseedev.com.
   edge:
     name: lnint-edge
     external: true

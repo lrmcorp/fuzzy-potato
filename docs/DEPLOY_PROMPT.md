@@ -12,7 +12,7 @@ For any other Linux server, use `./setup.sh` as described in the README instead.
 
 ```text
 TASK
-Put the ARAH app online at https://arah.lnint.xyz and make every merge to `main` deploy by itself.
+Put the ARAH app online at https://arah.hasseedev.com and make every merge to `main` deploy by itself.
 When you finish: the dashboard asks for the owner's password over HTTPS, the Telegram bot answers /brief,
 and a push to `main` of lrmcorp/fuzzy-potato goes live through GitHub Actions without anyone logging in
 to the server.
@@ -21,12 +21,12 @@ HOW IT FITS TOGETHER
 - ARAH runs as one Docker container named `arah` (service `arah`, compose project `arah`) in ~/arah on the
   server. It publishes no ports. Its data lives in the Docker volume `arah_arah_data`.
 - The existing Caddy container from lrmcorp/ln reaches it as `arah:8787` over the network `lnint-edge`
-  and serves https://arah.lnint.xyz. That site block lives in lrmcorp/ln (deploy/Caddyfile.domain), because
+  and serves https://arah.hasseedev.com. That site block lives in lrmcorp/ln (deploy/Caddyfile.domain), because
   every ln deploy replaces that file on the server.
 - GitHub Actions in lrmcorp/fuzzy-potato (.github/workflows/deploy.yml) tests the code, copies the commit
   to ~/arah, writes ~/arah/.env.vps (mode 600) from repository secrets, builds and starts the container,
   waits for it to be healthy, then checks the public URL.
-- DNS: the A record arah.lnint.xyz -> 43.152.240.47 is already active. Do not add an AAAA record.
+- DNS: the A record arah.hasseedev.com -> 43.152.240.47 is already active. Do not add an AAAA record.
 
 VALUES YOU NEED FROM THE OWNER (never print them in logs or reports)
 - ARAH_PASSWORD        dashboard password chosen by the owner, 12+ characters, no single quote
@@ -42,7 +42,7 @@ STEPS
    > Actions. Under Secrets create: VPS_SSH_KEY, ARAH_PASSWORD, OPENROUTER_API_KEY, and the optional ones the
    owner gave you: CLAUDE_CODE_OAUTH_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID. Under Variables create VPS_DEPLOY_ENABLED = true.
 
-2. Caddy site. Merge the pull request in lrmcorp/ln that adds the `arah.lnint.xyz` site to
+2. Caddy site. Merge the pull request in lrmcorp/ln that adds the `arah.hasseedev.com` site to
    deploy/Caddyfile.domain. Its deploy workflow restarts Caddy. Until ARAH is running, the new site answers
    502; int.lnint.xyz and agent.lnint.xyz are not affected. Confirm the ln workflow run is green.
 
@@ -54,13 +54,13 @@ STEPS
            -> one container, "healthy", network lnint-edge, no published ports
        docker exec ln-demo-caddy-1 wget -qO- http://arah:8787/api/session
            -> JSON containing "auth_required":true
-       curl -sI https://arah.lnint.xyz | head -1
+       curl -sI https://arah.hasseedev.com | head -1
            -> HTTP/2 200
        ss -ltnp | grep 8787
            -> empty (the port is not open on the host)
        cat /home/ubuntu/arah/.deploy-revision
            -> the commit that GitHub shows as deployed
-   Then open https://arah.lnint.xyz, sign in with the owner's password, and wait about a minute for the first
+   Then open https://arah.hasseedev.com, sign in with the owner's password, and wait about a minute for the first
    summary. If Telegram is configured, send /brief to the bot and confirm a reply.
 
 5. Verify automatic deployment. Make any small merge to `main` (or re-run the workflow) and confirm that
@@ -130,6 +130,6 @@ login is needed to fetch it.
    cd /home/ubuntu/arah && bash deploy/vps-up.sh
    ```
 
-The site `arah.lnint.xyz` still comes from the Caddy container of `lrmcorp/ln`, so that repository's
+The site `arah.hasseedev.com` still comes from the Caddy container of `lrmcorp/ln`, so that repository's
 pull request must be merged for the address to work and to survive its next deploy. To update ARAH later,
 repeat steps 1 and 3.
