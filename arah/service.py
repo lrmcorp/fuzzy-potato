@@ -11,7 +11,7 @@ from .data.yahoo import load_bars
 from .db import DB
 from .forecast.backtest import grade, walk_forward
 from .forecast.engine import Forecast, direction_of, simulate, tilt_to_drift
-from .signals import both, build_facts, evidence_tilt, fmt_num, fmt_pct, snapshot
+from .signals import both, build_facts, evidence_tilt, fmt_pct, fmt_price, snapshot
 from .universe import DEFAULT_LEVELS, Asset
 
 MAX_TILT = 0.08
@@ -123,7 +123,7 @@ def conclusion_text(asset: Asset, f: Forecast, label: str, snap: dict | None = N
 
     def make(lang: str) -> str:
         i = 0 if lang == "id" else 1
-        lo, hi = fmt_num(f.q05, asset.decimals, lang), fmt_num(f.q95, asset.decimals, lang)
+        lo, hi = fmt_price(asset, f.q05, lang), fmt_price(asset, f.q95, lang)
         past = ""
         if trend and week is not None:
             past = (f"{asset.nm(lang)} {TREND_TEXT[trend][i]} ({fmt_pct(week, lang)} {'seminggu' if lang == 'id' else 'this week'}). ")
@@ -189,7 +189,7 @@ def build_view(db: DB, asset: Asset, horizon: str = "1w", insight: dict | None =
     val = validation(db, asset, label)
     view = {
         "key": asset.key, "name": asset.name, "name_en": asset.nm("en"), "klass": asset.klass, "country": asset.country,
-        "decimals": asset.decimals, "up_is": asset.up_is,
+        "decimals": asset.decimals, "unit": asset.unit, "up_is": asset.up_is,
         "horizon": label, "horizon_name": horizon_name(label),
         "snapshot": {k: v for k, v in snap.items() if k != "spark"},
         "forecast": final.to_dict() | {"p_up_quant": quant.p_up, "tilt_rule": rule_tilt, "tilt_llm": llm_tilt},

@@ -15,9 +15,15 @@ from .db import DB
 from .extras import ask_context, calc, weekly_report
 from .service import all_horizons, build_view
 from .signals import fmt_num
-from .universe import resolve
+from .universe import BY_KEY, resolve
 
 log = logging.getLogger("arah.telegram")
+
+
+def money(x: float, d: int, unit: str = "", lang: str = "id") -> str:
+    """1,234.56 with its currency in front, e.g. "Rp 18,228"."""
+    return f"{unit} {fmt_num(x, d, lang)}" if unit else fmt_num(x, d, lang)
+
 ARROW = {"up": "▲", "down": "▼", "flat": "◆"}
 DIR_WORD = {"id": {"up": "cenderung naik", "down": "cenderung turun", "flat": "belum jelas"},
             "en": {"up": "leans up", "down": "leans down", "flat": "unclear"}}
@@ -44,7 +50,7 @@ def format_view(view: dict, lang: str) -> str:
     if view.get("error"):
         return {"id": "Data untuk aset ini belum tersedia.", "en": "No data for this asset yet."}[lang]
     f, d = view["forecast"], view["decimals"]
-    lines = [f"{ARROW[view['direction']]} <b>{esc(view['name_en'] if lang == 'en' else view['name'])}</b>  {fmt_num(f['s0'], d, lang)}",
+    lines = [f"{ARROW[view['direction']]} <b>{esc(view['name_en'] if lang == 'en' else view['name'])}</b>  {money(f['s0'], d, view.get('unit', ''), lang)}",
              esc(view["summary"][lang]), ""]
     lines.append("<b>Kenapa</b>" if lang == "id" else "<b>Why</b>")
     for r in view["reasons"][:5]:
@@ -58,7 +64,7 @@ def format_view(view: dict, lang: str) -> str:
         lines.append(f"<b>{'Tingkat kewaspadaan' if lang == 'id' else 'Watch level'}: {esc(vg['name'][lang])}</b>")
     for level, p in sorted(f.get("touch", {}).items(), key=lambda x: float(x[0])):
         word = "menyentuh" if lang == "id" else "touching"
-        lines.append(f"{'Peluang' if lang == 'id' else 'Chance of'} {word} {fmt_num(float(level), d, lang)}: {p * 100:.0f}%")
+        lines.append(f"{'Peluang' if lang == 'id' else 'Chance of'} {word} {money(float(level), d, view.get('unit', ''), lang)}: {p * 100:.0f}%")
     val = view.get("validation")
     if val and val.get("grade"):
         note = {"validated": ("Arah dan rentang lolos uji historis.", "Direction and range passed the historical test."),
@@ -72,7 +78,8 @@ def format_view(view: dict, lang: str) -> str:
     return "\n".join(lines)
 
 
-MARK = {"good": "🟢", "bad": "🔴"}
+MARK = {"good": "🟢", "neutral": "⚪", "bad": "🔴"}
+VERDICT = {"good": ("Bagus", "Good"), "neutral": ("Netral", "Neutral"), "bad": ("Kurang bagus", "Not good")}
 
 
 def format_brief(brief: dict, lang: str) -> str:
@@ -122,7 +129,7 @@ def format_report(report: dict, lang: str) -> str:
 def format_calc(c: dict, lang: str) -> str:
     cur = c["currency"]
     src = ("kurs jual BCA" if c["source"] == "bca" else "kurs pasar") if lang == "id" else ("BCA selling rate" if c["source"] == "bca" else "market rate")
-    lines = [esc(c["summary"][lang]), f"{'Kurs' if lang == 'id' else 'Rate'}: {fmt_num(c['rate'], 2, lang)} ({src})",
+    lines = [esc(c["summary"][lang]), f"{'Kurs' if lang == 'id' else 'Rate'}: {money(c['rate'], 2, 'Rp', lang)} ({src})",
              (f"Sebulan lagi kira-kira {fmt_num(c['next_low'], 2, lang)} sampai {fmt_num(c['next_high'], 2, lang)} {cur}." if lang == "id"
               else f"In a month roughly {fmt_num(c['next_low'], 2, lang)} to {fmt_num(c['next_high'], 2, lang)} {cur}."),
              f"<b>{esc(c['advice'][lang])}</b>"]
@@ -131,8 +138,7 @@ def format_calc(c: dict, lang: str) -> str:
 
 def format_answer(a: dict, lang: str) -> str:
     conf = {"thin": ("tipis", "thin"), "fair": ("cukup", "fair"), "strong": ("kuat", "strong")}[a["confidence"]][0 if lang == "id" else 1]
-    head = f"{MARK[a['verdict']]} <b>{'Bagus' if a['verdict'] == 'good' else 'Kurang bagus'}</b>" if lang == "id" else \
-        f"{MARK[a['verdict']]} <b>{'Good' if a['verdict'] == 'good' else 'Not good'}</b>"
+    head = f"{MARK[a['verdict']]} <b>{VERDICT[a['verdict']][0 if lang == 'id' else 1]}</b>"
     lines = [f"{head} ({'keyakinan' if lang == 'id' else 'confidence'} {conf})", esc(a["answer"][lang])]
     lines += [f"• {esc(p['text'][lang])}" for p in a["points"]]
     if a.get("risk"):
@@ -150,11 +156,12 @@ def format_recs(recs: dict, market: str, lang: str) -> str:
     for c in cards:
         d = c["decimals"]
         plan = c["plan"]
-        out.append(f"<b>{esc(c['key'])}</b> {esc(c['name'])}  {fmt_num(c['price'], d, lang)}")
+        u = BY_KEY[c["key"]].unit if c["key"] in BY_KEY else ""
+        out.append(f"<b>{esc(c['key'])}</b> {esc(c['name'])}  {money(c['price'], d, u, lang)}")
         out += [f"{i}. {esc(s[lang])}" for i, s in enumerate(c["strengths"], 1)]
         out.append(("<b>Kenapa masih layak:</b> " if lang == "id" else "<b>Why still worth it:</b> ") + esc(c["why"][lang]))
-        out.append(f"{'Masuk' if lang == 'id' else 'Entry'} {fmt_num(plan['entry'][0], d, lang)} - {fmt_num(plan['entry'][1], d, lang)} | "
-                   f"Target {fmt_num(plan['targets'][0], d, lang)} | {'Batas rugi' if lang == 'id' else 'Stop'} {fmt_num(plan['stop'], d, lang)}")
+        out.append(f"{'Masuk' if lang == 'id' else 'Entry'} {money(plan['entry'][0], d, u, lang)} - {fmt_num(plan['entry'][1], d, lang)} | "
+                   f"Target {money(plan['targets'][0], d, u, lang)} | {'Batas rugi' if lang == 'id' else 'Stop'} {money(plan['stop'], d, u, lang)}")
         out.append(("Risiko: " if lang == "id" else "Risk: ") + esc(c["risks"][0][lang]))
         out.append("")
     return "\n".join(out)
@@ -285,8 +292,8 @@ class Bot:
         if not asset or level <= 0:
             return usage
         self.db.x("INSERT INTO alerts (asset, op, level, created_at) VALUES (?,?,?,?)", (asset.key, args[1], level, int(time.time())))
-        return (f"Peringatan dipasang: {asset.name} {args[1]} {fmt_num(level, asset.decimals, lang)}" if lang == "id"
-                else f"Alert set: {asset.name} {args[1]} {fmt_num(level, asset.decimals, lang)}")
+        return (f"Peringatan dipasang: {asset.name} {args[1]} {money(level, asset.decimals, asset.unit, lang)}" if lang == "id"
+                else f"Alert set: {asset.name} {args[1]} {money(level, asset.decimals, asset.unit, lang)}")
 
     async def poll_forever(self) -> None:
         if not self.settings.telegram_enabled:

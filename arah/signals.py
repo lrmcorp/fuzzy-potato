@@ -13,17 +13,19 @@ from .universe import BENCHMARK, BY_KEY, Asset
 
 
 def fmt_num(x: float, decimals: int = 2, lang: str = "id") -> str:
-    s = f"{x:,.{decimals}f}"
-    if lang == "id":
-        s = s.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
-    return s
+    """1,234.56 in both languages: the owner reads numbers this way."""
+    return f"{x:,.{decimals}f}"
+
+
+def fmt_price(asset, x: float, lang: str = "id") -> str:
+    """A price with its unit, e.g. "Rp 18,228" or "$ 7,591.63"; index points have none."""
+    unit = asset.unit
+    return f"{unit} {fmt_num(x, asset.decimals, lang)}" if unit else fmt_num(x, asset.decimals, lang)
 
 
 def fmt_pct(x: float, lang: str = "id", signed: bool = True) -> str:
     x = 0.0 if abs(x) < 0.05 else x  # no "-0.0%"
     s = f"{x:+.1f}" if signed else f"{x:.1f}"
-    if lang == "id":
-        s = s.replace(".", ",")
     return s + "%"
 
 
@@ -239,11 +241,11 @@ def build_facts(db: DB, asset: Asset, snaps: dict[str, dict] | None = None) -> l
         add("vol", 0, 0.3, "Pergerakan harian sedang lebih tenang dari biasanya.", "Daily swings are calmer than usual.")
 
     if s["from_hi"] > -1.5:
-        add("level", 0, 0.5, f"{pw} berada di dekat titik tertinggi setahun ({fmt_num(s['hi52'], asset.decimals)}).",
-            f"{pw_e} is near its one-year high ({fmt_num(s['hi52'], asset.decimals, 'en')}).")
+        add("level", 0, 0.5, f"{pw} berada di dekat titik tertinggi setahun ({fmt_price(asset, s['hi52'])}).",
+            f"{pw_e} is near its one-year high ({fmt_price(asset, s['hi52'], 'en')}).")
     elif s["from_lo"] < 1.5:
-        add("level", 0, 0.5, f"{pw} berada di dekat titik terendah setahun ({fmt_num(s['lo52'], asset.decimals)}).",
-            f"{pw_e} is near its one-year low ({fmt_num(s['lo52'], asset.decimals, 'en')}).")
+        add("level", 0, 0.5, f"{pw} berada di dekat titik terendah setahun ({fmt_price(asset, s['lo52'])}).",
+            f"{pw_e} is near its one-year low ({fmt_price(asset, s['lo52'], 'en')}).")
 
     drivers = list(DRIVERS.get(asset.key, []))
     if asset.klass == "stock":

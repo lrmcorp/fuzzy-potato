@@ -1,4 +1,4 @@
-"""The plain answer: is it good or not, now and next month, and why.
+"""The plain answer: good, neutral or not good, now and next month, and why.
 
 "Good" is always from the owner's side: a rupiah investor who may expand
 abroad. Rising stocks are good. A rising USD/IDR or CNY/IDR means a weaker
@@ -10,27 +10,47 @@ from .agents import get_insight
 from .data.bca import bca_rate
 from .db import DB
 from .service import build_view
-from .signals import both, fmt_num, fmt_pct, snapshot
+import math
+
+from .signals import both, fmt_pct, fmt_price, snapshot
 from .techniques import techniques
 from .universe import BY_KEY, Asset
 
 ABROAD = [("US", "SPX"), ("JP", "N225"), ("SG", "STI"), ("CN", "SSE")]
-STATE_NAMES = {"good": ("Bagus", "Good"), "bad": ("Kurang bagus", "Not good")}
-NEXT_NAMES = {"good": ("Bagus", "Good"), "bad": ("Kurang bagus", "Not good")}
+STATE_NAMES = {"good": ("Bagus", "Good"), "neutral": ("Netral", "Neutral"), "bad": ("Kurang bagus", "Not good")}
+NEXT_NAMES = STATE_NAMES
+# The owner's rule: a call needs at least a 60% chance on the owner's side to be "Bagus", and at most
+# 40% to be "Kurang bagus". Anything between is a coin toss with a slight lean, shown as "Netral".
+GOOD_AT, BAD_AT = 0.60, 0.40
+# Bumped when the summary's shape or rules change, so a stored one is rebuilt on the next start.
+SIMPLE_V = 2
 
 
-def price_now(snap: dict) -> int:
-    """+1 or -1, never 0: the direction of the last month, with the 50-day average as tie-break."""
+def price_now(snap: dict, asset: Asset) -> int:
+    """+1 up, -1 down, 0 when the last month's move is within half of a normal month's swing."""
     m = snap.get("chg1m") or 0.0
-    if abs(m) >= 0.05:
-        return 1 if m > 0 else -1
-    return 1 if snap["price"] >= (snap.get("ma50") or snap["price"]) else -1
+    s = snap.get("spark") or []
+    days = 30 if asset.days_per_week == 7 else 21
+    if len(s) > 21:
+        r = [math.log(b / a) for a, b in zip(s, s[1:]) if a > 0 and b > 0]
+        mu = sum(r) / len(r)
+        sd = math.sqrt(sum((x - mu) ** 2 for x in r) / max(len(r) - 1, 1))
+        quiet = 0.5 * sd * math.sqrt(days) * 100
+    else:
+        quiet = 1.0 if asset.klass == "fx" else 2.0
+    if abs(m) < quiet:
+        return 0
+    return 1 if m > 0 else -1
 
 
-def price_next(p_up: float) -> int:
-    """+1 or -1, never 0. The owner asked for a yes or no, so even a thin edge picks a side;
-    `strength` says how thin it is."""
-    return 1 if round(p_up, 2) >= 0.50 else -1
+def favorable(p_up: float, asset: Asset) -> float:
+    """Chance that the move is good for the owner: a rise for stocks, a fall for USD/IDR."""
+    return p_up if (asset.up_is or 1) > 0 else 1.0 - p_up
+
+
+def next_state(p_up: float, asset: Asset) -> str:
+    pf = round(favorable(p_up, asset), 2)
+    return "good" if pf >= GOOD_AT else "bad" if pf <= BAD_AT else "neutral"
 
 
 def strength(p_up: float) -> dict:
@@ -41,7 +61,8 @@ def strength(p_up: float) -> dict:
 
 
 def state_of(direction: int, asset: Asset) -> str:
-    return "good" if direction * (asset.up_is or 1) > 0 else "bad"
+    v = direction * (asset.up_is or 1)
+    return "good" if v > 0 else "bad" if v < 0 else "neutral"
 
 
 def _spark(db: DB, asset: Asset, snaps: dict) -> list[float]:
@@ -72,8 +93,9 @@ def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
     shown = bca["mid"] if bca else snap["price"]
     scale = shown / f["s0"] if f["s0"] else 1.0
     lo_px, hi_px = f["q05"] * scale, f["q95"] * scale
-    now_dir, next_dir = price_now(snap), price_next(f["p_up"])
-    now_state, next_state = state_of(now_dir, asset), state_of(next_dir, asset)
+    now_dir = price_now(snap, asset)
+    now_state, nxt = state_of(now_dir, asset), next_state(f["p_up"], asset)
+    next_dir = 1 if f["p_up"] >= 0.5 else -1
     fx = asset.klass == "fx"
     d = asset.decimals
 
@@ -81,9 +103,10 @@ def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
         i = 0 if lang == "id" else 1
         m = fmt_pct(snap["chg1m"] or 0, lang)
         if fx:
-            word = {1: ("Rupiah melemah", "The rupiah weakened"), -1: ("Rupiah menguat", "The rupiah strengthened")}[now_dir][i]
-            return f"{word}: {fmt_num(shown, d, lang)} ({m} {'sebulan' if i == 0 else 'this month'})."
-        word = {1: ("Naik", "Up"), -1: ("Turun", "Down")}[now_dir][i]
+            word = {1: ("Rupiah melemah", "The rupiah weakened"), -1: ("Rupiah menguat", "The rupiah strengthened"),
+                    0: ("Rupiah stabil", "The rupiah held steady")}[now_dir][i]
+            return f"{word}: {fmt_price(asset, shown, lang)} ({m} {'sebulan' if i == 0 else 'this month'})."
+        word = {1: ("Naik", "Up"), -1: ("Turun", "Down"), 0: ("Datar", "Flat")}[now_dir][i]
         return f"{word}: {m} {'dalam sebulan' if i == 0 else 'over the month'}."
 
     st = strength(f["p_up"])
@@ -91,7 +114,7 @@ def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
     def next_text(lang: str) -> str:
         i = 0 if lang == "id" else 1
         p = round(f["p_up"] * 100)
-        lo, hi = fmt_num(lo_px, d, lang), fmt_num(hi_px, d, lang)
+        lo, hi = fmt_price(asset, lo_px, lang), fmt_price(asset, hi_px, lang)
         # Always state the chance of the side that was picked, so the number matches the label.
         if fx:
             side = (("rupiah melemah", "the rupiah weakens") if next_dir > 0 else ("rupiah menguat", "the rupiah strengthens"))[i]
@@ -102,18 +125,22 @@ def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
         lead = (f"Peluang {side} {hw[0]} ke depan {chance}% (keyakinan {st['id']})",
                 f"Chance of {side} over the {hw[1]}: {chance}% ({st['en']} confidence)")[i]
         rng = (f"Kisaran wajar {lo} sampai {hi}.", f"Reasonable range {lo} to {hi}.")[i]
+        if nxt == "neutral":
+            rule = (" Di bawah 60%, jadi belum layak disebut bagus atau kurang bagus.",
+                    " Below 60%, so it is not enough to call either way.")[i]
+            return f"{lead}.{rule} {rng}"
         return f"{lead}. {rng}"
 
     # Lead with a reason that points somewhere; a bare "it moved x%" explains nothing.
     reasons = sorted(view["reasons"], key=lambda r: r["lean"] == 0)[:3]
     return {
-        "key": key, "name": asset.name, "name_en": asset.nm("en"), "decimals": d, "klass": asset.klass,
+        "key": key, "name": asset.name, "name_en": asset.nm("en"), "decimals": d, "klass": asset.klass, "unit": asset.unit,
         "price": shown, "chg1d": snap["chg1d"], "chg1m": snap["chg1m"], "bca": bca,
         # Daily closes for the card's chart, put on the same footing as the price shown above.
         "spark": [round(x * scale, max(d, 2)) for x in _spark(db, asset, snaps)],
         "now": {"state": now_state, "name": dict(zip(("id", "en"), STATE_NAMES[now_state])), "text": both(now_text)},
-        "next": {"state": next_state, "name": dict(zip(("id", "en"), NEXT_NAMES[next_state])), "text": both(next_text),
-                 "p_up": f["p_up"], "range": [lo_px, hi_px], "strength": st},
+        "next": {"state": nxt, "name": dict(zip(("id", "en"), NEXT_NAMES[nxt])), "text": both(next_text),
+                 "p_up": f["p_up"], "p_good": favorable(f["p_up"], asset), "range": [lo_px, hi_px], "strength": st},
         "why": reasons[0]["text"] if reasons else None,
         "reasons": reasons, "watch": view.get("watch"),
         "from_team": bool(ins), "grade": (view.get("validation") or {}).get("grade"),
@@ -125,14 +152,13 @@ def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
 
 
 def _blend(cards: list[dict], which: str) -> str:
-    """Majority of the countries; an even split is settled by the average chance or monthly move."""
-    score = sum(1 if c[which]["state"] == "good" else -1 for c in cards)
-    if score == 0:
-        if which == "next":
-            score = sum(c["next"]["p_up"] for c in cards) / len(cards) - 0.5
-        else:
-            score = sum(c["chg1m"] or 0 for c in cards)
-    return "good" if score >= 0 else "bad"
+    """Next: the average chance across the countries, under the same 60/40 rule as one market.
+    Now: good or not good only when a clear majority of the markets agree, otherwise neutral."""
+    if which == "next":
+        pf = round(sum(c["next"]["p_good"] for c in cards) / len(cards), 2)
+        return "good" if pf >= GOOD_AT else "bad" if pf <= BAD_AT else "neutral"
+    score = sum({"good": 1, "bad": -1}.get(c["now"]["state"], 0) for c in cards)
+    return "good" if score >= 2 else "bad" if score <= -2 else "neutral"
 
 
 def _abroad_text(lang: str, n: int, ups: int, downs: int) -> str:
@@ -142,7 +168,7 @@ def _abroad_text(lang: str, n: int, ups: int, downs: int) -> str:
 
 
 def build_simple(db: DB, snaps: dict, horizon: str = "1m") -> dict:
-    out: dict = {"horizon": horizon, "indonesia": card(db, "IHSG", snaps, horizon), "usd": card(db, "USDIDR", snaps, horizon),
+    out: dict = {"v": SIMPLE_V, "horizon": horizon, "indonesia": card(db, "IHSG", snaps, horizon), "usd": card(db, "USDIDR", snaps, horizon),
                  "cny": card(db, "CNYIDR", snaps, horizon)}
     countries = []
     for country, key in ABROAD:
@@ -152,13 +178,14 @@ def build_simple(db: DB, snaps: dict, horizon: str = "1m") -> dict:
             countries.append(c)
     if countries:
         now_state, next_state = _blend(countries, "now"), _blend(countries, "next")
-        ups = sum(1 for c in countries if c["now"]["state"] == "good")
-        downs = sum(1 for c in countries if c["now"]["state"] == "bad")
+        ups = sum(1 for c in countries if (c["chg1m"] or 0) > 0)
+        downs = len(countries) - ups
         n = len(countries)
+        p_good = sum(c["next"]["p_good"] for c in countries) / n
         out["abroad"] = {
             "now": {"state": now_state, "name": dict(zip(("id", "en"), STATE_NAMES[now_state])),
                     "text": both(lambda lang: _abroad_text(lang, n, ups, downs))},
-            "next": {"state": next_state, "name": dict(zip(("id", "en"), NEXT_NAMES[next_state]))},
+            "next": {"state": next_state, "name": dict(zip(("id", "en"), NEXT_NAMES[next_state])), "p_good": p_good},
             "countries": countries,
         }
     return out

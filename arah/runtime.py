@@ -18,9 +18,10 @@ from .data.news import refresh_news
 from .extras import flips
 from .data.yahoo import build_synthetic, refresh_many
 from .db import DB
+from .outlook import SIMPLE_V, build_simple
 from .recommend import build_recs
 from .service import record_forecasts, score_forecasts, validation
-from .signals import fmt_num
+from .signals import fmt_price
 from .telegram import Bot, format_brief, format_report
 from .universe import SYNTHETIC, BY_KEY, DEFAULT_LEVELS, GAUGES, MACRO, STOCKS
 
@@ -107,9 +108,9 @@ class Runtime:
             if (row["op"] == ">" and price > row["level"]) or (row["op"] == "<" and price < row["level"]):
                 self.db.x("UPDATE alerts SET triggered_at=?, last_price=? WHERE id=?", (int(time.time()), price, row["id"]))
                 d = asset.decimals
-                msg = (f"<b>Peringatan:</b> {asset.name} sekarang {fmt_num(price, d, lang)}, sudah melewati {fmt_num(row['level'], d, lang)}."
+                msg = (f"<b>Peringatan:</b> {asset.name} sekarang {fmt_price(asset, price, lang)}, sudah melewati {fmt_price(asset, row['level'], lang)}."
                        if lang == "id" else
-                       f"<b>Alert:</b> {asset.name} is now {fmt_num(price, d, lang)}, past {fmt_num(row['level'], d, lang)}.")
+                       f"<b>Alert:</b> {asset.name} is now {fmt_price(asset, price, lang)}, past {fmt_price(asset, row['level'], lang)}.")
                 await self.bot.send(msg)
 
     def ensure_level_alerts(self) -> None:
@@ -141,6 +142,17 @@ class Runtime:
             self.status["validating"] = False
             self.db.set("validated_at", int(time.time()))
 
+    def _refresh_simple(self) -> None:
+        """After an update that changed the summary rules, redo just the summary in the stored brief,
+        without the AI team, so the home page follows the new rules straight away."""
+        b = self.db.latest_report("brief")
+        if not b or (b.get("simple") or {}).get("v") == SIMPLE_V:
+            return
+        b["simple"] = build_simple(self.db, {})
+        b["simple_by_h"] = {h: build_simple(self.db, {}, h) for h in ("2m", "3m")}
+        self.db.save_report("brief", b)
+        log.info("summary rebuilt under the current rules")
+
     async def bootstrap(self) -> None:
         """First start: pull history, build the first brief, then test the model in the background."""
         try:
@@ -149,6 +161,8 @@ class Runtime:
                 await self.refresh_data(stocks=True)
             if not self.db.latest_report("brief", max_age=6 * 3600):
                 await self.run_brief("startup", push=False)
+            else:
+                await asyncio.to_thread(self._refresh_simple)
             await self.tick()
             # Also when the 2 and 3-month tests have never run (added after the first install).
             if time.time() - self.db.get("validated_at", 0) > 7 * 86400 or self.db.get("bt:IHSG:3m") is None:

@@ -135,7 +135,7 @@ export function FanChart({view}: {view: AssetView}) {
 
 /** Card chart: the last ~3 months of daily closes, then a cone out to next month's reasonable range.
  *  The cone is tinted by whether next month looks good or not for the owner. */
-export function MiniFan({values, range, state, label}: {values: number[]; range?: [number, number]; state?: 'good' | 'bad'; label: string}) {
+export function MiniFan({values, range, state, label}: {values: number[]; range?: [number, number]; state?: 'good' | 'neutral' | 'bad'; label: string}) {
   if (values.length < 2) return <div className="mini mini-empty" aria-hidden="true" />;
   const W = 320, H = 96, pad = 4;
   const histW = range ? W * 0.74 : W;
@@ -181,7 +181,7 @@ export function LiveChart({bars, decimals, label}: {bars: Bar[]; decimals: numbe
       grid: {vertLines: {visible: false}, horzLines: {color: grid}},
       rightPriceScale: {borderVisible: false},
       timeScale: {borderVisible: false, timeVisible: true, secondsVisible: false, tickMarkFormatter: (ts: number) => fmtTime(ts)},
-      localization: {timeFormatter: (ts: number) => fmtTime(ts), priceFormatter: (p: number) => p.toLocaleString(undefined, {minimumFractionDigits: decimals, maximumFractionDigits: decimals})},
+      localization: {timeFormatter: (ts: number) => fmtTime(ts), priceFormatter: (p: number) => p.toLocaleString('en-US', {minimumFractionDigits: decimals, maximumFractionDigits: decimals})},
       crosshair: {mode: CrosshairMode.Magnet},
       handleScroll: {vertTouchDrag: false},
     });

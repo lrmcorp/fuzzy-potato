@@ -18,7 +18,7 @@ from .data.yahoo import load_bars
 from .db import DB
 from .forecast.engine import simulate, tilt_to_drift
 from .service import MEAN_SHRINK, validation
-from .signals import build_facts, fmt_num, fmt_pct
+from .signals import build_facts, fmt_num, fmt_pct, fmt_price
 from .universe import Asset
 
 MAX_COMBINED_TILT = 0.08
@@ -306,8 +306,8 @@ def techniques(db: DB, asset: Asset, horizon: str = "1m") -> dict:
     ma50 = float(np.mean(c[-50:]))
     gap = (s0 / ma50 - 1) * 100
     if rv[-1]:
-        r = _text(f"{pw} {fmt_pct(gap)} dari rata-rata 50 hari, jauh di luar kebiasaan: cenderung kembali ke {fmt_num(ma50, d)}.",
-                  f"{pw_e} is {fmt_pct(gap, 'en')} from its 50-day average, far outside its usual range: it tends to drift back toward {fmt_num(ma50, d, 'en')}.")
+        r = _text(f"{pw} {fmt_pct(gap)} dari rata-rata 50 hari, jauh di luar kebiasaan: cenderung kembali ke {fmt_price(asset, ma50)}.",
+                  f"{pw_e} is {fmt_pct(gap, 'en')} from its 50-day average, far outside its usual range: it tends to drift back toward {fmt_price(asset, ma50, 'en')}.")
         exp = ma50 / s0 - 1
     else:
         r = _text(f"{pw} {fmt_pct(gap)} dari rata-rata 50 hari, masih dalam batas wajar: tidak ada tarikan balik.",
@@ -411,7 +411,7 @@ def techniques(db: DB, asset: Asset, horizon: str = "1m") -> dict:
     down = sum(1 for t in out if t["vote"] < 0)
     tested = [t for t in out if t["hist"] and t["hist"].get("n_eff", 0) >= 12]
     return {
-        "key": asset.key, "horizon": label, "steps": steps, "s0": s0, "decimals": d,
+        "key": asset.key, "horizon": label, "steps": steps, "s0": s0, "decimals": d, "unit": asset.unit,
         "techniques": out,
         "votes": {"up": up, "down": down, "none": len(out) - up - down},
         "tilt": round(tilt, 4),

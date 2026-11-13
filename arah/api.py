@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import hmac
 import logging
+import mimetypes
 import secrets
 import time
 from contextlib import asynccontextmanager
@@ -32,6 +33,7 @@ from .universe import BY_KEY, COUNTRIES, CRYPTO, COMMODITIES, DEFAULT_LEVELS, FX
 
 log = logging.getLogger("arah.api")
 STATIC = Path(__file__).parent / "static"
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 COOKIE = "arah_session"
 # The owner stays signed in on their own devices; each visit pushes the expiry out again.
 SESSION_DAYS = 180
@@ -172,7 +174,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
             if v.get("error"):
                 continue
             s = snapshot(db, a) or {}
-            rows.append({"key": a.key, "name": a.name, "name_en": a.nm("en"), "decimals": a.decimals, "up_is": a.up_is,
+            rows.append({"key": a.key, "name": a.name, "name_en": a.nm("en"), "decimals": a.decimals, "unit": a.unit, "up_is": a.up_is,
                          "price": v["forecast"]["s0"], "chg1d": v["snapshot"]["chg1d"], "chg1w": v["snapshot"]["chg1w"],
                          "direction": v["direction"], "p_up": v["forecast"]["p_up"], "q05": v["forecast"]["q05"],
                          "q95": v["forecast"]["q95"], "vigilance": v["vigilance"], "spark": s.get("spark", [])[-40:]})
@@ -310,7 +312,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
     @app.get("/api/alerts", dependencies=[Depends(auth)])
     def alerts():
         rows = db.q("SELECT * FROM alerts ORDER BY triggered_at IS NOT NULL, id DESC LIMIT 60")
-        return {"items": [dict(r) | {"name": BY_KEY[r["asset"]].name, "decimals": BY_KEY[r["asset"]].decimals}
+        return {"items": [dict(r) | {"name": BY_KEY[r["asset"]].name, "decimals": BY_KEY[r["asset"]].decimals, "unit": BY_KEY[r["asset"]].unit}
                           for r in rows if r["asset"] in BY_KEY]}
 
     @app.post("/api/alerts", dependencies=[Depends(auth)])

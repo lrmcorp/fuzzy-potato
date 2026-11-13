@@ -4,6 +4,7 @@
   --arah-accent: #0f6b63;
   --arah-good: #1a7f4b; --arah-good-bg: #e6f4ec;
   --arah-bad: #b42318; --arah-bad-bg: #fdecea;
+  --arah-neutral: #5b6472; --arah-neutral-bg: #eef0f3;
   --arah-ink: #1f2328; --arah-line: #e4e7eb; --arah-soft: #f6f7f9;
   --arah-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
   --arah-col: 62rem;
@@ -208,14 +209,16 @@ a.tile:hover { border-color: var(--arah-accent); color: var(--arah-ink); box-sha
 .chip-k { font-weight: 500; opacity: 0.8; }
 .chip-good { background: var(--arah-good-bg); color: var(--arah-good); }
 .chip-bad { background: var(--arah-bad-bg); color: var(--arah-bad); }
+.chip-neutral { background: var(--arah-neutral-bg); color: var(--arah-neutral); }
 .mini { display: block; width: 100%; height: 96px; }
 .mini-empty { height: 96px; background: var(--arah-soft); border-radius: 6px; }
 .mini-line { fill: none; stroke: var(--arah-ink); stroke-width: 1.75; stroke-linejoin: round; }
 .mini-area { fill: var(--arah-ink); opacity: 0.05; }
 .mini-cone.mini-good { fill: var(--arah-good); opacity: 0.18; }
 .mini-cone.mini-bad { fill: var(--arah-bad); opacity: 0.16; }
+.mini-cone.mini-neutral { fill: var(--arah-neutral); opacity: 0.16; }
 .mini-mid { fill: none; stroke-width: 1.5; stroke-dasharray: 4 3; }
-.mini-good-s { stroke: var(--arah-good); } .mini-bad-s { stroke: var(--arah-bad); }
+.mini-good-s { stroke: var(--arah-good); } .mini-bad-s { stroke: var(--arah-bad); } .mini-neutral-s { stroke: var(--arah-neutral); }
 .mini-now { stroke: var(--arah-line); stroke-width: 1; }
 .rows { list-style: none; margin: 0; padding: 0; }
 .rows a { display: grid; grid-template-columns: 1fr 96px 4rem; align-items: center; gap: 0.6rem; padding: 0.45rem 0;
@@ -257,6 +260,8 @@ a.tile:hover { border-color: var(--arah-accent); color: var(--arah-ink); box-sha
 .conclusion p { margin: 0.2rem 0; }
 .conclusion-good { background: var(--arah-good-bg); border-left-color: var(--arah-good); }
 .conclusion-bad { background: var(--arah-bad-bg); border-left-color: var(--arah-bad); }
+.conclusion-neutral { background: var(--arah-neutral-bg); border-left-color: var(--arah-neutral); }
+.conclusion-neutral .conclusion-v { color: var(--arah-neutral); }
 .conclusion-k { font-size: 0.8125rem; font-weight: 600; color: var(--color-text-secondary); }
 .conclusion-v { font-size: 1.5rem; font-weight: 700; line-height: 1.2; }
 .conclusion-good .conclusion-v { color: var(--arah-good); } .conclusion-bad .conclusion-v { color: var(--arah-bad); }
