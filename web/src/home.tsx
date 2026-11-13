@@ -353,13 +353,13 @@ function Agenda({events}: {events: EventItem[]}) {
 }
 
 export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo | null}) {
-  const [h, setH] = useState('1m');
+  const [h, setH] = useState('1d');
   const tFmt = useT();
   const [region, setRegion] = useState<'ID' | 'US'>(() => {
     try { return localStorage.getItem('arah.region') === 'US' ? 'US' : 'ID'; } catch { return 'ID'; }
   });
   const b = useLoad(api.brief, [], onAuth);
-  const pn = useLoad(api.panel, [], onAuth);
+  const pn = useLoad(() => api.panel(h), [h], onAuth);
   const other = useLoad(() => (h === '1m' ? Promise.resolve(null) : api.simple(h)), [h], onAuth);
   const brief = b.data?.brief;
   const simple: Simple | null | undefined = h === '1m' ? brief?.simple : other.data;
@@ -372,7 +372,7 @@ export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo 
   const tilesOf = (c: 'ID' | 'US', card?: SimpleCard | null): TileData[] => {
     const lvl = (v: number, d = 2) => num(v, v >= 1000 ? Math.min(d, 2) : d);
     const f = (pn.data?.factors[c] ?? []).map((x): TileData => {
-      const label = x.label.replace(/ (1 bln|1 mgg|hari ini)$/, ' · $1');
+      const label = x.label.replace(/ (\d bln|1 mgg|hari ini)$/, ' · $1');
       const base = {label, side: SIDE_OF(x.side), href: x.href ?? '#/'};
       if (x.kind === 'idr') {
         if (!x.value) return {...base, value: null};

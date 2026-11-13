@@ -5,6 +5,7 @@ Every number here comes from stored data. When a series is not available, its va
 """
 from __future__ import annotations
 
+import math
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -103,22 +104,30 @@ def top_news(db: DB) -> dict:
     return out
 
 
-def summary(db: DB) -> dict:
+def summary(db: DB, horizon: str = "1m") -> dict:
     return {"session": idx_session(), "foreign": foreign_flow(db), "commodities": commodities(db), "macro": macro(db),
-            "factors": gauge_factors(db), "profile": db.get("risk_profile"), "news": top_news(db)}
+            "factors": gauge_factors(db, horizon), "profile": db.get("risk_profile"), "news": top_news(db)}
 
 
-def gauge_factors(db: DB) -> dict:
+LOOKBACK = {"1d": "hari ini", "1w": "1 mgg", "1m": "1 bln", "2m": "2 bln", "3m": "3 bln"}
+
+
+def gauge_factors(db: DB, horizon: str = "1m") -> dict:
     """What moves the Menekan↔Mendukung gauge, each with its direction for the owner: +1 mendukung, -1 menekan,
     0 seimbang, None when there is no data. The model's forecast is added by the page from the gauge itself."""
-    from .outlook import price_now
+    from .outlook import PERIOD, price_now
 
-    def moved(key: str, label: str, good_when_up: int, period: str = "chg1m") -> dict:
+    h = horizon if horizon in PERIOD else "1m"
+    period, days, _ = PERIOD[h]
+    lb = LOOKBACK[h]
+
+    def moved(key: str, label: str, good_when_up: int) -> dict:
         a = BY_KEY[key]
         s = snapshot(db, a)
+        label = f"{label} {lb}"
         if not s or s.get(period) is None:
             return {"label": label, "side": None, "value": None, "kind": "pct", "href": f"#/a/{key}"}
-        return {"label": label, "side": price_now(s, a) * good_when_up, "value": s[period], "kind": "pct", "href": f"#/a/{key}",
+        return {"label": label, "side": price_now(s, a, h) * good_when_up, "value": s[period], "kind": "pct", "href": f"#/a/{key}",
                 "level": s["price"], "decimals": 2 if key == "US10Y" else a.decimals, "unit": "%" if key == "US10Y" else ""}
 
     flow = (db.get("sbt:foreign_day:IHSG") or {}).get("v") or {}
@@ -126,15 +135,16 @@ def gauge_factors(db: DB) -> dict:
     if not net and not flow.get("foreign_buy") and not flow.get("foreign_sell"):
         net = None  # Stockbit answers zeros before the session or for an empty day
     vix = snapshot(db, BY_KEY["VIX"])
-    v1w = vix.get("chg1w") if vix else None
+    v1w = vix.get(period) if vix else None
+    vix_big = 10 * math.sqrt(days / 5)  # a 10% week is ordinary for the VIX; scaled to the period
     return {
-        "ID": [moved("IHSG", "IHSG 1 bln", 1), moved("USDIDR", "USD/IDR 1 bln", -1),
+        "ID": [moved("IHSG", "IHSG", 1), moved("USDIDR", "USD/IDR", -1),
                {"label": "Asing hari ini", "side": None if net is None else (1 if net > 0 else -1 if net < 0 else 0),
                 "value": net, "kind": "idr", "href": "#/a/IHSG",
                 "buy": flow.get("foreign_buy") if net is not None else None, "sell": flow.get("foreign_sell") if net is not None else None}],
-        "US": [moved("SPX", "S&P 500 1 bln", 1),
+        "US": [moved("SPX", "S&P 500", 1),
                # Fear falling is good for stocks; a move under 10% in a week is ordinary for the VIX.
-               {"label": "VIX 1 mgg", "side": None if v1w is None else (-1 if v1w > 10 else 1 if v1w < -10 else 0),
+               {"label": f"VIX {lb}", "side": None if v1w is None else (-1 if v1w > vix_big else 1 if v1w < -vix_big else 0),
                 "value": v1w, "kind": "pct", "href": "#/a/VIX", "level": vix["price"] if vix else None, "decimals": 2, "unit": ""},
-               moved("US10Y", "Yield AS 10 thn 1 bln", -1)],
+               moved("US10Y", "Yield AS 10 thn", -1)],
     }

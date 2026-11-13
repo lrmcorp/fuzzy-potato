@@ -223,7 +223,7 @@ export const api = {
     call<{group: string; count: number}>('/api/alerts/batch', {method: 'POST', body: JSON.stringify({asset, levels, verdict_change})}),
   undoAlerts: (group: string) => call<{items: AlertItem[]}>(`/api/alerts/group/${encodeURIComponent(group)}`, {method: 'DELETE'}),
   pulse: () => call<PulseInfo>('/api/pulse'),
-  panel: () => call<PanelInfo>('/api/panel'),
+  panel: (h = '1m') => call<PanelInfo>(`/api/panel?h=${h}`),
   kurs: () => call<KursInfo>('/api/kurs'),
   pushPrefs: () => call<PushPrefs>('/api/push/prefs'),
   setPushPrefs: (p: Record<string, boolean>) => call<{prefs: Record<string, boolean>}>('/api/push/prefs', {method: 'POST', body: JSON.stringify(p)}),

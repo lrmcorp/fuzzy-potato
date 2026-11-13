@@ -733,3 +733,44 @@ def test_kurs_says_whether_the_move_is_normal_and_why(db):
     # CNY/IDR = USD/IDR / USD/CNY: the parts name both legs.
     assert "terhadap dolar" in cny["parts"]["text"] and "," in cny["parts"]["text"]
     assert usd["forecast"]["1w"]["q05"] < usd["forecast"]["1w"]["q95"]
+
+
+def test_horizon_changes_the_lookback_in_tiles_gauge_and_headline(db):
+    from arah import panel
+    from arah.outlook import gauge_now
+    from arah.signals import snapshot
+    from arah.universe import BY_KEY
+
+    c = TestClient(create_app(Settings(password="", secret="k" * 32, openrouter_key="", claude_bin="/nonexistent"), db, background=False))
+    s = snapshot(db, BY_KEY["IHSG"])
+    labels = {}
+    for h, lb, field in (("1d", "hari ini", "chg1d"), ("1w", "1 mgg", "chg1w"), ("2m", "2 bln", "chg2m"), ("3m", "3 bln", "chg3m")):
+        f = c.get(f"/api/panel?h={h}").json()["factors"]
+        assert f["ID"][0]["label"] == f"IHSG {lb}" and abs(f["ID"][0]["value"] - s[field]) < 1e-9
+        assert f["US"][1]["label"] == f"VIX {lb}"
+        labels[h] = f["ID"][0]["value"]
+        hd = c.get(f"/api/simple?h={h}").json()["headline"]
+        assert {"1d": "hari ini", "1w": "sepekan terakhir", "2m": "2 bulan terakhir", "3m": "3 bulan terakhir"}[h] in hd
+    assert len(set(labels.values())) > 1
+    # The same 1% move fills more of the gauge over a day than over three months.
+    snap = {"chg1d": 1.0, "chg3m": 1.0}
+    assert gauge_now(snap, BY_KEY["IHSG"], "1d") > gauge_now(snap, BY_KEY["IHSG"], "3m") > 0.5
+    assert panel.gauge_factors(db, "bogus")["ID"][0]["label"] == "IHSG 1 bln"
+
+
+def test_today_change_uses_yesterdays_close_not_the_chart_start(db):
+    from arah.signals import quote_info
+    from arah.universe import BY_KEY
+
+    a = BY_KEY["IHSG"]
+    bars = db.q("SELECT ts, c FROM bars WHERE symbol=? AND interval='1d' ORDER BY ts DESC LIMIT 2", (a.symbol,))
+    today, yday = bars[0], bars[1]
+    # Yahoo's chartPreviousClose for a 5-day chart: the close five days ago, 10% higher here.
+    db.x("UPDATE quotes SET price=?, prev_close=?, market_ts=?, source='Yahoo' WHERE symbol=?",
+         (today["c"], yday["c"] * 1.10, today["ts"] + 3600, a.symbol))
+    q = quote_info(db, a)
+    assert abs(q["prev"] - yday["c"]) < 1e-9 and abs(q["chg1d"] - (today["c"] / yday["c"] - 1) * 100) < 1e-9
+    # A bad daily bar for yesterday loses to the quote's own previous close when that implies the smaller move.
+    db.x("UPDATE bars SET c=? WHERE symbol=? AND interval='1d' AND ts=?", (yday["c"] * 0.8, a.symbol, yday["ts"]))
+    db.x("UPDATE quotes SET prev_close=? WHERE symbol=?", (today["c"] * 0.99, a.symbol))
+    assert abs(quote_info(db, a)["chg1d"] - (1 / 0.99 - 1) * 100) < 1e-6
