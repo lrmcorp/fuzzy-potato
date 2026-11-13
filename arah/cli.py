@@ -175,6 +175,19 @@ def selfcheck():
             ok(f"forecast IHSG {h}: chance of a rise {f['conclusion']['p_up'] * 100:.0f}%, {used} of 7 techniques used")
         except Exception as e:
             warn(f"forecast IHSG {h}: {str(e)[:120]}  [T9]")
+    from .recommend import recs_ok
+
+    r = db.latest_report("recs") or {}
+    sc, ms = r.get("screened") or {}, r.get("missing") or {}
+    if recs_ok(db, max_age=36 * 3600):
+        ok(f"stock screen: {sc.get('ID', 0)} ID and {sc.get('US', 0)} US stocks checked, "
+           f"{len(r.get('ID', []))} and {len(r.get('US', []))} picks")
+    else:
+        errs = (db.get("data_status") or {}).get("errors") or {}
+        stock_errs = [f"{k}: {v[:60]}" for k, v in errs.items() if k.endswith(".JK") or "." not in k][:2]
+        warn(f"stock screen empty or old (no price history for {ms.get('ID', '?')} ID / {ms.get('US', '?')} US stocks)"
+             + (f"; download errors e.g. {'; '.join(stock_errs)}" if stock_errs else "")
+             + ". ARAH retries every hour; to force now: docker compose -f deploy/compose.yaml restart arah  [T9]")
 
 
 @app.command()
