@@ -212,17 +212,19 @@ def selfcheck():
 
 @app.command("probe-stockbit")
 def probe_stockbit():
-    """Print the SHAPE of Stockbit's chart answers (field names, counts, first and last dates), to fix parsing.
-    Read-only, prints no token, price list or account data."""
+    """Print the SHAPE of Stockbit's answers for the terminal's data (field names, counts, dates and any
+    error message), to find the right parameters. Read-only; prints no token, prices or account data."""
     import time as _time
 
     from .data.stockbit import Stockbit, StockbitError
 
     sb = Stockbit(_rt().db)
+    today = _time.strftime("%Y-%m-%d")
+    year_ago = _time.strftime("%Y-%m-%d", _time.localtime(_time.time() - 370 * 86400))
 
     def shape(v, depth=0):
         if isinstance(v, dict):
-            return "{" + ", ".join(f"{k}: {shape(x, depth + 1) if depth < 2 else type(x).__name__}" for k, x in list(v.items())[:12]) + "}"
+            return "{" + ", ".join(f"{k}: {shape(x, depth + 1) if depth < 2 else type(x).__name__}" for k, x in list(v.items())[:14]) + "}"
         if isinstance(v, list):
             return f"list[{len(v)}]" + (f" of {shape(v[0], depth + 1)}" if v and depth < 2 else "")
         return type(v).__name__
@@ -234,19 +236,50 @@ def probe_stockbit():
         except (TypeError, ValueError):
             return str(x)[:25]
 
-    for code in ("IHSG", "BBCA"):
-        for tf in ("today", "1d", "1w", "1m", "3m", "1y", "3y", "5y"):
-            path = f"/charts/{code}/daily?timeframe={tf}&chart_type=PRICE_CHART_TYPE_CANDLE"
-            try:
-                data = asyncio.run(sb.get(path))
-            except StockbitError as e:
-                typer.echo(f"{code} {tf:>5}: error {str(e)[:80]}")
-                continue
-            lists = {k: v for k, v in data.items() if isinstance(v, list)} if isinstance(data, dict) else {}
-            span = "; ".join(f"{k}: {len(v)} rows, first {when((v[0] or {}).get('date') if isinstance(v[0], dict) else None)}, "
-                             f"last {when((v[-1] or {}).get('date') if isinstance(v[-1], dict) else None)}"
-                             for k, v in lists.items() if v)
-            typer.echo(f"{code} {tf:>5}: {shape(data)}" + (f"  | {span}" if span else ""))
+    def spans(data):
+        if not isinstance(data, dict):
+            return ""
+        out = []
+        for k, v in data.items():
+            if isinstance(v, list) and v and isinstance(v[0], dict):
+                d0 = next((v[0].get(f) for f in ("date", "time", "datetime", "created_at", "timestamp") if f in v[0]), None)
+                d1 = next((v[-1].get(f) for f in ("date", "time", "datetime", "created_at", "timestamp") if f in v[-1]), None)
+                out.append(f"{k}: {len(v)} rows" + (f", {when(d0)} .. {when(d1)}" if d0 is not None else ""))
+        return "; ".join(out)
+
+    tries = [
+        "/charts/BBCA/daily?timeframe=today&chart_type=PRICE_CHART_TYPE_CANDLE",
+        "/charts/BBCA/daily?timeframe=1d&chart_type=PRICE_CHART_TYPE_CANDLE",
+        "/charts/BBCA/daily?timeframe=1y&chart_type=PRICE_CHART_TYPE_CANDLE",
+        "/charts/BBCA/daily?timeframe=5y&chart_type=PRICE_CHART_TYPE_CANDLE",
+        f"/company-price-feed/historical/summary/BBCA?period=HS_PERIOD_DAILY&start_date={year_ago}&end_date={today}&limit=50&page=1",
+        "/company-price-feed/historical/summary/BBCA?limit=50&page=1",
+        "/order-trade/running-trade/chart/BBCA?period=RT_PERIOD_LAST_1_DAY&investor_type=INVESTOR_TYPE_ALL&market_board=BOARD_TYPE_REGULAR",
+        "/marketdetectors/BBCA",
+        "/marketdetectors/BBCA?transaction_type=TRANSACTION_TYPE_NET&market_board=BOARD_TYPE_REGULAR&investor_type=INVESTOR_TYPE_ALL&limit=25",
+        "/marketdetectors/BBCA?transaction_type=TRANSACTION_TYPE_NET&market_board=MARKET_BOARD_REGULER&investor_type=INVESTOR_TYPE_ALL&limit=25",
+        f"/order-trade/broker/distribution?date={today}&symbol=BBCA&investor_type=INVESTOR_TYPE_ALL&market_board=BOARD_TYPE_REGULAR",
+        "/findata-view/foreign-domestic/v1/chart-data/BBCA",
+        "/findata-view/foreign-domestic/v1/chart-data/BBCA?market_type=MARKET_TYPE_REGULAR&period=PERIOD_RANGE_1M",
+        "/insider/company/majorholder?symbols=BBCA&page=1&limit=10",
+        "/stream/v3/symbol/BBCA?limit=10",
+        "/stream/v3/symbol/BBCA?category=STREAM_CATEGORY_ALL&limit=10",
+    ]
+    for path in tries:
+        label = path.split("?")[0].replace("BBCA", "{code}") + ("?" + path.split("?")[1][:70] if "?" in path else "")
+        try:
+            status, body = asyncio.run(sb.probe(path))
+        except StockbitError as e:
+            typer.echo(f"ERR  {label}\n     {str(e)[:120]}")
+            continue
+        msg = ""
+        if isinstance(body, dict):
+            msg = str(body.get("message") or body.get("error") or "")[:140]
+            data = body.get("data", body)
+        else:
+            data = body
+        typer.echo(f"{status}  {label}" + (f"\n     message: {msg}" if msg else "")
+                   + f"\n     shape: {shape(data)[:400]}" + (f"\n     rows: {spans(data)}" if spans(data) else ""))
 
 
 @app.command()
