@@ -4,7 +4,8 @@ import {api, type MarketRow, type RecCard, type Simple} from './api';
 import {openAlertSheet} from './alertsheet';
 import {useLoad} from './hooks';
 import {useT} from './i18n';
-import {ChangeText, Icon, Seg, Skeleton, SourceLine, Sparkline, VerdictTag} from './ui';
+import {ChangeText, Icon, Seg, Skeleton, SourceLine, Sparkline, Term, VerdictTag} from './ui';
+import type {RiskProfile} from './api';
 
 const SEGS = [
   {key: 'pilihan', text: 'Pilihan ARAH'}, {key: 'saham', text: 'Saham'}, {key: 'indeks', text: 'Indeks'},
@@ -178,7 +179,7 @@ function PickCard({c, paused}: {c: RecCard; paused: boolean}) {
         <>
           <p className="body" style={{margin: 0}}>Target 1 · {horizon(c)} <b className="chg-up">{pct((c.plan.targets[0] / c.price - 1) * 100, 1)}</b> · Rugi maks <b className="chg-down">{pct((c.plan.stop / c.price - 1) * 100, 1)}</b></p>
           <dl className="pick-facts">
-            <div><dt>Modal 1 {c.country === 'ID' ? 'lot' : 'lembar'}</dt><dd>{minCap(c)}</dd></div>
+            <div><dt>Modal 1 {c.country === 'ID' ? <Term k="lot">lot</Term> : 'lembar'}</dt><dd>{minCap(c)}</dd></div>
             <div><dt>Risiko : hasil</dt><dd>{rrText(c, num)}</dd></div>
             <div><dt>Transaksi/hari</dt><dd>{compact(c.liquidity, c.currency)}</dd></div>
           </dl>
@@ -218,9 +219,18 @@ function Picks({onAuth, paused}: {onAuth: () => void; paused: boolean}) {
   const recs = useLoad(api.recs, [], onAuth);
   if (!recs.data) return <div className="card"><Skeleton lines={4} /></div>;
   const d = recs.data;
+  const setProfile = async (p: RiskProfile) => { await api.setProfile(p); recs.reload(); };
+  const profileBar = (
+    <div className="profile-bar">
+      <span className="caption">Urutan untuk profil risiko</span>
+      <Seg label="Profil risiko" value={d.profile ?? 'sedang'} onChange={v => setProfile(v as RiskProfile)}
+        options={[{key: 'hati-hati', text: 'Hati-hati'}, {key: 'sedang', text: 'Sedang'}, {key: 'berani', text: 'Berani'}]} />
+    </div>
+  );
   if (d.ID.length + d.US.length === 0) return <div className="card"><p className="body" style={{margin: 0}}>Hari ini belum ada saham yang lolos. ARAH menunggu.</p></div>;
   return (
     <>
+      {profileBar}
       {MARKETS.map(m => {
         const list = d[m.key];
         const h = list[0] ? horizon(list[0]) : '~1 bln';
@@ -233,8 +243,8 @@ function Picks({onAuth, paused}: {onAuth: () => void; paused: boolean}) {
                   <table className="ptable">
                     <thead><tr>
                       <th>Saham</th><th>Status</th><th className="num">Harga ({m.cur})</th>
-                      <th className="num">Target 1 · {h}</th><th className="num">Rugi maks</th><th className="num">Risiko : hasil</th>
-                      <th className="num">Modal 1 {m.key === 'ID' ? 'lot' : 'lembar'}</th><th className="num">Transaksi/hari</th><th />
+                      <th className="num"><Term k="target">Target 1</Term> · {h}</th><th className="num"><Term k="rugi">Rugi maks</Term></th><th className="num">Risiko : hasil</th>
+                      <th className="num">Modal 1 {m.key === 'ID' ? <Term k="lot">lot</Term> : 'lembar'}</th><th className="num">Transaksi/hari</th><th />
                     </tr></thead>
                     <tbody>{list.map(c => <PickRow key={c.key} c={c} paused={paused} />)}</tbody>
                   </table>

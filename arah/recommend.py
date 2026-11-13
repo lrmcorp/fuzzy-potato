@@ -307,6 +307,28 @@ def picks_summary(db: DB, last: int = 30) -> dict:
                        "ret": (r["close_price"] / r["price"] - 1) * 100 if r["close_price"] else None} for r in closed[:10]]}
 
 
+PROFILES = ("hati-hati", "sedang", "berani")
+
+
+def order_picks(cards: list[dict], profile: str | None) -> list[dict]:
+    """The owner's answer to "how much swing can you take" orders the list; it never adds or removes a stock.
+    hati-hati: smallest loss to the stop first, then the most traded. berani: the largest room to target 1 first.
+    sedang or unanswered: ARAH's own score (the screen's order)."""
+    def loss(c):
+        p = c.get("plan") or {}
+        return (c["price"] - p["stop"]) / c["price"] if p.get("stop") and c.get("price") else 1.0
+
+    def room(c):
+        p = c.get("plan") or {}
+        return (p["targets"][0] / c["price"] - 1) if p.get("targets") and c.get("price") else 0.0
+
+    if profile == "hati-hati":
+        return sorted(cards, key=lambda c: (round(loss(c), 3), -(c.get("liquidity") or 0)))
+    if profile == "berani":
+        return sorted(cards, key=lambda c: -room(c))
+    return cards
+
+
 def recs_ok(db: DB, max_age: int = 20 * 3600) -> bool:
     """A recent screen that actually looked at stocks."""
     r = db.latest_report("recs", max_age=max_age)

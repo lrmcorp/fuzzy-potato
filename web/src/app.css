@@ -425,3 +425,22 @@ a:hover { text-decoration: underline; }
 .story-tags { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 2px; }
 .tick { font-size: var(--fs-caption); font-weight: 600; color: var(--ink); border: 1px solid var(--divider); border-radius: var(--r-tag); padding: 1px 6px; }
 .tick:hover { text-decoration: none; border-color: var(--control-border); }
+
+/* Fase 6: glossary, gauge factors, risk profile */
+.term-wrap { position: relative; display: inline-block; }
+.term { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; border-bottom: 1px dotted currentColor; position: relative; }
+.term::after { content: ""; position: absolute; inset: -12px -6px; }  /* a 44px tap area around a small word */
+.term:focus-visible { outline: 2px solid var(--focus, #2563eb); outline-offset: 2px; border-radius: 2px; }
+.term-q { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 7px; font-size: 10px; font-weight: 700;
+  background: var(--track); color: var(--ink-2, var(--muted)); }
+.term-pop { position: absolute; z-index: 40; top: calc(100% + 8px); left: 0; width: min(280px, 80vw); background: var(--surface); color: var(--ink);
+  border: 1px solid var(--divider); border-radius: var(--r-control); box-shadow: 0 8px 24px rgba(15, 23, 42, .12); padding: 10px 12px;
+  font-size: var(--fs-caption); line-height: 1.45; font-weight: 400; text-align: left; white-space: normal; }
+th .term-pop, .num .term-pop { left: auto; right: 0; }
+.factors { list-style: none; margin: var(--s5) 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-caption); }
+.factors li { display: flex; justify-content: space-between; gap: var(--s2); min-height: 22px; align-items: center; }
+.factor-side { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; white-space: nowrap; }
+.risk-q { display: flex; flex-direction: column; gap: var(--s3); }
+.risk-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); }
+.risk-opts .btn { flex-direction: column; min-height: 64px; gap: 2px; white-space: normal; text-align: center; }
+.profile-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); justify-content: space-between; }
