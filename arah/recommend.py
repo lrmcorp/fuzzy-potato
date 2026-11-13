@@ -187,10 +187,19 @@ async def build_recs(db: DB, top: int = 5) -> dict:
     # Broker and foreign flow for Indonesian stocks, when the owner's Stockbit session is set up.
     sbts: dict[str, dict] = {}
     sb = Stockbit(db)
-    if sb.status().get("usable"):
-        for a in STOCKS:
-            if a.country == "ID":
-                sbts[a.key] = {"bandar": await sbterm.bandar(db, sb, a.key), "foreign": await sbterm.foreign(db, sb, a.key)}
+    fetched = 0
+    for a in STOCKS:
+        if a.country != "ID":
+            continue
+        cached = {k: (db.get(f"sbt:{k}:{a.key}") or {}) for k in ("bandar", "foreign")}
+        fresh = all(time.time() - c.get("_at", 0) < 12 * 3600 for c in cached.values())
+        # A burst of terminal requests at startup is what made Stockbit refuse the session once: refresh at
+        # most six stocks per run and use what is cached for the rest.
+        if not fresh and fetched < 6 and sb.status().get("usable"):
+            sbts[a.key] = {"bandar": await sbterm.bandar(db, sb, a.key), "foreign": await sbterm.foreign(db, sb, a.key)}
+            fetched += 1
+        else:
+            sbts[a.key] = {k: c.get("v") for k, c in cached.items()}
     out: dict = {"at": int(time.time()), "ID": [], "US": [], "screened": {"ID": 0, "US": 0}, "missing": {"ID": 0, "US": 0}}
     for a, fd in zip(STOCKS, funds):
         try:
