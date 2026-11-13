@@ -10,7 +10,8 @@ from .agents import get_insight
 from .data.bca import bca_rate
 from .db import DB
 from .service import build_view
-from .signals import both, fmt_num, fmt_pct
+from .signals import both, fmt_num, fmt_pct, snapshot
+from .techniques import techniques
 from .universe import BY_KEY, Asset
 
 ABROAD = [("US", "SPX"), ("JP", "N225"), ("SG", "STI"), ("CN", "SSE")]
@@ -43,13 +44,28 @@ def state_of(direction: int, asset: Asset) -> str:
     return "good" if direction * (asset.up_is or 1) > 0 else "bad"
 
 
-def card(db: DB, key: str, snaps: dict) -> dict | None:
+def _spark(db: DB, asset: Asset, snaps: dict) -> list[float]:
+    snap = snaps.get(asset.key) or snapshot(db, asset) or {}
+    return snap.get("spark", [])
+
+
+HORIZON_WORDS = {"1m": ("sebulan", "next month"), "2m": ("2 bulan", "2 months"), "3m": ("3 bulan", "3 months")}
+
+
+def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
     asset = BY_KEY[key]
     ins = get_insight(db, key)
-    view = build_view(db, asset, "1m", insight=ins, with_chart=False, snaps=snaps)
+    view = build_view(db, asset, horizon, insight=ins, with_chart=False, snaps=snaps)
     if view.get("error"):
         return None
-    snap, f = view["snapshot"], view["forecast"]
+    snap, f = view["snapshot"], dict(view["forecast"])
+    # The conclusion of all techniques replaces the single model's odds and range.
+    tech = None
+    try:
+        tech = techniques(db, asset, horizon)
+        f.update({k: tech["conclusion"][k] for k in ("p_up", "q05", "q95")})
+    except ValueError:
+        pass
     # For currencies the number on screen is the bank's rate, the one the owner actually pays. The
     # forecast keeps its shape and is re-based onto it: Yahoo's rupiah quote jumps about 1% between hours.
     bca = bca_rate(db, key)
@@ -82,8 +98,9 @@ def card(db: DB, key: str, snaps: dict) -> dict | None:
         else:
             side = (("naik", "a rise") if next_dir > 0 else ("turun", "a fall"))[i]
         chance = p if next_dir > 0 else 100 - p
-        lead = (f"Peluang {side} sebulan ke depan {chance}% (keyakinan {st['id']})",
-                f"Chance of {side} over the next month: {chance}% ({st['en']} confidence)")[i]
+        hw = HORIZON_WORDS.get(horizon, HORIZON_WORDS["1m"])
+        lead = (f"Peluang {side} {hw[0]} ke depan {chance}% (keyakinan {st['id']})",
+                f"Chance of {side} over the {hw[1]}: {chance}% ({st['en']} confidence)")[i]
         rng = (f"Kisaran wajar {lo} sampai {hi}.", f"Reasonable range {lo} to {hi}.")[i]
         return f"{lead}. {rng}"
 
@@ -91,7 +108,9 @@ def card(db: DB, key: str, snaps: dict) -> dict | None:
     reasons = sorted(view["reasons"], key=lambda r: r["lean"] == 0)[:3]
     return {
         "key": key, "name": asset.name, "name_en": asset.nm("en"), "decimals": d, "klass": asset.klass,
-        "price": shown, "chg1m": snap["chg1m"], "bca": bca,
+        "price": shown, "chg1d": snap["chg1d"], "chg1m": snap["chg1m"], "bca": bca,
+        # Daily closes for the card's chart, put on the same footing as the price shown above.
+        "spark": [round(x * scale, max(d, 2)) for x in _spark(db, asset, snaps)],
         "now": {"state": now_state, "name": dict(zip(("id", "en"), STATE_NAMES[now_state])), "text": both(now_text)},
         "next": {"state": next_state, "name": dict(zip(("id", "en"), NEXT_NAMES[next_state])), "text": both(next_text),
                  "p_up": f["p_up"], "range": [lo_px, hi_px], "strength": st},
@@ -99,6 +118,9 @@ def card(db: DB, key: str, snaps: dict) -> dict | None:
         "reasons": reasons, "watch": view.get("watch"),
         "from_team": bool(ins), "grade": (view.get("validation") or {}).get("grade"),
         "touch": f["touch"] if key == "USDIDR" and not bca else {},
+        "horizon": horizon,
+        "votes": tech["votes"] if tech else None,
+        "techniques": [{"key": t["key"], "name": t["name"], "vote": t["vote"]} for t in tech["techniques"]] if tech else [],
     }
 
 
@@ -119,11 +141,12 @@ def _abroad_text(lang: str, n: int, ups: int, downs: int) -> str:
     return f"Of {n} markets watched, {ups} rose and {downs} fell this month."
 
 
-def build_simple(db: DB, snaps: dict) -> dict:
-    out: dict = {"indonesia": card(db, "IHSG", snaps), "usd": card(db, "USDIDR", snaps), "cny": card(db, "CNYIDR", snaps)}
+def build_simple(db: DB, snaps: dict, horizon: str = "1m") -> dict:
+    out: dict = {"horizon": horizon, "indonesia": card(db, "IHSG", snaps, horizon), "usd": card(db, "USDIDR", snaps, horizon),
+                 "cny": card(db, "CNYIDR", snaps, horizon)}
     countries = []
     for country, key in ABROAD:
-        c = card(db, key, snaps)
+        c = card(db, key, snaps, horizon)
         if c:
             c["country"] = country
             countries.append(c)

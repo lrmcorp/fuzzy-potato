@@ -128,6 +128,7 @@ async def build_brief(db: DB, settings: Settings, slot: str = "manual", use_llm:
         "headline": (team or {}).get("headline") or rule_headline(world, usd),
         "outlook": (team or {}).get("outlook"),
         "simple": build_simple(db, snaps),
+        "simple_by_h": {h: build_simple(db, snaps, h) for h in ("2m", "3m")},
         "events": events_for_brief(db, (team or {}).get("desks")),
         "foreign": (((team or {}).get("desks") or {}).get("ID") or {}).get("foreign"),
         "report": weekly_report(db),

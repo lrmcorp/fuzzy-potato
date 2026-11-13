@@ -142,6 +142,32 @@ Telegram: `/brief`, `/tanya <question>` (or just type the question), `/hitung 10
 
 Briefs go out at 07:30, 12:00, 16:30, 20:00 and 05:00 WIB, plus a weekly outlook on Sunday 19:00.
 
+## Live prices and the multi-technique forecast
+
+- **Live chart.** Each asset page opens with today's minute bars. Crypto comes from Binance's public market data
+  (realtime). Indonesian stocks and indices come from your own Stockbit session when one is configured (realtime,
+  with the order book); otherwise from Yahoo, about 15 minutes behind. Everything else uses Yahoo minute bars.
+- **Forecast for 1, 2 or 3 months.** Seven techniques each give a view: statistical simulation, trend, mean
+  reversion, seasonality (the same weeks in the last ten years), similar past patterns (the 20 closest earlier
+  moments), fundamentals and macro, and news with the AI analysts. Every technique that can be replayed on past
+  prices is tested on that asset and horizon, and it only gets weight in proportion to how much it beat luck.
+  The conclusion moves the simulation's odds by at most 8 points. The chart draws the combined range and the paths
+  implied by trend, seasonality and similar patterns.
+
+### Stockbit session (optional, realtime IDX)
+
+ARAH uses the session API read-only: chart and order-book paths only, checked before any token is sent. The same
+API can place orders and move cash, so use a Stockbit account that is not linked to a brokerage or cash account.
+
+1. In a private browser window, sign in at stockbit.com.
+2. Open DevTools (F12) > Application > Cookies > `https://stockbit.com`, copy the value of `credentialStorage`.
+3. Close the window without signing out, and do not use this session anywhere else: every refresh replaces
+   both tokens, so two users of one session log each other out.
+4. Put the value in the settings as `STOCKBIT_SESSION` and restart. Settings shows whether it works.
+
+The session lasts about a week without use and renews itself while ARAH runs. This is an unofficial API and may
+conflict with Stockbit's terms; automated use could get the account flagged. ARAH asks at most once a second.
+
 ## Data and its limits
 
 - Prices come from Yahoo Finance and are delayed by about 10 to 15 minutes for IDX.

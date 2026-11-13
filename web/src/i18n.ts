@@ -2,6 +2,10 @@ import {createContext, useContext} from 'react';
 import type {L, Lang} from './api';
 
 const S = {
+  refresh: ['Perbarui', 'Refresh'], q_id_short: ['Saham Indonesia (IHSG)', 'Indonesian stocks (IHSG)'],
+  range_next: ['Kisaran bulan depan', 'Next month range'], abroad_foot: ['Bursa AS, Jepang, Singapura, China', 'US, Japan, Singapore, China markets'],
+  legend_good: ['= menguntungkan Anda', '= works for you'], legend_bad: ['= kurang menguntungkan', '= works against you'],
+  more_detail: ['Data lain', 'More data'],
   nav_today: ['Ringkasan', 'Summary'], nav_fx: ['Kurs', 'Currencies'], nav_stocks: ['Saham', 'Stocks'],
   nav_world: ['Dunia', 'World'], nav_track: ['Rekam jejak', 'Track record'], nav_settings: ['Atur', 'Settings'],
   main_nav: ['Navigasi utama', 'Main navigation'],
@@ -32,6 +36,38 @@ const S = {
   calc_bad: ['Isi jumlah rupiah lebih dari nol.', 'Enter a rupiah amount above zero.'],
   rate_bca: ['kurs jual BCA', 'BCA selling rate'], rate_market: ['kurs pasar', 'market rate'], rate: ['Kurs', 'Rate'],
   in_month: ['Sebulan lagi kira-kira', 'In a month roughly'], to: ['sampai', 'to'],
+  h_1m: ['1 bulan', '1 month'], h_2m: ['2 bulan', '2 months'], h_3m: ['3 bulan', '3 months'],
+  in_1m: ['1 bulan lagi', 'In 1 month'], in_2m: ['2 bulan lagi', 'In 2 months'], in_3m: ['3 bulan lagi', 'In 3 months'],
+  range_1m: ['Kisaran wajar 1 bulan', '1-month range'], range_2m: ['Kisaran wajar 2 bulan', '2-month range'],
+  range_3m: ['Kisaran wajar 3 bulan', '3-month range'],
+  forecast_for: ['Prakiraan untuk', 'Forecast for'],
+  live_h: ['Hari ini', 'Today'], live_rt: ['Realtime · {src}', 'Realtime · {src}'],
+  live_delay: ['Tertunda sekitar {m} menit', 'About {m} minutes delayed'],
+  live_off: ['Harga hari ini belum bisa diambil.', 'Today\'s prices could not be fetched.'],
+  live_closed: ['Belum ada transaksi hari ini.', 'No trades yet today.'],
+  orderbook: ['Antrean beli dan jual', 'Order book'], bid: ['Beli', 'Bid'], offer: ['Jual', 'Offer'],
+  bid_lots: ['Lot beli', 'Bid lots'], offer_lots: ['Lot jual', 'Offer lots'],
+  foreign_net_today: ['Asing bersih hari ini', 'Foreign net today'],
+  forecast_h: ['Prakiraan', 'Forecast'], proj_title: ['Arah grafik ke depan', 'Where the chart may go'],
+  conclusion: ['Kesimpulan', 'Conclusion'], day_n: ['Hari bursa ke-{n}', 'Trading day {n}'],
+  rupiah_weaker: ['rupiah melemah', 'the rupiah weakening'], rupiah_stronger: ['rupiah menguat', 'the rupiah strengthening'],
+  v_up: ['naik', 'up'], v_down: ['turun', 'down'], v_none: ['netral', 'no view'],
+  v_up_long: ['harga naik', 'a rise'], v_down_long: ['harga turun', 'a fall'],
+  concl_line: ['Peluang {side}: {p}% (keyakinan {conf}).', 'Chance of {side}: {p}% ({conf} confidence).'],
+  concl_range: ['Titik tengah {mid}, kisaran wajar {lo} sampai {hi}.', 'Midpoint {mid}, reasonable range {lo} to {hi}.'],
+  concl_votes: ['{up} teknik condong naik, {down} condong turun, {none} netral.', '{up} techniques lean up, {down} lean down, {none} have no view.'],
+  techs_h: ['Hasil tiap teknik', 'What each technique says'],
+  techs_lead: ['Teknik yang terbukti lebih baik dari tebakan pada aset ini mendapat bobot lebih besar dalam kesimpulan.',
+    'Techniques that beat guessing on this asset get more say in the conclusion.'],
+  tested_line: ['Teruji: benar {hit}% vs {chance}% kebetulan, dari sekitar {n} periode', 'Tested: right {hit}% vs {chance}% by chance, over about {n} periods'],
+  short_trend: ['Tren', 'Trend'], short_season: ['Musiman', 'Seasonal'], short_analog: ['Serupa', 'Similar'],
+  sb_off: ['belum diatur (harga IDX tertunda sekitar 15 menit)', 'not set (IDX prices about 15 minutes delayed)'],
+  sb_on: ['aktif, realtime; sesi diperbarui sendiri, paling lambat {d}', 'on, realtime; the session renews itself, at the latest by {d}'],
+  sb_expired: ['sesi habis: login ulang di stockbit.com dan perbarui STOCKBIT_SESSION', 'session expired: sign in again at stockbit.com and update STOCKBIT_SESSION'],
+  rare: ['Jarang memberi sinyal, belum cukup kejadian untuk diuji', 'Rarely gives a signal; too few cases to test'],
+  untested: ['Belum bisa diuji pada data lama', 'Cannot be replayed on past data'],
+  weight_line: ['bobot {w}%', 'weight {w}%'],
+  short_h: ['Jangka pendek (jam sampai minggu)', 'Short term (hours to weeks)'],
   q_id: ['Indonesia', 'Indonesia'], q_abroad: ['Luar negeri', 'Abroad'],
   q_usd: ['Rupiah terhadap dolar AS', 'Rupiah against the US dollar'], q_cny: ['Rupiah terhadap yuan (RMB)', 'Rupiah against the yuan (RMB)'],
   now: ['Sekarang', 'Now'], next_month: ['Bulan depan', 'Next month'], my_view: ['Menurut ARAH', "ARAH's view"],
@@ -39,7 +75,7 @@ const S = {
   sub_id: ['Diukur dari IHSG, indeks seluruh saham Indonesia.', 'Measured by the IHSG, the index of all Indonesian stocks.'],
   sub_abroad: ['Diukur dari bursa AS, Jepang, Singapura dan China.', 'Measured by the US, Japan, Singapore and China stock markets.'],
   sub_fx: ['Bagus berarti rupiah menguat, jadi biaya ke luar negeri lebih murah.', 'Good means a stronger rupiah, so going abroad costs less.'],
-  c_US: ['Amerika Serikat', 'United States'], c_JP: ['Jepang', 'Japan'], c_SG: ['Singapura', 'Singapore'], c_CN: ['China', 'China'],
+  c_ID: ['Indonesia', 'Indonesia'], c_US: ['Amerika Serikat', 'United States'], c_JP: ['Jepang', 'Japan'], c_SG: ['Singapura', 'Singapore'], c_CN: ['China', 'China'],
   by_team: ['Alasan dari tim analis AI.', 'Reasons from the AI analyst team.'], by_rules: ['Alasan dari data pasar.', 'Reasons from market data.'],
   more: ['Lainnya', 'More'], updating: ['Ringkasan lama. Data baru sedang disiapkan.', 'This summary is old. New data is being prepared.'],
   show_numbers: ['Lihat angka pasar dunia', 'See world market numbers'],
@@ -137,7 +173,9 @@ export const LangCtx = createContext<Lang>('id');
 export function useT() {
   const lang = useContext(LangCtx);
   const t = (key: Key, vars?: Record<string, string | number>) => {
-    let s: string = S[key][lang === 'id' ? 0 : 1];
+    const pair = S[key] as readonly [string, string] | undefined;
+    // An unknown key (a country code the server added later, say) shows the code instead of breaking the page.
+    let s: string = pair ? pair[lang === 'id' ? 0 : 1] : String(key).replace(/^c_/, '');
     for (const [k, v] of Object.entries(vars ?? {})) s = s.replace(`{${k}}`, String(v));
     return s;
   };

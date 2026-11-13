@@ -28,8 +28,10 @@ export interface Country {name: L; summary: L | null; mood: number | null; event
 export type State = 'good' | 'bad';
 export interface SimpleCard {
   key: string; name: string; name_en: string; decimals: number; klass: string; country?: string; price: number;
+  chg1d?: number | null; chg1m?: number | null; spark?: number[];
   now: {state: State; name: L; text: L}; next: {state: State; name: L; text: L; p_up: number; range: [number, number]};
   why: L | null; reasons: Reason[]; watch: L | null; from_team: boolean; grade: Validation['grade'] | null;
+  votes?: {up: number; down: number; none: number} | null; horizon?: string;
   touch: Record<string, number>; bca: {currency: string; buy: number; sell: number; at: number} | null;
 }
 export interface EventItem {at: number; country: string; title?: string; what?: L; why?: L; source: 'calendar' | 'news'}
@@ -37,7 +39,24 @@ export interface Report {days: number; total: number; right: number; wrong: numb
 export interface Answer {verdict: State; confidence: 'thin' | 'fair' | 'strong'; answer: L; points: Reason[]; risk: L | null}
 export interface Calc {currency: string; amount_idr: number; rate: number; source: 'bca' | 'market'; rate_at: number | null; now: number;
   next_low: number; next_high: number; plan: 'now' | 'wait' | 'split'; advice: L; summary: L}
+export interface Technique {
+  key: string; name: L; vote: number; strength: number; exp_ret: number | null; target: number | null; reason: L;
+  hist: {n: number; n_eff: number; hit: number | null; chance: number | null} | null; weight: number; path: number[] | null;
+}
+export interface Forecast {
+  key: string; name: string; name_en: string; klass: string; up_is: number; horizon: string; horizon_name: L; steps: number;
+  s0: number; decimals: number; techniques: Technique[]; votes: {up: number; down: number; none: number}; tilt: number;
+  conclusion: {p_up: number; q05: number; q25: number; q50: number; q75: number; q95: number; band: Band[]};
+  tested: number; history: {t: number; c: number}[];
+}
+export interface Bar {t: number; o: number; h: number; l: number; c: number; v: number}
+export interface LiveData {
+  key: string; source: 'stockbit' | 'binance' | 'yahoo'; realtime: boolean; bars: Bar[]; last: number; prev: number | null;
+  chg_pct: number | null; delay_min?: number; at: number; note?: L; decimals?: number;
+  book?: {bids: {price: number; lots: number}[]; offers: {price: number; lots: number}[]; foreign_net: number | null};
+}
 export interface Simple {
+  horizon?: string;
   indonesia: SimpleCard | null; usd: SimpleCard | null; cny: SimpleCard | null;
   abroad?: {now: {state: State; name: L; text: L}; next: {state: State; name: L}; countries: SimpleCard[]};
 }
@@ -68,7 +87,8 @@ export interface Status {
   version: string; data_at: number | null; data_errors: Record<string, string>; news_at: number | null;
   llm_enabled: boolean; llm_error: {kind: string} | null; models: {provider: string; quick: string; deep: string; fallback: string | null}; llm_last: {provider: string; fallback: boolean; at: number} | null; claude_calls_today: number;
   budget: {day: number; month: number; cap_day: number; cap_month: number; over: boolean};
-  telegram_enabled: boolean; schedule: {slot: string; time: string}[]; timezone: string;
+  telegram_enabled: boolean; stockbit?: {configured: boolean; usable?: boolean; refresh_until?: number | null; error?: {kind: string} | null};
+  schedule: {slot: string; time: string}[]; timezone: string;
 }
 export interface AlertItem {id: number; asset: string; name: string; decimals: number; op: string; level: number;
   triggered_at: number | null; last_price: number | null}
@@ -99,6 +119,9 @@ export const api = {
   asset: (key: string, horizon: string) => call<AssetView>(`/api/asset/${encodeURIComponent(key)}?horizon=${encodeURIComponent(horizon)}`),
   analyze: (key: string) => call(`/api/asset/${encodeURIComponent(key)}/analyze`, {method: 'POST'}),
   recs: () => call<Recs>('/api/recs'),
+  forecast: (key: string, h: string) => call<Forecast>(`/api/forecast/${encodeURIComponent(key)}?h=${h}`),
+  live: (key: string) => call<LiveData>(`/api/live/${encodeURIComponent(key)}`),
+  simple: (h: string) => call<Simple>(`/api/simple?h=${h}`),
   track: () => call<Track>('/api/track'),
   status: () => call<Status>('/api/status'),
   settings: () => call<{lang: Lang; levels: Record<string, number[]>; assets: {key: string; name: string}[]}>('/api/settings'),

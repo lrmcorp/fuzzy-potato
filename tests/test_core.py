@@ -135,3 +135,46 @@ def test_calendar_keeps_high_impact_and_merges_twins():
     assert [e["title"] for e in events] == ["CPI m/m, Core CPI m/m", "BOJ Policy Rate"]
     assert events[0]["country"] == "US" and "inflasi" in events[0]["why"]["id"].lower()
     assert pick({"oops": 1}) == []
+
+
+def test_stockbit_session_parsing_and_read_only_guard():
+    import json
+    from urllib.parse import quote
+
+    from arah.data.stockbit import is_read_path, parse_session, token_exp
+
+    def jwt(exp):
+        import base64
+        body = base64.urlsafe_b64encode(json.dumps({"exp": exp}).encode()).decode().rstrip("=")
+        return f"eyJhbGciOiJSUzI1NiJ9.{body}.c2ln"
+
+    cookie = quote(json.dumps({"state": {"access": {"token": jwt(100)}, "refresh": {"token": jwt(200)}}}))
+    s = parse_session(cookie)
+    assert token_exp(s["access"]) == 100 and token_exp(s["refresh"]) == 200
+    assert parse_session(jwt(300)) == {"access": "", "refresh": jwt(300)}
+    assert parse_session("not a token") is None
+    assert is_read_path("/charts/BBCA/daily?timeframe=1d")
+    assert is_read_path("/company-price-feed/v2/orderbook/companies/BBCA")
+    for bad in ("/order/buy", "/charts/../order/buy", "/charts/%2e%2e/order", "/login/refresh"):
+        assert not is_read_path(bad)
+
+
+def test_technique_helpers_vote_sensibly():
+    import numpy as np
+
+    from arah.techniques import _analog_at, _analog_index, _revert_votes, _trend_votes, _weight
+
+    up = np.exp(np.linspace(0, 1, 400)) * 100
+    tv, _ = _trend_votes(up)
+    assert tv[-1] == 1 and tv[100] == 0  # no vote before the 200-day average exists
+    base = np.full(300, 100.0) * np.exp(np.random.default_rng(1).normal(0, 0.01, 300))
+    stretched = np.r_[base, base[-1] * np.linspace(1, 1.25, 8)[1:]]
+    assert _revert_votes(stretched)[0][-1] == -1  # far above its 50-day average: expect a pull back
+    assert _revert_votes(base)[0][-1] == 0
+    c = 100 * np.exp(np.cumsum(np.random.default_rng(2).normal(0, 0.01, 900)))
+    vote, strength, med, paths = _analog_at(c, _analog_index(c), len(c) - 1, 21)
+    assert vote in (-1, 0, 1) and len(paths) == 20 and all(len(p) == 22 for p in paths)
+    assert _weight({"n_eff": 40, "hit": 0.60, "chance": 0.52}, 0) > 0
+    assert _weight({"n_eff": 40, "hit": 0.75, "chance": 0.75}, 0) == 0  # right only as often as luck
+    assert _weight({"n_eff": 5, "hit": 0.9, "chance": 0.5}, 0) == 0
+    assert _weight(None, 0.25) == 0.25

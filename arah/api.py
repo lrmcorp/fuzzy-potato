@@ -19,11 +19,14 @@ from .agents import analyze_asset, ask, get_insight
 from .extras import ask_context, calc, weekly_report
 from .config import BRIEF_SCHEDULE, DEFAULT_HORIZONS, Settings, get_settings, parse_horizon
 from .data.news import headlines
-from .data.yahoo import refresh_many
+from .data.yahoo import fetch_fundamentals, refresh_many
+from .live import Live
+from .outlook import build_simple
+from .techniques import techniques
 from .db import DB
 from .llm import budget_state, claude_calls_today
 from .runtime import Runtime
-from .service import all_horizons, build_view, track_record, validation
+from .service import all_horizons, build_view, horizon_name, track_record, validation
 from .signals import snapshot
 from .universe import BY_KEY, COUNTRIES, CRYPTO, COMMODITIES, DEFAULT_LEVELS, FX, INDICES, STOCKS, resolve
 
@@ -78,6 +81,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
     # Sessions are signed with the password mixed in, so changing the password signs every device out.
     secret = hmac.new(secret.encode(), settings.password.encode(), hashlib.sha256).hexdigest()
     rt = Runtime(db, settings)
+    live = Live(db)
     tasks: list[asyncio.Task] = []
     login_fails: dict[str, list[float]] = {}
 
@@ -174,6 +178,38 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
                          "q95": v["forecast"]["q95"], "vigilance": v["vigilance"], "spark": s.get("spark", [])[-40:]})
         return {"group": group, "horizon": horizon, "rows": rows}
 
+    @app.get("/api/live/{key}", dependencies=[Depends(auth)])
+    async def live_prices(key: str):
+        a = asset_or_404(key)
+        try:
+            return await live.get(a)
+        except Exception as e:
+            log.warning("live data failed for %s: %s", a.key, e)
+            raise HTTPException(503, "live prices unavailable right now")
+
+    @app.get("/api/forecast/{key}", dependencies=[Depends(auth)])
+    async def forecast(key: str, h: str = Query("1m", pattern="^[1-9][0-9]?[dwm]$")):
+        a = asset_or_404(key)
+        h = horizon_or_400(h, a)
+        if a.klass == "stock":
+            await fetch_fundamentals(db, a.symbol)
+        try:
+            out = await asyncio.to_thread(techniques, db, a, h)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        out["name"], out["name_en"], out["up_is"], out["klass"] = a.name, a.nm("en"), a.up_is, a.klass
+        out["horizon_name"] = horizon_name(h)
+        return out
+
+    @app.get("/api/simple", dependencies=[Depends(auth)])
+    def simple(h: str = Query("1m", pattern="^[123]m$")):
+        b = db.latest_report("brief") or {}
+        if h == "1m" and b.get("simple"):
+            return b["simple"]
+        if (b.get("simple_by_h") or {}).get(h):
+            return b["simple_by_h"][h]
+        return build_simple(db, {}, h)
+
     @app.get("/api/asset/{key}", dependencies=[Depends(auth)])
     async def asset(key: str, horizon: str = "1w"):
         a = asset_or_404(key)
@@ -251,6 +287,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
                 "news_at": db.get("news_at"), "llm_enabled": settings.llm_enabled, "llm_error": db.get("llm_error"),
                 "models": settings.llm_names, "llm_last": db.get("llm_last"), "claude_calls_today": claude_calls_today(db),
                 "budget": budget_state(db, settings), "telegram_enabled": settings.telegram_enabled,
+                "stockbit": live.stockbit.status(),
                 "schedule": [{"slot": s, "time": t} for s, t in BRIEF_SCHEDULE], "timezone": settings.timezone}
 
     @app.get("/api/settings", dependencies=[Depends(auth)])

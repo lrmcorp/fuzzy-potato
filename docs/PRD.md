@@ -615,6 +615,12 @@ Indonesia desk, Telegram alerts when an answer changes, an exchange calculator, 
 box ("Ask ARAH"), and `setup.sh`, a one-command VPS setup with a systemd service. The systemd step and Telegram
 delivery could not be run in the build environment.
 
+### Charts and multi-technique forecast (added 2026-11-13)
+Asset pages open with a live minute chart (Binance for crypto, the owner's Stockbit session for IDX when set, Yahoo
+otherwise) and a 1, 2 or 3-month forecast that combines seven techniques, each tested on the asset's own history
+and weighted by its edge over chance. The summary cards follow the same 1, 2 or 3-month filter. The Stockbit path
+follows the idx project's documented API and was not run against Stockbit (no session in the build environment).
+
 ### Changes from the PRD, with reasons
 | PRD | Built | Why |
 |---|---|---|
