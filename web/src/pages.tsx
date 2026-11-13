@@ -309,8 +309,7 @@ export function Login({onDone}: {onDone: () => void}) {
     <main className="login">
       <form className="login-card" onSubmit={e => { e.preventDefault(); void submit(); }}>
         <header className="login-brand">
-          <span className="lrm-mark full" role="img" aria-label="Liando Reyfort Management" />
-          <h1 className="login-title">ARAH <span className="brand-by">by LRM</span></h1>
+          <img className="login-logo" src="/arah-logo.png" alt="ARAH by LRM Corporation" width={280} height={122} />
           <p className="note">{t('login_title')}</p>
         </header>
         <TextInput type="password" label={t('password')} value={pw} onChange={setPw} autoComplete="current-password" hasAutoFocus

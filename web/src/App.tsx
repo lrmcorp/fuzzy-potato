@@ -34,7 +34,11 @@ const PHONE = [
 const MOVED: Record<string, string> = {'/saham': '/pasar/saham', '/kurs': '/pasar/kurs', '/hitung': '/pasar', '/dunia': '/berita'};
 
 function Logo() {
-  return <a className="logo" href="#/" aria-label="ARAH by LRM Corporation, ke Ringkasan">ARAH</a>;
+  return (
+    <a className="logo" href="#/" aria-label="ARAH by LRM Corporation, ke Ringkasan">
+      <img src="/arah-wordmark.png" alt="" width={84} height={28} />
+    </a>
+  );
 }
 
 /** The header search: type to see tickers and "Tanya ARAH"; the / key focuses it from anywhere. */
