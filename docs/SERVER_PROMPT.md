@@ -46,7 +46,7 @@ SERVER
 - Port 80 dan 443 dipegang kontainer Caddy ln-demo-caddy-1 dari repo lrmcorp/ln. Jangan pasang web server
   lain dan jangan buka port lain.
 - DNS arah.lnint.xyz -> 43.152.240.47 sudah aktif.
-- Koneksi keluar yang dipakai: github.com, registry.npmjs.org, pypi.org, Docker Hub, query1.finance.yahoo.com,
+- Koneksi keluar yang dipakai: github.com, registry.npmjs.org, pypi.org, Docker Hub, query1 dan query2.finance.yahoo.com, api.frankfurter.dev,
   news.google.com, www.cnbcindonesia.com, www.bca.co.id, nfs.faireconomy.media, openrouter.ai,
   data-api.binance.vision, exodus.stockbit.com, api.telegram.org.
 
@@ -135,7 +135,11 @@ MASALAH (perbaiki, lalu jalankan ulang LANGKAH 1; baris VALUES boleh dibiarkan .
        Jika ada "CDN refused this server (HTTP 403)", Stockbit menolak alamat server ini. Itu bukan masalah
        yang bisa diperbaiki di server; laporkan ke pemilik. ARAH tetap jalan dengan harga tertunda.
      - Jangan mencoba token atau akun lain, dan jangan menjalankan alat Stockbit lain dengan sesi yang sama.
-[T9] Grafik live atau prakiraan gagal untuk satu aset.
+[T9] "Yahoo refused this server (429)": Yahoo membatasi alamat server. ARAH berhenti memanggil Yahoo
+     sendiri (15 menit, berlipat sampai 2 jam) supaya blokirnya lepas; kurs memakai kurs harian ECB
+     dan grafik live memakai harga penutupan harian selama itu. Jangan restart berulang: setiap start
+     memanggil Yahoo lagi. Tunggu, lalu ulangi selfcheck.
+     Grafik live atau prakiraan gagal untuk satu aset.
      - Ulangi pemeriksaan setelah 2 menit (sumber gratis kadang membatasi permintaan):
        docker compose -f /home/ubuntu/arah/deploy/compose.yaml exec -T arah arah selfcheck
      - "live BTC" gagal terus: cek curl -sI https://data-api.binance.vision/api/v3/ping dari server.

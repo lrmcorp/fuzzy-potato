@@ -139,8 +139,14 @@ def selfcheck():
     from .techniques import techniques
     from .universe import BY_KEY
 
+    from .data.yahoo import GATE
+
     rt = _rt()
     db = rt.db
+    if GATE.paused_until():
+        typer.echo("WARN Yahoo refused this server (429) and ARAH is pausing its Yahoo calls until "
+                   f"{_time.strftime('%H:%M', _time.localtime(GATE.paused_until()))}. Do not restart to retry: "
+                   "it clears by itself. Currencies use ECB daily rates meanwhile.  [T9]")
     keys = ["IHSG", "BBCA", "USDIDR", "USDCNY", "SPX", "BTC"]
     asyncio.run(refresh_many(db, [BY_KEY[k].symbol for k in keys]))
     ok = lambda m: typer.echo(f"OK   {m}")

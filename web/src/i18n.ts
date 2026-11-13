@@ -48,6 +48,7 @@ const S = {
   range_3m: ['Kisaran wajar 3 bulan', '3-month range'],
   forecast_for: ['Prakiraan untuk', 'Forecast for'],
   live_h: ['Hari ini', 'Today'], live_rt: ['Realtime · {src}', 'Realtime · {src}'],
+  live_daily: ['Harga penutupan harian', 'Daily closes'],
   live_delay: ['Tertunda sekitar {m} menit', 'About {m} minutes delayed'],
   live_off: ['Harga hari ini belum bisa diambil.', 'Today\'s prices could not be fetched.'],
   live_closed: ['Belum ada transaksi hari ini.', 'No trades yet today.'],

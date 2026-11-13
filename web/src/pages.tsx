@@ -436,7 +436,8 @@ function LivePanel({k, decimals: fallback, klass}: {k: string; decimals: number;
       <div className="live-head">
         <h2 id="live-h" className="block-h">{t('live_h')}</h2>
         <span className={`live-badge ${data.realtime ? 'is-live' : ''}`}>
-          {data.realtime ? t('live_rt', {src: data.source === 'stockbit' ? 'Stockbit' : 'Binance'}) : t('live_delay', {m: data.delay_min ?? 15})}
+          {data.realtime ? t('live_rt', {src: data.source === 'stockbit' ? 'Stockbit' : 'Binance'})
+            : data.source === 'daily' ? t('live_daily') : t('live_delay', {m: data.delay_min ?? 15})}
         </span>
       </div>
       <p className="live-price">

@@ -56,14 +56,35 @@ class Live:
             except (httpx.HTTPError, ValueError, KeyError) as e:
                 log.warning("binance live failed for %s: %s", asset.key, e)
         if out is None:
-            out = await self._yahoo(asset)
+            try:
+                out = await self._yahoo(asset)
+            except (YahooError, httpx.HTTPError, ValueError, KeyError) as e:
+                # Yahoo refused or is paused: show the stored daily closes rather than nothing.
+                log.info("live %s falls back to daily closes: %s", asset.key, e)
+                out = self._daily(asset)
+                note = {"id": "Harga per menit sedang tidak tersedia, jadi grafik ini memakai harga penutupan harian.",
+                        "en": "Minute prices are unavailable right now, so this chart uses daily closes."}
+                ttl = 120
         if note:
             out["note"] = note
         out["at"] = int(time.time())
         out["decimals"] = asset.decimals
         out["unit"] = asset.unit
-        self._cache[asset.key] = (time.time(), out)
+        # A fallback answer is kept a little longer so a busy page does not keep asking a refusing source.
+        self._cache[asset.key] = (time.time() + (ttl - 30 if out["source"] == "daily" else 0), out)
         return out
+
+    def _daily(self, asset: Asset) -> dict:
+        from .data.yahoo import load_bars
+
+        b = load_bars(self.db, asset.symbol, "1d", 90)
+        if len(b["c"]) < 2:
+            raise YahooError(f"no stored prices for {asset.key}")
+        bars = [{"t": int(t), "o": float(o), "h": float(h), "l": float(l), "c": float(c), "v": float(v)}
+                for t, o, h, l, c, v in zip(b["ts"], b["o"], b["h"], b["l"], b["c"], b["v"])]
+        last, prev = bars[-1]["c"], bars[-2]["c"]
+        return {"key": asset.key, "source": "daily", "realtime": False, "bars": bars, "last": last, "prev": prev,
+                "chg_pct": (last / prev - 1) * 100, "delay_min": None}
 
     async def _stockbit(self, asset: Asset) -> dict:
         bars = await self.stockbit.intraday(asset.key)

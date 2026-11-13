@@ -52,7 +52,7 @@ export interface Forecast {
 }
 export interface Bar {t: number; o: number; h: number; l: number; c: number; v: number}
 export interface LiveData {
-  key: string; source: 'stockbit' | 'binance' | 'yahoo'; realtime: boolean; bars: Bar[]; last: number; prev: number | null;
+  key: string; source: 'stockbit' | 'binance' | 'yahoo' | 'daily'; realtime: boolean; bars: Bar[]; last: number; prev: number | null;
   chg_pct: number | null; delay_min?: number; at: number; note?: L; decimals?: number; unit?: string;
   book?: {bids: {price: number; lots: number}[]; offers: {price: number; lots: number}[]; foreign_net: number | null};
 }
