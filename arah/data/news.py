@@ -11,6 +11,7 @@ from urllib.parse import quote_plus
 import httpx
 from defusedxml import ElementTree as ET
 
+from ..config import news_tiers
 from ..db import DB
 
 log = logging.getLogger("arah.news")
@@ -203,10 +204,6 @@ def headlines(db: DB, topics: list[str], limit: int = 20, max_age_h: int = 48) -
 
 
 # Ranking: many outlets on one story, a primary or major source, market-moving words, and freshness.
-TIER1 = ("reuters", "bloomberg", "financial times", "wall street journal", "wsj", "cnbc", "associated press",
-         "ap news", "nikkei", "federal reserve", "european central bank", "bank indonesia", "kontan", "bisnis",
-         "investor.id", "katadata", "antara", "idx channel", "idxchannel", "straits times", "south china morning post",
-         "scmp", "marketwatch", "barron", "economist", "tempo", "kompas")
 MOVERS = ("suku bunga", "bi-rate", "inflasi", "rupiah", "ihsg", "asing", "beli bersih", "jual bersih", "buyback",
           "rights issue", "tender offer", "msci", "ftse", "direksi", "komisaris", "pengendali", "dividen", "ipo",
           "target harga", "downgrade", "upgrade", "tarif", "apbn", "defisit", "rate", "fed", "fomc", "powell",
@@ -224,7 +221,17 @@ def _tokens(title: str) -> set[str]:
 def top_stories(db: DB, topics: list[str], limit: int = 30, max_age_h: int = 48) -> list[dict]:
     """The most important stories, one line per story however many outlets ran it, best first.
     Each carries `outlets` (how many sources ran it) and the freshest headline's link."""
-    rows = headlines(db, topics, limit=400, max_age_h=max_age_h)
+    tiers = news_tiers()
+
+    def tier(src: str) -> int | None:
+        s = (src or "").lower()
+        for k in (1, 2):
+            if any(t in s for t in tiers[k]):
+                return k
+        return None
+
+    # Only named outlets on the configured list: an unnamed or unknown source is not shown at all.
+    rows = [dict(r, tier=t) for r in headlines(db, topics, limit=400, max_age_h=max_age_h) if (t := tier(r["source"]))]
     stories: list[dict] = []
     for r in rows:  # newest first, so each story keeps its freshest headline
         tok = _tokens(r["title"])
@@ -234,6 +241,7 @@ def top_stories(db: DB, topics: list[str], limit: int = 30, max_age_h: int = 48)
             inter = len(tok & st["_tok"])
             if inter >= 3 and inter / min(len(tok), len(st["_tok"])) >= 0.6:
                 st["_src"].add((r["source"] or r["url"][:40]).lower())
+                st["tier"] = min(st["tier"], r["tier"])
                 st["_tok"] |= tok
                 break
         else:
@@ -244,7 +252,7 @@ def top_stories(db: DB, topics: list[str], limit: int = 30, max_age_h: int = 48)
         age_h = max(0.0, (now - (st["published_at"] or now)) / 3600)
         low = st["title"].lower()
         st["outlets"] = outlets
-        st["score"] = (1.2 * math.log1p(outlets - 1) + (0.6 if any(t in src for src in st["_src"] for t in TIER1) else 0)
+        st["score"] = (1.2 * math.log1p(outlets - 1) + (0.8 if st["tier"] == 1 else 0.4)
                        + 0.5 * min(2, sum(1 for m in MOVERS if m in low)) + 1.0 * math.exp(-age_h / 18))
     stories.sort(key=lambda x: -x["score"])
     # Keep every topic in view: no single topic may take more than half the list.

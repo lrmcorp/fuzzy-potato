@@ -1,6 +1,6 @@
 /* Ringkasan (redesign pack prompt 02, mockups Main.html and MobileHome.html). */
 import {useState} from 'react';
-import {api, type EventItem, type PulseInfo, type Simple, type SimpleCard} from './api';
+import {api, type EventItem, type PulseInfo, type RecordInfo, type Simple, type SimpleCard} from './api';
 import {useLoad} from './hooks';
 import {useT} from './i18n';
 import {ChangeText, Seg, Skeleton, Sparkline, VerdictTag} from './ui';
@@ -9,6 +9,7 @@ const DIRTAG = {
   naik: {key: 'naik', label: 'Naik', icon: 'up', tone: 'green'},
   datar: {key: 'datar', label: 'Datar', icon: 'square', tone: 'grey'},
   turun: {key: 'turun', label: 'Turun', icon: 'down', tone: 'orange'},
+  belum_jelas: {key: 'belum_jelas', label: 'Belum jelas arahnya', icon: 'square', tone: 'grey'},
 } as const;
 const H_LABEL: Record<string, string> = {'1m': '1 bln', '2m': '2 bln', '3m': '3 bln'};
 
@@ -35,7 +36,7 @@ function Gauge({now, next, h}: {now: number; next: number; h: string}) {
 }
 
 function MarketCard({c, title, h}: {c: SimpleCard; title: string; h: string}) {
-  const {num, range} = useT();
+  const {num} = useT();
   const fx = c.klass === 'fx';
   const d = c.price < 100 ? 2 : c.decimals;
   const rd = c.price >= 1000 ? 0 : d;  // ranges read faster without decimals: "4.606 sampai 6.091"
@@ -53,8 +54,9 @@ function MarketCard({c, title, h}: {c: SimpleCard; title: string; h: string}) {
       <Sparkline values={c.spark ?? []} range={c.next.range} label={`${title}: 3 bulan terakhir dan prakiraan ${H_LABEL[h]}`} />
       <div className="mcard-foot">
         <VerdictTag tag={DIRTAG[dir]} prefix={`${H_LABEL[h]}: `} />
-        <span className="rng">{range(c.next.range[0], c.next.range[1], rd)}</span>
       </div>
+      {/* The odds come from the model: its 5th to 95th percentile, so 9 of 10 simulated paths end inside. */}
+      <span className="rng caption">{c.next.odds ? `${c.next.odds.n} dari ${c.next.odds.of}` : '9 dari 10'} kemungkinan di {num(c.next.range[0], rd)}–{num(c.next.range[1], rd)}</span>
     </a>
   );
 }
@@ -168,9 +170,18 @@ function Agenda({events}: {events: EventItem[]}) {
 }
 
 /** One market in one punch: the sentence, why in two short lines, and where to read more. */
-function MarketPunch({place, sentence, why, causes, news, asset, assetLabel, gauge, h, big, children}: {
+function RecordLine({r}: {r?: RecordInfo}) {
+  if (!r) return null;
+  return (
+    <span className="caption record">
+      {r.enough ? `Prediksi 1 bln tepat ${r.pct}% (${r.n} prediksi terakhir)` : `Rekam jejak belum cukup (${r.n} dinilai, ${r.pending} menunggu 1 bln)`}
+    </span>
+  );
+}
+
+function MarketPunch({place, sentence, why, causes, news, asset, assetLabel, gauge, h, big, record, children}: {
   place: string; sentence: string | null | undefined; why: string[]; causes: number; news: string; asset: string; assetLabel: string;
-  gauge?: {now: number; next: number}; h: string; big?: boolean; children?: React.ReactNode}) {
+  gauge?: {now: number; next: number}; h: string; big?: boolean; record?: RecordInfo; children?: React.ReactNode}) {
   return (
     <div className={`punch${big ? ' big' : ''}`}>
       <div className="hero-text">
@@ -181,6 +192,7 @@ function MarketPunch({place, sentence, why, causes, news, asset, assetLabel, gau
           <a href={news}>{causes ? `${causes} berita penyebab` : 'Berita penyebab'}</a>
           <a href={`#/a/${asset}`}>Lihat {assetLabel}</a>
         </p>
+        <RecordLine r={record} />
       </div>
       <div className="gauge-box">
         {children}
@@ -210,14 +222,15 @@ export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo 
     const want = g < 0.4 ? -1 : g > 0.6 ? 1 : 0;
     const up = (card?.up_is ?? 1) >= 0 ? 1 : -1;
     const score = (lean: number) => (want === 0 ? 0 : lean * up === want ? -1 : lean === 0 ? 0 : 1);
-    return [...(card?.reasons ?? [])].sort((x, y) => score(x.lean) - score(y.lean)).slice(0, 2).map(r => r.text.id);
+    // A reason pointing against the sentence is left out rather than shown second: it would read as a contradiction.
+    return [...(card?.reasons ?? [])].filter(r => score(r.lean) <= 0).sort((x, y) => score(x.lean) - score(y.lean)).slice(0, 2).map(r => r.text.id);
   };
   const events = importantEvents([...(brief.events ?? [])].sort((a, c) => a.at - c.at));
   return (
     <>
       <section className="card hero-stack" aria-label="Arah pasar hari ini">
         <MarketPunch place="Indonesia" big sentence={simple?.headline ?? brief.headline.id} why={whyOf('ID', ind)} causes={causes('ID')}
-          news="#/berita/ID" asset="IHSG" assetLabel="IHSG" gauge={ind?.gauge} h={h}>
+          news="#/berita/ID" asset="IHSG" assetLabel="IHSG" gauge={ind?.gauge} h={h} record={b.data?.record}>
           <div className="gauge-head">
             <span>Arah pasar</span>
             <Seg label="Rentang prakiraan" value={h} onChange={setH} options={['1m', '2m', '3m'].map(k => ({key: k, text: H_LABEL[k]}))} />

@@ -29,7 +29,7 @@ export type State = 'good' | 'neutral' | 'bad';
 export interface SimpleCard {
   key: string; name: string; name_en: string; decimals: number; unit?: string; klass: string; country?: string; price: number;
   chg1d?: number | null; chg1m?: number | null; spark?: number[];
-  now: {state: State; name: L; text: L}; next: {state: State; name: L; text: L; p_up: number; p_good?: number; range: [number, number]; dir?: 'naik' | 'datar' | 'turun'};
+  now: {state: State; name: L; text: L}; next: {state: State; name: L; text: L; p_up: number; p_good?: number; range: [number, number]; dir?: 'naik' | 'datar' | 'turun' | 'belum_jelas'; odds?: {n: number; of: number}};
   gauge?: {now: number; next: number}; up_is?: number;
   why: L | null; reasons: Reason[]; watch: L | null; from_team: boolean; grade: Validation['grade'] | null;
   votes?: {up: number; down: number; none: number} | null; horizon?: string;
@@ -85,7 +85,10 @@ export interface RecCard {
   strengths: L[]; risks: L[]; why: L; p_up_1m: number; pe: number | null; tag?: TagInfo | null; score?: number | null;
   plan: {entry: [number, number]; stop: number; targets: [number, number]; rr: number}; spark: number[];
 }
-export interface Recs {at: number | null; ID: RecCard[]; US: RecCard[]; screened: {ID: number; US: number}}
+export interface RecordInfo {horizon: string; n: number; hits: number; pct: number | null; pending: number; enough: boolean}
+export interface PicksRecord {closed: number; open: number; target: number; stop: number; expired: number;
+  items: {asset: string; status: 'target' | 'stop' | 'expired'; made_at: number; closed_at: number; ret: number | null}[]}
+export interface Recs {at: number | null; ID: RecCard[]; US: RecCard[]; screened: {ID: number; US: number}; record?: PicksRecord}
 export interface MarketRow {
   key: string; name: string; name_en: string; decimals: number; unit?: string; price: number; chg1d: number | null; chg1w: number | null;
   direction: Direction; p_up: number; q05: number; q95: number; vigilance: Vigilance | null; spark: number[];
@@ -150,7 +153,7 @@ export const api = {
   session: () => call<{auth_required: boolean; authed: boolean; lang: Lang; version: string}>('/api/session'),
   login: (password: string) => call('/api/login', {method: 'POST', body: JSON.stringify({password})}),
   logout: () => call('/api/logout', {method: 'POST'}),
-  brief: () => call<{brief: Brief | null; building: boolean; llm_error: 'credit' | 'auth' | 'limit' | 'error' | null; llm_enabled: boolean}>('/api/brief'),
+  brief: () => call<{brief: Brief | null; building: boolean; llm_error: 'credit' | 'auth' | 'limit' | 'error' | null; llm_enabled: boolean; record?: RecordInfo}>('/api/brief'),
   calc: (amount: number, currency: string) => call<Calc>(`/api/calc?amount=${amount}&currency=${currency}`),
   ask: (question: string) => call<Answer>('/api/ask', {method: 'POST', body: JSON.stringify({question})}),
   runBrief: () => call<{started: boolean}>('/api/brief/run', {method: 'POST'}),

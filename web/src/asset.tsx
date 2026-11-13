@@ -160,7 +160,10 @@ function Keputusan({k, f, v, paused, onAsk, analysing, onAnalyse}: {k: string; f
   const p = v?.p_up ?? f?.conclusion.p_up ?? null;
   const pct = p == null ? null : Math.round(p * 100);
   if (stock && v === undefined) return <section className="card"><Skeleton lines={5} /></section>;
-  const dir = p == null ? null : p >= 0.6 ? {label: 'Naik', icon: 'up', tone: 'green' as const} : p <= 0.4 ? {label: 'Turun', icon: 'down', tone: 'orange' as const} : {label: 'Datar', icon: 'square', tone: 'grey' as const};
+  // Same rule as the server: a flat middle with a 9-in-10 range wider than 5% either way is "belum jelas".
+  const wide = !!f && (f.conclusion.q95 / f.s0 - 1 > 0.05 || 1 - f.conclusion.q05 / f.s0 > 0.05);
+  const dir = p == null ? null : p >= 0.6 ? {label: 'Naik', icon: 'up', tone: 'green' as const} : p <= 0.4 ? {label: 'Turun', icon: 'down', tone: 'orange' as const}
+    : wide ? {label: 'Belum jelas arahnya', icon: 'square', tone: 'grey' as const} : {label: 'Datar', icon: 'square', tone: 'grey' as const};
   const tone = stock ? v?.tone : dir?.tone;
   return (
     <section className="card" aria-labelledby="kp-h">
@@ -173,7 +176,8 @@ function Keputusan({k, f, v, paused, onAsk, analysing, onAnalyse}: {k: string; f
         ) : stock ? (
           <><p className="vword">Tunggu</p><p className="vsent">Data belum cukup untuk memutuskan.</p></>
         ) : dir ? (
-          <><p className="vword"><VerdictMark icon={dir.icon} />{dir.label}</p><p className="vsent">ARAH memperkirakan {dir.label.toLowerCase()} dalam 1 bulan.</p></>
+          <><p className="vword"><VerdictMark icon={dir.icon} />{dir.label}</p>
+            <p className="vsent">{wide && dir.label.startsWith('Belum') ? 'Rentang 1 bulan terlalu lebar untuk menyebut arah.' : `ARAH memperkirakan ${dir.label.toLowerCase()} dalam 1 bulan.`}</p></>
         ) : <p className="vsent">Data belum cukup untuk prakiraan</p>}
       </div>
       <div className="bars">

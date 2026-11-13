@@ -67,7 +67,7 @@ const S = {
   news_rank_note: ['Diurutkan menurut jumlah media, mutu sumber, kata yang menggerakkan pasar, dan seberapa baru.', 'Ranked by number of outlets, source quality, market-moving words and freshness.'],
   no_news_desc: ['Berita diambil setiap brief dibuat (pagi, siang, sore). Coba lagi nanti.', 'News is collected with every brief (morning, midday, evening). Check again later.'],
   outlets: ['{n} media', '{n} outlets'], src_unknown: ['sumber tidak disebut', 'source not given'],
-  region: ['Wilayah', 'Region'], topic: ['Topik', 'Topic'], scope_asia: ['Asia', 'Asia'], desk_says: ['Kata analis {c}', 'The {c} desk says'],
+  region: ['Wilayah', 'Region'], topic: ['Topik', 'Topic'], scope_asia: ['Asia', 'Asia'], desk_says: ['Ringkasan AI · {c}', 'AI summary · {c}'],
   tp_all: ['Semua', 'All'], tp_market: ['Pasar & rupiah', 'Markets'], tp_flow: ['Asing', 'Foreign flow'], tp_insider: ['Orang dalam & aksi korporasi', 'Insiders & corporate actions'],
   tp_policy: ['Kebijakan & politik', 'Policy & politics'], tp_commodity: ['Komoditas', 'Commodities'], tp_central: ['Bank sentral & data', 'Central bank & data'],
   tp_insider_us: ['Orang dalam & laporan keuangan', 'Insiders & earnings'], tp_global: ['Global & geopolitik', 'Global & geopolitics'],

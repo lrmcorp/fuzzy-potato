@@ -24,7 +24,11 @@ ACTIONS = {
     "tunggu": ("Tunggu", "square", "grey"),
     "hindari": ("Hindari", "down", "orange"),
 }
-DIRECTIONS = {"naik": ("Naik", "up", "green"), "datar": ("Datar", "square", "grey"), "turun": ("Turun", "down", "orange")}
+DIRECTIONS = {"naik": ("Naik", "up", "green"), "datar": ("Datar", "square", "grey"), "turun": ("Turun", "down", "orange"),
+              "belum_jelas": ("Belum jelas arahnya", "square", "grey")}
+# "Datar" is only honest when the range is narrow too: a flat middle with a range wider than this either way
+# means ARAH does not know, and says so.
+WIDE_RANGE = 0.05
 # Telegram and notifications have no icons of their own; these characters stand in for them.
 TEXT_ICON = {"full": "●", "half": "◐", "square": "■", "down": "▼", "up": "▲"}
 
@@ -45,6 +49,14 @@ def direction(p_up: float | None) -> str:
         return "datar"
     p = round(p_up, 2)
     return "naik" if p >= MASUK_CHANCE else "turun" if p <= HINDARI_CHANCE else "datar"
+
+
+def direction_range(p_up: float | None, lo: float | None, hi: float | None, s0: float | None) -> str:
+    """Direction, with "belum_jelas" instead of "datar" when the 9-in-10 range spans more than 5% either way."""
+    d = direction(p_up)
+    if d == "datar" and lo and hi and s0 and (hi / s0 - 1 > WIDE_RANGE or 1 - lo / s0 > WIDE_RANGE):
+        return "belum_jelas"
+    return d
 
 
 def sentence(key: str, score: float | None, p_up: float | None) -> str:
