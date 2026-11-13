@@ -80,6 +80,9 @@ class DB:
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.executescript(SCHEMA)
         # Columns added after the first install. SQLite has no "ADD COLUMN IF NOT EXISTS".
+        qcols = {r[1] for r in self._conn.execute("PRAGMA table_info(quotes)").fetchall()}
+        if "source" not in qcols:
+            self._conn.execute("ALTER TABLE quotes ADD COLUMN source TEXT NOT NULL DEFAULT 'Yahoo'")
         have = {r[1] for r in self._conn.execute("PRAGMA table_info(alerts)").fetchall()}
         for col, decl in (("kind", "TEXT NOT NULL DEFAULT 'price'"), ("grp", "TEXT"), ("label", "TEXT")):
             if col not in have:

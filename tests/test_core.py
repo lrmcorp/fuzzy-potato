@@ -267,3 +267,13 @@ def test_news_tiers_hide_unlisted_sources_and_can_be_configured(tmp_path, monkey
     monkeypatch.setenv("ARAH_NEWS_TIER2", "blog saham acak")
     got = {s["source"]: s["tier"] for s in top_stories(db, ["id_market"])}
     assert got == {"Kontan": 1, "Blog Saham Acak": 2}
+
+
+def test_ai_text_numbers_become_indonesian():
+    from arah.signals import id_numbers
+
+    assert id_numbers("IHSG naik 4.4% ke 5,311.36") == "IHSG naik 4,4% ke 5.311,36"
+    assert id_numbers("Net buy Rp 1,234 miliar, yield 4.25%") == "Net buy Rp 1.234 miliar, yield 4,25%"
+    # Already Indonesian, years and clock times stay as they are.
+    assert id_numbers("Rupiah Rp18.250 per dolar, naik 2,5% pada 2026") == "Rupiah Rp18.250 per dolar, naik 2,5% pada 2026"
+    assert id_numbers("Rilis 20.30 WIB") == "Rilis 20.30 WIB"

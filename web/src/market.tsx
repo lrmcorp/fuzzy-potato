@@ -4,7 +4,7 @@ import {api, type MarketRow, type RecCard, type Simple} from './api';
 import {openAlertSheet} from './alertsheet';
 import {useLoad} from './hooks';
 import {useT} from './i18n';
-import {ChangeText, Icon, Seg, Skeleton, Sparkline, VerdictTag} from './ui';
+import {ChangeText, Icon, Seg, Skeleton, SourceLine, Sparkline, VerdictTag} from './ui';
 
 const SEGS = [
   {key: 'pilihan', text: 'Pilihan ARAH'}, {key: 'saham', text: 'Saham'}, {key: 'indeks', text: 'Indeks'},
@@ -203,9 +203,9 @@ function QuoteRow({r, paused}: {r: MarketRow; paused: boolean}) {
       <a className="wl-row" href={`#/a/${encodeURIComponent(r.key)}`}>
         <span className="wl-name"><strong>{stock ? r.key : r.name}</strong> <span className="muted">{stock ? r.name : r.name !== r.key ? r.key : ''}</span></span>
         <span className="wl-tag"><VerdictTag tag={r.tag} paused={paused && stock} /></span>
-        <span className="wl-px">{num(r.price, r.price < 100 ? 2 : r.decimals)}</span>
-        <ChangeText value={r.chg1d} upIsGood={(r.up_is ?? 1) >= 0} digits={2} />
-        <span className="wl-spark"><Sparkline values={r.spark.slice(-30)} label={`${r.key}: sebulan terakhir`} height={32} /></span>
+        <span className="wl-px">{num(r.price, r.price < 100 ? 2 : r.decimals)}<SourceLine src={r.src} className="caption src-line src-short" /></span>
+        <span className="wl-chg"><ChangeText value={r.chg1d} upIsGood={(r.up_is ?? 1) >= 0} digits={2} /><span className="caption"> hari ini</span></span>
+        <span className="wl-spark"><Sparkline values={r.spark.slice(-30)} label={`${r.key}: sebulan terakhir`} height={32} /><span className="caption">1 bln</span></span>
       </a>
     </li>
   );

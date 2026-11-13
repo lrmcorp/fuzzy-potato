@@ -3,7 +3,7 @@ import {useState} from 'react';
 import {api, type EventItem, type PulseInfo, type RecordInfo, type Simple, type SimpleCard} from './api';
 import {useLoad} from './hooks';
 import {useT} from './i18n';
-import {ChangeText, Seg, Skeleton, Sparkline, VerdictTag} from './ui';
+import {ChangeText, Seg, Skeleton, SourceLine, Sparkline, VerdictTag} from './ui';
 
 const DIRTAG = {
   naik: {key: 'naik', label: 'Naik', icon: 'up', tone: 'green'},
@@ -12,6 +12,8 @@ const DIRTAG = {
   belum_jelas: {key: 'belum_jelas', label: 'Belum jelas arahnya', icon: 'square', tone: 'grey'},
 } as const;
 const H_LABEL: Record<string, string> = {'1m': '1 bln', '2m': '2 bln', '3m': '3 bln'};
+// Foreign markets by the name of their index, the way the news writes them.
+const INDEX_NAME: Record<string, string> = {SPX: 'S&P 500', N225: 'Nikkei 225', STI: 'STI', SSE: 'Shanghai Composite'};
 
 function Gauge({now, next, h}: {now: number; next: number; h: string}) {
   // The "Sekarang" dot takes the colour of where it sits: pressing (orange), balanced (grey), supportive (green).
@@ -47,16 +49,22 @@ function MarketCard({c, title, h}: {c: SimpleCard; title: string; h: string}) {
     <a className="mcard" href={`#/a/${encodeURIComponent(c.key)}`}>
       <div className="mcard-top">
         <span className="mcard-name">{title}</span>
-        <span className="only-desk"><ChangeText value={chg} upIsGood={(c.up_is ?? 1) >= 0} label={fxWord ?? 'hari ini'} /></span>
+        {fxWord && <span className={`caption ${chg! > 0 ? 'chg-down' : 'chg-up'}`} style={{fontWeight: 600}}>{fxWord}</span>}
       </div>
       <div className="mcard-val">{num(c.price, d)}</div>
-      <span className="only-phone"><ChangeText value={chg} upIsGood={(c.up_is ?? 1) >= 0} label={fxWord?.replace('melemah', 'lemah').replace('menguat', 'kuat')} /></span>
+      {/* Today and the last month side by side, each with its period, so the card never fights the headline. */}
+      <div className="chg-pair">
+        <span><ChangeText value={chg} upIsGood={(c.up_is ?? 1) >= 0} /> <span className="caption">hari ini</span></span>
+        <span><ChangeText value={c.chg1m ?? null} upIsGood={(c.up_is ?? 1) >= 0} /> <span className="caption">1 bln</span></span>
+      </div>
       <Sparkline values={c.spark ?? []} range={c.next.range} label={`${title}: 3 bulan terakhir dan prakiraan ${H_LABEL[h]}`} />
+      <span className="caption spark-lbl">3 bln terakhir · prakiraan {H_LABEL[h]}</span>
       <div className="mcard-foot">
         <VerdictTag tag={DIRTAG[dir]} prefix={`${H_LABEL[h]}: `} />
       </div>
       {/* The odds come from the model: its 5th to 95th percentile, so 9 of 10 simulated paths end inside. */}
       <span className="rng caption">{c.next.odds ? `${c.next.odds.n} dari ${c.next.odds.of}` : '9 dari 10'} kemungkinan di {num(c.next.range[0], rd)}–{num(c.next.range[1], rd)}</span>
+      <SourceLine src={c.src} />
     </a>
   );
 }
@@ -66,13 +74,13 @@ function AbroadCard({s}: {s: NonNullable<Simple['abroad']>}) {
   const max = Math.max(...s.countries.map(c => Math.abs(c.chg1m ?? 0)), 1);
   return (
     <a className="mcard abroad" href="#/pasar/indeks">
-      <div className="mcard-top"><span className="mcard-name">Bursa luar negeri</span><span className="muted">sebulan</span></div>
+      <div className="mcard-top"><span className="mcard-name">Bursa luar negeri</span><span className="caption">1 bln</span></div>
       <div className="mcard-abroad">
         {s.countries.map(c => {
           const v = c.chg1m ?? 0;
           return (
             <div key={c.key} className="ab-row">
-              <span>{c.country === 'US' ? 'Amerika' : t(`c_${c.country}` as 'c_US')}</span>
+              <span title={t(`c_${c.country}` as 'c_US')}>{INDEX_NAME[c.key] ?? c.name}</span>
               <div className="ab-bar" style={{justifyContent: v < 0 ? 'flex-end' : 'flex-start'}}>
                 <span style={{width: `${Math.max(6, (Math.abs(v) / max) * 100)}%`, background: v < 0 ? 'var(--down-mark)' : 'var(--up)'}} />
               </div>
@@ -108,8 +116,8 @@ function Watchlist() {
                   <span className="muted">{r.klass === 'stock' ? r.name : r.alerts ? `${r.alerts} peringatan` : ''}</span></span>
                 <span className="wl-tag"><VerdictTag tag={r.tag} /></span>
                 <span className="wl-px">{r.price != null ? num(r.price, r.price < 100 ? 2 : r.decimals) : 'Tidak ada data'}</span>
-                <ChangeText value={r.chg1d} upIsGood={r.up_is >= 0} digits={2} />
-                <span className="wl-spark"><Sparkline values={r.spark.slice(-30)} label={`${r.key}: sebulan terakhir`} height={32} /></span>
+                <span className="wl-chg"><ChangeText value={r.chg1d} upIsGood={r.up_is >= 0} digits={2} /><span className="caption"> hari ini</span></span>
+                <span className="wl-spark"><Sparkline values={r.spark.slice(-30)} label={`${r.key}: sebulan terakhir`} height={32} /><span className="caption">1 bln</span></span>
               </a>
             </li>
           ))}

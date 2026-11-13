@@ -166,6 +166,19 @@ export function Sparkline({values, range, label, height = 64}: {values: number[]
   );
 }
 
+/* ---------- Where a number comes from ---------- */
+
+export interface SrcInfo {source: string; at: number; delay_min: number}
+
+/** "Stockbit · 14.30 · realtime" or "Yahoo · 14.15 · tertunda 15 mnt": every price says where and when. */
+export function SourceLine({src, className = 'caption src-line'}: {src?: SrcInfo | null; className?: string}) {
+  if (!src) return <span className={className}>Sumber: —</span>;
+  const t = src.at ? new Intl.DateTimeFormat('id-ID', {hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta'}).format(src.at * 1000) : '—';
+  const day = src.at && Date.now() / 1000 - src.at > 18 * 3600
+    ? new Intl.DateTimeFormat('id-ID', {day: 'numeric', month: 'short', timeZone: 'Asia/Jakarta'}).format(src.at * 1000) + ' ' : '';
+  return <span className={className}>{src.source} · {day}{t} · {src.delay_min ? `tertunda ${src.delay_min} mnt` : 'realtime'}</span>;
+}
+
 /* ---------- Data freshness ---------- */
 
 export interface Pulse {state: 'live' | 'delayed' | 'paused'; at: number | null; since: number | null; stockbit: boolean; delay_min: number; alerts_active: number; telegram: boolean}

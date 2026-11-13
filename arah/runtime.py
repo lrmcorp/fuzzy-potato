@@ -27,7 +27,7 @@ from .db import DB
 from .outlook import SIMPLE_V, build_simple
 from .recommend import VERDICTS_V, build_recs, recs_ok, score_picks
 from .service import record_forecasts, score_forecasts, validation
-from .signals import fmt_price
+from .signals import fmt_price, save_quote
 from .telegram import Bot, format_brief, format_report
 from .universe import INDICES, SYNTHETIC, BY_KEY, DEFAULT_LEVELS, GAUGES, MACRO, STOCKS
 
@@ -230,6 +230,25 @@ class Runtime:
             self.db.set("watch_changes", {"at": int(time.time()), "items": changes})
         return out
 
+    async def idx_quotes(self) -> None:
+        """Every two minutes while Stockbit is connected: realtime prices for the Indonesian assets the owner sees
+        most (IHSG, LQ45, the watchlist, open picks), at most twelve and paced, so every page shows the same
+        Stockbit price for them."""
+        sb = self.live.stockbit
+        if not sb.status().get("usable"):
+            return
+        keys = ["IHSG", "LQ45"] + [k for k in self.db.get("watchlist", []) if k in BY_KEY and BY_KEY[k].country == "ID"]
+        keys += [r["asset"] for r in self.db.q("SELECT asset FROM picks_ledger WHERE status='open'") if r["asset"] in BY_KEY and BY_KEY[r["asset"]].country == "ID"]
+        for key in list(dict.fromkeys(keys))[:12]:
+            asset = BY_KEY[key]
+            try:
+                book = await sb.book(key)
+            except Exception as e:
+                log.info("stockbit quote %s failed: %s", key, e)
+                break
+            if book.get("last"):
+                save_quote(self.db, asset, book["last"], book.get("prev"), "Stockbit")
+
     async def watch_alerts(self) -> None:
         """Every two minutes: fresh prices for the assets that have an open alert, then the alert check.
         The 15-minute data refresh is too slow for "tell me when the dollar passes Rp 18,500"."""
@@ -307,6 +326,7 @@ class Runtime:
         tz = self.settings.timezone
         self.scheduler.add_job(self.tick, IntervalTrigger(minutes=15), id="tick", max_instances=1, coalesce=True)
         self.scheduler.add_job(self.watch_alerts, IntervalTrigger(minutes=2), id="alerts", max_instances=1, coalesce=True)
+        self.scheduler.add_job(self.idx_quotes, IntervalTrigger(minutes=2), id="idx_quotes", max_instances=1, coalesce=True)
         for slot, hhmm in BRIEF_SCHEDULE:
             h, m = hhmm.split(":")
             self.scheduler.add_job(self.run_brief, CronTrigger(hour=int(h), minute=int(m), timezone=tz), args=[slot],

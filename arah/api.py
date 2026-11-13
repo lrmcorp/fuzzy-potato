@@ -210,7 +210,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
                          "price": v["forecast"]["s0"], "chg1d": v["snapshot"]["chg1d"], "chg1w": v["snapshot"]["chg1w"],
                          "direction": v["direction"], "p_up": v["forecast"]["p_up"], "q05": v["forecast"]["q05"],
                          "q95": v["forecast"]["q95"], "vigilance": v["vigilance"], "spark": s.get("spark", [])[-40:],
-                         "klass": a.klass, "score": (verdicts.get(a.key) or {}).get("score"),
+                         "klass": a.klass, "score": (verdicts.get(a.key) or {}).get("score"), "src": s.get("src"), "chg1m": s.get("chg1m"),
                          "tag": (rules.tag(verdicts[a.key]["verdict"]) if a.key in verdicts and verdicts[a.key].get("verdict") in rules.ACTIONS else None)
                          if a.klass == "stock" else rules.tag(rules.direction_range(v["forecast"]["p_up"], v["forecast"]["q05"], v["forecast"]["q95"], v["forecast"]["s0"]))})
         return {"group": group, "horizon": horizon, "rows": rows}
@@ -355,7 +355,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         s = snapshot(db, a) or {}
         row = {"key": a.key, "name": a.name, "name_en": a.nm("en"), "klass": a.klass, "country": a.country, "unit": a.unit,
                "decimals": a.decimals, "up_is": a.up_is, "price": s.get("live") or s.get("price"), "chg1d": s.get("chg1d"),
-               "spark": (s.get("spark") or [])[-60:], "tag": None}
+               "spark": (s.get("spark") or [])[-60:], "tag": None, "src": s.get("src"), "chg1m": s.get("chg1m")}
         if a.klass == "stock":
             v = verdicts.get(a.key)
             if v and v.get("verdict") in rules.ACTIONS:

@@ -13,6 +13,7 @@ import time
 import httpx
 
 from .data.stockbit import Stockbit, StockbitError
+from .signals import save_quote
 from .data.yahoo import YahooError, fetch_chart
 from .db import DB
 from .universe import BY_KEY, SYNTHETIC, Asset
@@ -46,6 +47,8 @@ class Live:
         if source == "stockbit":
             try:
                 out = await self._stockbit(asset)
+                if out.get("last"):
+                    save_quote(self.db, asset, out["last"], out.get("prev"), "Stockbit")
             except (StockbitError, httpx.HTTPError, ValueError) as e:
                 note = {"id": "Stockbit tidak bisa dipakai saat ini, jadi data diambil dari sumber tertunda.",
                         "en": "Stockbit is unavailable right now, so this uses the delayed source."}

@@ -162,11 +162,13 @@ async def refresh_symbol(db: DB, client: httpx.AsyncClient, symbol: str, interva
     price = meta.get("regularMarketPrice")
     if price:
         db.x(
-            "INSERT INTO quotes (symbol, price, prev_close, market_ts, currency, fetched_at) VALUES (?,?,?,?,?,?) "
+            "INSERT INTO quotes (symbol, price, prev_close, market_ts, currency, fetched_at, source) VALUES (?,?,?,?,?,?,'Yahoo') "
             "ON CONFLICT(symbol) DO UPDATE SET price=excluded.price, prev_close=excluded.prev_close, "
-            "market_ts=excluded.market_ts, currency=excluded.currency, fetched_at=excluded.fetched_at",
+            "market_ts=excluded.market_ts, currency=excluded.currency, fetched_at=excluded.fetched_at, source='Yahoo' "
+            # One price source per asset: a fresh Stockbit price is not overwritten by Yahoo's delayed one.
+            "WHERE quotes.source != 'Stockbit' OR quotes.fetched_at < ?",
             (symbol, price, meta.get("previousClose") or meta.get("chartPreviousClose"),
-             meta.get("regularMarketTime"), meta.get("currency"), int(time.time())),
+             meta.get("regularMarketTime"), meta.get("currency"), int(time.time()), int(time.time()) - 900),
         )
     db.set(stamp_key, int(time.time()))
     return len(rows)
