@@ -36,7 +36,7 @@ const MOVED: Record<string, string> = {'/saham': '/pasar/saham', '/kurs': '/pasa
 function Logo() {
   return (
     <a className="logo" href="#/" aria-label="ARAH by LRM Corporation, ke Ringkasan">
-      <img src="/arah-wordmark.png" alt="" width={84} height={28} />
+      <img src="/arah-logo.png" alt="" width={110} height={48} />
     </a>
   );
 }
