@@ -105,6 +105,14 @@ public_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 --retry 12 -
 [ "$public_code" = 200 ] && ok "https://$DOMAIN answers 200 with a valid certificate" \
   || warn "https://$DOMAIN answered '$public_code' with certificate checks on  [T6]"
 docker compose -f deploy/compose.yaml exec -T arah arah doctor 2>&1 | sed 's/^/    /'
+echo "Feature check (live prices, forecasts, Stockbit):"
+while IFS= read -r line; do
+  case "$line" in
+    "OK   "*) ok "${line#OK   }" ;;
+    "WARN "*) warn "${line#WARN }" ;;
+    *) echo "    $line" ;;
+  esac
+done < <(docker compose -f deploy/compose.yaml exec -T arah arah selfcheck 2>&1)
 
 step "6/7 Automatic updates"
 bash deploy/install-auto-update.sh && ok "every 5 minutes, new commits on main are deployed (rollback if unhealthy)" \

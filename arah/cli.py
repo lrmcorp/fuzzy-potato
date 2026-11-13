@@ -130,6 +130,54 @@ def validate():
 
 
 @app.command()
+def selfcheck():
+    """Check the app's own features on this machine: data, live prices, forecasts, Stockbit. Prints no secrets."""
+    import time as _time
+
+    from .data.yahoo import load_bars, refresh_many
+    from .live import Live
+    from .techniques import techniques
+    from .universe import BY_KEY
+
+    rt = _rt()
+    db = rt.db
+    keys = ["IHSG", "BBCA", "USDIDR", "USDCNY", "SPX", "BTC"]
+    asyncio.run(refresh_many(db, [BY_KEY[k].symbol for k in keys]))
+    ok = lambda m: typer.echo(f"OK   {m}")
+    warn = lambda m: typer.echo(f"WARN {m}")
+    for k in ("IHSG", "USDIDR", "BTC"):
+        n = len(load_bars(db, BY_KEY[k].symbol, "1d", 3000)["c"])
+        (ok if n >= 300 else warn)(f"daily history {k}: {n} days")
+    live = Live(db)
+    sb = live.stockbit.status()
+    if not sb.get("configured"):
+        typer.echo("INFO Stockbit not configured: IDX prices about 15 minutes delayed")
+    elif sb.get("usable"):
+        until = _time.strftime("%Y-%m-%d", _time.gmtime(sb.get("refresh_until") or 0))
+        ok(f"Stockbit session usable, renews itself, refresh token valid until {until}")
+    else:
+        warn("Stockbit session expired or refused: sign in again and set STOCKBIT_SESSION  [T8]")
+    for k in ("IHSG", "BBCA", "BTC", "USDIDR"):
+        try:
+            r = asyncio.run(live.get(BY_KEY[k]))
+            label = "realtime" if r["realtime"] else f"delayed about {r.get('delay_min', 15)} min"
+            msg = f"live {k}: {r['source']}, {label}, {len(r['bars'])} minute bars"
+            if sb.get("usable") and k in ("IHSG", "BBCA") and r["source"] != "stockbit":
+                warn(msg + " (Stockbit is set but was not used)  [T8]")
+            else:
+                ok(msg)
+        except Exception as e:  # report and continue: one source failing must not hide the others
+            warn(f"live {k}: {str(e)[:120]}  [T9]")
+    for h in ("1m", "2m", "3m"):
+        try:
+            f = techniques(db, BY_KEY["IHSG"], h)
+            used = sum(1 for t in f["techniques"] if t["status"]["used"])
+            ok(f"forecast IHSG {h}: chance of a rise {f['conclusion']['p_up'] * 100:.0f}%, {used} of 7 techniques used")
+        except Exception as e:
+            warn(f"forecast IHSG {h}: {str(e)[:120]}  [T9]")
+
+
+@app.command()
 def doctor():
     """Check configuration and connectivity."""
     import httpx
