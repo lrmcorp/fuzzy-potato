@@ -85,4 +85,33 @@ def foreign_flow(db: DB, top: int = 5) -> dict:
 
 
 def summary(db: DB) -> dict:
-    return {"session": idx_session(), "foreign": foreign_flow(db), "commodities": commodities(db), "macro": macro(db)}
+    return {"session": idx_session(), "foreign": foreign_flow(db), "commodities": commodities(db), "macro": macro(db),
+            "factors": gauge_factors(db), "profile": db.get("risk_profile")}
+
+
+def gauge_factors(db: DB) -> dict:
+    """What moves the Menekan↔Mendukung gauge, each with its direction for the owner: +1 mendukung, -1 menekan,
+    0 seimbang, None when there is no data. The model's forecast is added by the page from the gauge itself."""
+    from .outlook import price_now
+
+    def moved(key: str, label: str, good_when_up: int, period: str = "chg1m") -> dict:
+        a = BY_KEY[key]
+        s = snapshot(db, a)
+        if not s or s.get(period) is None:
+            return {"label": label, "side": None, "value": None, "kind": "pct"}
+        return {"label": label, "side": price_now(s, a) * good_when_up, "value": s[period], "kind": "pct"}
+
+    flow = (db.get("sbt:foreign_day:IHSG") or {}).get("v") or {}
+    net = flow.get("net_foreign")
+    vix = snapshot(db, BY_KEY["VIX"])
+    v1w = vix.get("chg1w") if vix else None
+    return {
+        "ID": [moved("IHSG", "IHSG 1 bln", 1), moved("USDIDR", "USD/IDR 1 bln", -1),
+               {"label": "Asing hari ini", "side": None if net is None else (1 if net > 0 else -1 if net < 0 else 0),
+                "value": net, "kind": "idr"}],
+        "US": [moved("SPX", "S&P 500 1 bln", 1),
+               # Fear falling is good for stocks; a move under 10% in a week is ordinary for the VIX.
+               {"label": "VIX 1 mgg", "side": None if v1w is None else (-1 if v1w > 10 else 1 if v1w < -10 else 0),
+                "value": v1w, "kind": "pct"},
+               moved("US10Y", "Yield AS 10 thn 1 bln", -1)],
+    }

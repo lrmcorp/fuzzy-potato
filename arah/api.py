@@ -34,7 +34,7 @@ from .signals import snapshot
 from . import panel
 from .data import agenda_id
 from . import verdict_rules as rules
-from .recommend import VERDICTS_V, picks_summary
+from .recommend import PROFILES, VERDICTS_V, order_picks, picks_summary
 from .universe import HEADLINE_KEYS, BY_KEY, COUNTRIES, CRYPTO, COMMODITIES, DEFAULT_LEVELS, FX, INDICES, STOCKS, resolve
 
 log = logging.getLogger("arah.api")
@@ -59,6 +59,10 @@ def valid_token(secret: str, token: str | None) -> bool:
         return False
     exp, sig = token.split(".", 1)
     return exp.isdigit() and int(exp) > time.time() and hmac.compare_digest(sig, _sign(secret, exp))
+
+
+class ProfileBody(BaseModel):
+    profile: str
 
 
 class LoginBody(BaseModel):
@@ -304,13 +308,28 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
     def recs():
         r = db.latest_report("recs") or {"ID": [], "US": [], "screened": {"ID": 0, "US": 0}, "at": None}
         r["record"] = picks_summary(db)
+        r["profile"] = db.get("risk_profile")
         vs = verdict_items()
         for m in ("ID", "US"):
             for c in r.get(m, []):
                 v = vs.get(c["key"]) or {}
                 c["tag"] = rules.tag(rules.pick_status(c, v["verdict"])) if v.get("verdict") in rules.ACTIONS else None
                 c["score"] = v.get("score")
+            # New picks in the order the owner's risk profile asks for; earlier picks still tracked stay last.
+            r[m] = order_picks([c for c in r.get(m, []) if not c.get("held")], r["profile"]) + [c for c in r.get(m, []) if c.get("held")]
         return r
+
+    @app.get("/api/profile", dependencies=[Depends(auth)])
+    def profile_get():
+        return {"profile": db.get("risk_profile"), "options": list(PROFILES)}
+
+    @app.post("/api/profile", dependencies=[Depends(auth)])
+    def profile_set(body: ProfileBody):
+        p = body.profile
+        if p not in PROFILES:
+            raise HTTPException(400, "unknown profile")
+        db.set("risk_profile", p)
+        return {"profile": p}
 
     @app.get("/api/news", dependencies=[Depends(auth)])
     def news(country: str = "ID"):

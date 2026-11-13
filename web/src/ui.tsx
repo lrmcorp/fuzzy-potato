@@ -251,3 +251,38 @@ export function Skeleton({lines = 3, label = 'Memuat harga…'}: {lines?: number
     </div>
   );
 }
+
+/* ---------- Glossary ---------- */
+
+export const GLOSSARY = {
+  ihsg: {title: 'IHSG', text: 'Indeks Harga Saham Gabungan: rata-rata tertimbang harga semua saham di Bursa Efek Indonesia. Naik berarti saham secara umum naik.'},
+  lot: {title: 'Lot', text: 'Satuan beli saham di BEI. 1 lot = 100 lembar, jadi modal minimum = harga × 100.'},
+  arb: {title: 'ARA dan ARB', text: 'Auto Reject Atas dan Bawah: batas naik dan turun harga saham dalam satu hari yang ditetapkan BEI. Di batas itu, order di luar batas ditolak sistem.'},
+  asing: {title: 'Net asing', text: 'Nilai beli investor asing dikurangi nilai jualnya. Positif (beli bersih) biasanya mendukung harga; negatif (jual bersih) menekan.'},
+  rugi: {title: 'Batas rugi', text: 'Harga tempat Anda menjual bila harga turun, supaya kerugian tidak membesar. "Rugi maks" adalah jaraknya dari harga sekarang.'},
+  target: {title: 'Target', text: 'Harga tempat Anda bisa mengambil untung. Target 1 lebih dekat; ~1 bln adalah perkiraan waktunya, bukan janji.'},
+} as const;
+export type TermKey = keyof typeof GLOSSARY;
+
+/** A word with a short explanation on tap: for the terms a beginner meets first. */
+export function Term({k, children}: {k: TermKey; children?: ReactNode}) {
+  const [open, setOpen] = useState(false);
+  const g = GLOSSARY[k];
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => { if (!(e.target as HTMLElement).closest?.('.term-wrap')) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  return (
+    <span className="term-wrap">
+      <button type="button" className="term" aria-expanded={open} aria-label={`Apa itu ${g.title}?`}
+        onClick={e => { e.preventDefault(); e.stopPropagation(); setOpen(!open); }}>
+        {children ?? g.title}<span className="term-q" aria-hidden="true">?</span>
+      </button>
+      {open && <span className="term-pop" role="note"><b>{g.title}</b> {g.text}</span>}
+    </span>
+  );
+}

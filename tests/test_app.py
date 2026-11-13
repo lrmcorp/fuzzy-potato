@@ -604,3 +604,28 @@ def test_ringkasan_panel_session_flow_and_missing_feeds(db):
     assert c["Batu bara"]["price"] is None and c["Nikel"]["price"] is None and c["Emas"]["price"] is not None
     m = {r["key"]: r for r in panel.macro(db)}
     assert m["BIRATE"]["price"] is None and m["DXY"]["price"] is not None and m["US10Y"]["chg1m"] is not None
+
+
+def test_risk_profile_orders_picks_and_gauge_lists_its_factors(db):
+    from arah import panel
+    from arah.recommend import order_picks
+
+    cards = [
+        {"key": "A", "price": 100, "liquidity": 5e9, "plan": {"stop": 90, "targets": [130, 150]}},   # loss 10%, room 30%
+        {"key": "B", "price": 100, "liquidity": 9e9, "plan": {"stop": 95, "targets": [110, 120]}},   # loss 5%, room 10%
+        {"key": "C", "price": 100, "liquidity": 1e9, "plan": {"stop": 92, "targets": [115, 125]}},   # loss 8%, room 15%
+    ]
+    assert [c["key"] for c in order_picks(cards, "hati-hati")] == ["B", "C", "A"]
+    assert [c["key"] for c in order_picks(cards, "berani")] == ["A", "C", "B"]
+    assert [c["key"] for c in order_picks(cards, "sedang")] == ["A", "B", "C"] == [c["key"] for c in order_picks(cards, None)]
+
+    c = TestClient(create_app(Settings(password="", secret="k" * 32, openrouter_key="", claude_bin="/nonexistent"), db, background=False))
+    assert c.get("/api/profile").json()["profile"] is None
+    assert c.post("/api/profile", json={"profile": "nekat"}).status_code == 400
+    assert c.post("/api/profile", json={"profile": "hati-hati"}).json()["profile"] == "hati-hati"
+    assert c.get("/api/recs").json()["profile"] == "hati-hati" and c.get("/api/panel").json()["profile"] == "hati-hati"
+
+    f = panel.gauge_factors(db)
+    assert [x["label"] for x in f["ID"]] == ["IHSG 1 bln", "USD/IDR 1 bln", "Asing hari ini"] and len(f["US"]) == 3
+    # Prices exist for IHSG, so it has a direction; foreign flow has no Stockbit data, so it has none ("—").
+    assert f["ID"][0]["side"] in (-1, 0, 1) and f["ID"][2]["side"] is None and f["ID"][2]["value"] is None

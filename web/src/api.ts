@@ -91,7 +91,7 @@ export interface RecCard {
 export interface RecordInfo {horizon: string; n: number; hits: number; pct: number | null; pending: number; enough: boolean}
 export interface PicksRecord {closed: number; open: number; target: number; stop: number; expired: number;
   items: {asset: string; status: 'target' | 'stop' | 'expired'; made_at: number; closed_at: number; ret: number | null}[]}
-export interface Recs {at: number | null; ID: RecCard[]; US: RecCard[]; screened: {ID: number; US: number}; record?: PicksRecord}
+export interface Recs {at: number | null; ID: RecCard[]; US: RecCard[]; screened: {ID: number; US: number}; record?: PicksRecord; profile?: RiskProfile | null}
 export interface MarketRow {
   key: string; name: string; name_en: string; decimals: number; unit?: string; price: number; chg1d: number | null; chg1w: number | null;
   direction: Direction; p_up: number; q05: number; q95: number; vigilance: Vigilance | null; spark: number[];
@@ -145,7 +145,10 @@ export interface PanelInfo {
   foreign: {day: {net_foreign: number; foreign_buy: number | null; foreign_sell: number | null; range?: string} | null;
     buy: FlowRow[]; sell: FlowRow[]; covered: number; at: number | null; source: string | null};
   commodities: PanelRow[]; macro: PanelRow[];
+  factors: Record<'ID' | 'US', Factor[]>; profile: RiskProfile | null;
 }
+export type RiskProfile = 'hati-hati' | 'sedang' | 'berani';
+export interface Factor {label: string; side: number | null; value: number | null; kind: 'pct' | 'idr'}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -202,6 +205,7 @@ export const api = {
   undoAlerts: (group: string) => call<{items: AlertItem[]}>(`/api/alerts/group/${encodeURIComponent(group)}`, {method: 'DELETE'}),
   pulse: () => call<PulseInfo>('/api/pulse'),
   panel: () => call<PanelInfo>('/api/panel'),
+  setProfile: (profile: RiskProfile) => call<{profile: RiskProfile}>('/api/profile', {method: 'POST', body: JSON.stringify({profile})}),
   stockbitSession: (value: string) => call('/api/stockbit/session', {method: 'POST', body: JSON.stringify({value})}),
   askTelegram: (question: string, answer: string) => call<{sent: boolean}>('/api/ask/telegram', {method: 'POST', body: JSON.stringify({question, answer})}),
   delAlert: (id: number) => call<{items: AlertItem[]}>(`/api/alerts/${id}`, {method: 'DELETE'}),

@@ -4,7 +4,8 @@ import {api, type EventItem, type FlowRow, type PanelInfo, type PanelRow, type P
 import {compact} from './market';
 import {useLoad} from './hooks';
 import {useT} from './i18n';
-import {ChangeText, Seg, Skeleton, SourceLine, Sparkline, VerdictTag} from './ui';
+import {ChangeText, Mark, Seg, Skeleton, SourceLine, Sparkline, Term, VerdictTag} from './ui';
+import type {Factor, RiskProfile} from './api';
 
 const DIRTAG = {
   naik: {key: 'naik', label: 'Naik', icon: 'up', tone: 'green'},
@@ -35,6 +36,57 @@ function Gauge({now, next, h}: {now: number; next: number; h: string}) {
       <div className="gauge-end" style={{left: 0}}>Menekan</div>
       <div className="gauge-end" style={{right: 0}}>Mendukung</div>
     </div>
+  );
+}
+
+const SIDE = {
+  1: {word: 'Mendukung', icon: 'up', cls: 'chg-up'},
+  [-1]: {word: 'Menekan', icon: 'down', cls: 'chg-down'},
+  0: {word: 'Seimbang', icon: 'square', cls: 'chg-flat'},
+} as Record<number, {word: string; icon: string; cls: string}>;
+
+/** The factors behind the gauge, each with the way it pushes: the gauge is never a black box. */
+function Factors({items, next, h}: {items: Factor[]; next?: number; h: string}) {
+  const {pct} = useT();
+  const model: Factor = {label: `Prakiraan model ${H_LABEL[h]}`, value: null, kind: 'pct',
+    side: next == null ? null : next >= 0.6 ? 1 : next <= 0.4 ? -1 : 0};
+  return (
+    <ul className="factors" aria-label="Faktor yang menggerakkan arah pasar">
+      {[...items, model].map(f => {
+        const s = f.side == null ? null : SIDE[f.side];
+        return (
+          <li key={f.label}>
+            <span>{f.label}{f.value != null && <span className="muted"> {f.kind === 'idr' ? compact(Math.abs(f.value)) : pct(f.value, 1)}</span>}</span>
+            {s ? <span className={`${s.cls} factor-side`}><Mark icon={s.icon} />{s.word}</span> : <span className="muted">—</span>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+const PROFILE_OPTS: {key: RiskProfile; text: string; hint: string}[] = [
+  {key: 'hati-hati', text: 'Hati-hati', hint: 'rugi kecil dulu'},
+  {key: 'sedang', text: 'Sedang', hint: 'seimbang'},
+  {key: 'berani', text: 'Berani', hint: 'target besar dulu'},
+];
+
+/** One question, once: how much swing the owner can take. It only changes the order of the picks. */
+function RiskQuestion({onDone}: {onDone: () => void}) {
+  const [busy, setBusy] = useState(false);
+  const pick = async (p: RiskProfile) => { setBusy(true); try { await api.setProfile(p); onDone(); } finally { setBusy(false); } };
+  return (
+    <section className="card risk-q" aria-labelledby="rq-h">
+      <h2 id="rq-h" className="h3" style={{margin: 0}}>Kalau saham turun 10% seminggu setelah dibeli, Anda…</h2>
+      <div className="risk-opts">
+        {PROFILE_OPTS.map(o => (
+          <button key={o.key} type="button" className="btn" disabled={busy} onClick={() => pick(o.key)}>
+            <b>{o.text}</b><span className="caption">{o.key === 'hati-hati' ? 'gelisah, ingin jual' : o.key === 'sedang' ? 'tenang, menunggu' : 'beli lagi'}</span>
+          </button>
+        ))}
+      </div>
+      <p className="caption" style={{margin: 0}}>Jawaban ini hanya mengubah urutan Pilihan ARAH. Bisa diubah di Pasar.</p>
+    </section>
   );
 }
 
@@ -111,7 +163,7 @@ function ForeignCard({f}: {f: PanelInfo['foreign']}) {
   );
   return (
     <div className="mcard flow">
-      <div className="mcard-top"><span className="mcard-name">Asing di IHSG</span><span className="caption">hari ini</span></div>
+      <div className="mcard-top"><span className="mcard-name"><Term k="asing">Asing di IHSG</Term></span><span className="caption">hari ini</span></div>
       <span className={`mcard-val ${net == null ? '' : net >= 0 ? 'chg-up' : 'chg-down'}`}>
         {net == null ? '—' : `${net >= 0 ? 'Beli' : 'Jual'} ${compact(Math.abs(net))}`}
       </span>
@@ -244,9 +296,9 @@ function RecordLine({r}: {r?: RecordInfo}) {
   );
 }
 
-function MarketPunch({place, sentence, why, causes, news, asset, assetLabel, gauge, h, big, record, children}: {
-  place: string; sentence: string | null | undefined; why: string[]; causes: number; news: string; asset: string; assetLabel: string;
-  gauge?: {now: number; next: number}; h: string; big?: boolean; record?: RecordInfo; children?: React.ReactNode}) {
+function MarketPunch({place, sentence, why, causes, news, asset, assetLabel, gauge, h, big, record, factors, children}: {
+  place: React.ReactNode; sentence: string | null | undefined; why: string[]; causes: number; news: string; asset: string; assetLabel: string;
+  gauge?: {now: number; next: number}; h: string; big?: boolean; record?: RecordInfo; factors?: Factor[]; children?: React.ReactNode}) {
   return (
     <div className={`punch${big ? ' big' : ''}`}>
       <div className="hero-text">
@@ -262,6 +314,7 @@ function MarketPunch({place, sentence, why, causes, news, asset, assetLabel, gau
       <div className="gauge-box">
         {children}
         {gauge ? <Gauge now={gauge.now} next={gauge.next} h={h} /> : <Skeleton lines={1} />}
+        {factors && <Factors items={factors} next={gauge?.next} h={h} />}
       </div>
     </div>
   );
@@ -294,9 +347,10 @@ export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo 
   const events = importantEvents([...(brief.events ?? [])].sort((a, c) => a.at - c.at));
   return (
     <>
+      {pn.data && !pn.data.profile && <RiskQuestion onDone={pn.reload} />}
       <section className="card hero-stack" aria-label="Arah pasar hari ini">
-        <MarketPunch place="Indonesia" big sentence={simple?.headline ?? brief.headline.id} why={whyOf('ID', ind)} causes={causes('ID')}
-          news="#/berita/ID" asset="IHSG" assetLabel="IHSG" gauge={ind?.gauge} h={h} record={b.data?.record}>
+        <MarketPunch place={<>Indonesia · <Term k="ihsg" /></>} big sentence={simple?.headline ?? brief.headline.id} why={whyOf('ID', ind)} causes={causes('ID')}
+          news="#/berita/ID" asset="IHSG" assetLabel="IHSG" gauge={ind?.gauge} h={h} record={b.data?.record} factors={pn.data?.factors.ID}>
           <div className="gauge-head">
             <span>Arah pasar</span>
             <Seg label="Rentang prakiraan" value={h} onChange={setH} options={['1m', '2m', '3m'].map(k => ({key: k, text: H_LABEL[k]}))} />
@@ -304,7 +358,7 @@ export function HomePage({onAuth, pulse}: {onAuth: () => void; pulse: PulseInfo 
         </MarketPunch>
         {simple?.headline_us && (
           <MarketPunch place="Amerika Serikat" sentence={simple.headline_us} why={whyOf('US', us)} causes={causes('US')}
-            news="#/berita/US" asset="SPX" assetLabel="S&P 500" gauge={us?.gauge} h={h} />
+            news="#/berita/US" asset="SPX" assetLabel="S&P 500" gauge={us?.gauge} h={h} factors={pn.data?.factors.US} />
         )}
       </section>
 
