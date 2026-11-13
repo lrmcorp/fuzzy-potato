@@ -352,3 +352,8 @@ a:hover { text-decoration: underline; }
 .cari-field { min-width: 0; }
 .cari-field input { width: 100%; }
 .deliver { flex-wrap: wrap; }
+
+/* The owner's logo: the "arah" wordmark in the bars, the full logo with "by LRM Corporation" on the sign-in page. */
+.logo img { height: 28px; width: auto; }
+@media (max-width: 760px) { .logo img { height: 24px; } }
+.login-logo { width: min(100%, 280px); height: auto; display: block; margin: 0 auto var(--s3); }
