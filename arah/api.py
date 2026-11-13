@@ -295,6 +295,19 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
                 "stockbit": live.stockbit.status(),
                 "schedule": [{"slot": s, "time": t} for s, t in BRIEF_SCHEDULE], "timezone": settings.timezone}
 
+    @app.get("/api/probe/stockbit", dependencies=[Depends(auth)])
+    async def stockbit_probe(path: str | None = Query(None, max_length=300)):
+        """Shapes of Stockbit's answers (no values), for the signed-in owner, to choose parameters.
+        At most one run per minute: each run makes about 16 paced requests to Stockbit."""
+        from .probe import probe_lines
+
+        if time.time() - (db.get("probe_at") or 0) < 60:
+            raise HTTPException(429, "one probe per minute")
+        db.set("probe_at", int(time.time()))
+        if not live.stockbit.session:
+            raise HTTPException(409, "Stockbit is not configured")
+        return {"lines": await probe_lines(live.stockbit, [path] if path else None)}
+
     @app.get("/api/settings", dependencies=[Depends(auth)])
     def get_prefs():
         return {"lang": db.get("lang", "id"), "levels": db.get("levels", DEFAULT_LEVELS),
