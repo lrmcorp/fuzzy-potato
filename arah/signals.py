@@ -12,9 +12,13 @@ from .data.yahoo import load_bars
 from .universe import BENCHMARK, BY_KEY, Asset
 
 
+MINUS = "\u2212"
+
+
 def fmt_num(x: float, decimals: int = 2, lang: str = "id") -> str:
-    """1,234.56 in both languages: the owner reads numbers this way."""
-    return f"{x:,.{decimals}f}"
+    """Indonesian style in both languages, as the owner chose: 5.311,36 and \u22121.234."""
+    s = f"{abs(x):,.{decimals}f}".replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+    return (MINUS + s) if x < 0 and s.strip("0,.") else s
 
 
 def fmt_price(asset, x: float, lang: str = "id") -> str:
@@ -25,8 +29,9 @@ def fmt_price(asset, x: float, lang: str = "id") -> str:
 
 def fmt_pct(x: float, lang: str = "id", signed: bool = True) -> str:
     x = 0.0 if abs(x) < 0.05 else x  # no "-0.0%"
-    s = f"{x:+.1f}" if signed else f"{x:.1f}"
-    return s + "%"
+    s = f"{abs(x):.1f}".replace(".", ",")
+    sign = (MINUS if x < 0 else "+" if signed and x > 0 else "") if x else ""
+    return sign + s + "%"
 
 
 def both(fn) -> dict:

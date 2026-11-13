@@ -12,18 +12,21 @@ from .db import DB
 from .service import build_view
 import math
 
+from . import verdict_rules as rules
+
 from .signals import both, fmt_pct, fmt_price, snapshot
 from .techniques import techniques
 from .universe import BY_KEY, Asset
 
 ABROAD = [("US", "SPX"), ("JP", "N225"), ("SG", "STI"), ("CN", "SSE")]
-STATE_NAMES = {"good": ("Bagus", "Good"), "neutral": ("Netral", "Neutral"), "bad": ("Kurang bagus", "Not good")}
+# Where the market sits for the owner, on the gauge that runs from Menekan to Mendukung.
+STATE_NAMES = {"good": ("Mendukung", "Supportive"), "neutral": ("Seimbang", "Balanced"), "bad": ("Menekan", "Pressing")}
 NEXT_NAMES = STATE_NAMES
-# The owner's rule: a call needs at least a 60% chance on the owner's side to be "Bagus", and at most
-# 40% to be "Kurang bagus". Anything between is a coin toss with a slight lean, shown as "Netral".
+# The owner's rule: a call needs at least a 60% chance on the owner's side to be "Mendukung", and at most
+# 40% to be "Menekan". Anything between is a coin toss with a slight lean, shown as "Seimbang".
 GOOD_AT, BAD_AT = 0.60, 0.40
 # Bumped when the summary's shape or rules change, so a stored one is rebuilt on the next start.
-SIMPLE_V = 2
+SIMPLE_V = 3
 
 
 def price_now(snap: dict, asset: Asset) -> int:
@@ -41,6 +44,12 @@ def price_now(snap: dict, asset: Asset) -> int:
     if abs(m) < quiet:
         return 0
     return 1 if m > 0 else -1
+
+
+def gauge_now(snap: dict, asset: Asset) -> float:
+    """Where the last month puts the market for the owner: a 10% move in their favour reaches the end."""
+    m = (snap.get("chg1m") or 0.0) * (asset.up_is or 1)
+    return round(min(0.97, max(0.03, 0.5 + m / 20)), 3)
 
 
 def favorable(p_up: float, asset: Asset) -> float:
@@ -126,7 +135,7 @@ def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
                 f"Chance of {side} over the {hw[1]}: {chance}% ({st['en']} confidence)")[i]
         rng = (f"Kisaran wajar {lo} sampai {hi}.", f"Reasonable range {lo} to {hi}.")[i]
         if nxt == "neutral":
-            rule = (" Di bawah 60%, jadi belum layak disebut bagus atau kurang bagus.",
+            rule = (" Di bawah 60%, jadi belum cukup untuk menyebut arah.",
                     " Below 60%, so it is not enough to call either way.")[i]
             return f"{lead}.{rule} {rng}"
         return f"{lead}. {rng}"
@@ -134,13 +143,16 @@ def card(db: DB, key: str, snaps: dict, horizon: str = "1m") -> dict | None:
     # Lead with a reason that points somewhere; a bare "it moved x%" explains nothing.
     reasons = sorted(view["reasons"], key=lambda r: r["lean"] == 0)[:3]
     return {
-        "key": key, "name": asset.name, "name_en": asset.nm("en"), "decimals": d, "klass": asset.klass, "unit": asset.unit,
+        "key": key, "name": asset.name, "name_en": asset.nm("en"), "decimals": d, "klass": asset.klass, "unit": asset.unit, "up_is": asset.up_is,
         "price": shown, "chg1d": snap["chg1d"], "chg1m": snap["chg1m"], "bca": bca,
         # Daily closes for the card's chart, put on the same footing as the price shown above.
         "spark": [round(x * scale, max(d, 2)) for x in _spark(db, asset, snaps)],
         "now": {"state": now_state, "name": dict(zip(("id", "en"), STATE_NAMES[now_state])), "text": both(now_text)},
         "next": {"state": nxt, "name": dict(zip(("id", "en"), NEXT_NAMES[nxt])), "text": both(next_text),
-                 "p_up": f["p_up"], "p_good": favorable(f["p_up"], asset), "range": [lo_px, hi_px], "strength": st},
+                 "p_up": f["p_up"], "p_good": favorable(f["p_up"], asset), "range": [lo_px, hi_px], "strength": st,
+                 "dir": rules.direction(f["p_up"])},
+        # Positions on the gauge from Menekan (0) to Mendukung (1), from the owner's side.
+        "gauge": {"now": gauge_now(snap, asset), "next": round(favorable(f["p_up"], asset), 3)},
         "why": reasons[0]["text"] if reasons else None,
         "reasons": reasons, "watch": view.get("watch"),
         "from_team": bool(ins), "grade": (view.get("validation") or {}).get("grade"),
@@ -167,9 +179,20 @@ def _abroad_text(lang: str, n: int, ups: int, downs: int) -> str:
     return f"Of {n} markets watched, {ups} rose and {downs} fell this month."
 
 
+def headline(card_id: dict | None, horizon: str = "1m") -> str | None:
+    """One sentence with an actor, from the IHSG card: "Pasar tertekan. ARAH memperkirakan datar dalam 1 bulan." """
+    if not card_id:
+        return None
+    g = card_id["gauge"]["now"]
+    now = "Pasar tertekan." if g < 0.4 else "Pasar menguat." if g > 0.6 else "Pasar tenang."
+    months = {"1m": "1 bulan", "2m": "2 bulan", "3m": "3 bulan"}.get(horizon, "1 bulan")
+    return f"{now} ARAH memperkirakan {card_id['next']['dir']} dalam {months}."
+
+
 def build_simple(db: DB, snaps: dict, horizon: str = "1m") -> dict:
     out: dict = {"v": SIMPLE_V, "horizon": horizon, "indonesia": card(db, "IHSG", snaps, horizon), "usd": card(db, "USDIDR", snaps, horizon),
                  "cny": card(db, "CNYIDR", snaps, horizon)}
+    out["headline"] = headline(out["indonesia"], horizon)
     countries = []
     for country, key in ABROAD:
         c = card(db, key, snaps, horizon)
@@ -182,10 +205,12 @@ def build_simple(db: DB, snaps: dict, horizon: str = "1m") -> dict:
         downs = len(countries) - ups
         n = len(countries)
         p_good = sum(c["next"]["p_good"] for c in countries) / n
+        g_now = sum(c["gauge"]["now"] for c in countries) / n
         out["abroad"] = {
             "now": {"state": now_state, "name": dict(zip(("id", "en"), STATE_NAMES[now_state])),
                     "text": both(lambda lang: _abroad_text(lang, n, ups, downs))},
             "next": {"state": next_state, "name": dict(zip(("id", "en"), NEXT_NAMES[next_state])), "p_good": p_good},
+            "gauge": {"now": round(g_now, 3), "next": round(p_good, 3)},
             "countries": countries,
         }
     return out

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import re
 import logging
 import time
@@ -16,6 +17,7 @@ from .config import BRIEF_SCHEDULE, DEFAULT_HORIZONS, WEEKLY_OUTLOOK, Settings
 from .data.bca import refresh_bca
 from .data.calendar import refresh_calendar
 from . import push
+from . import verdict_rules as rules
 from .data import sbterm
 from .data.frankfurter import fill as fill_fx
 from .data.news import refresh_news
@@ -23,7 +25,7 @@ from .extras import flips
 from .data.yahoo import GATE, build_synthetic, refresh_many
 from .db import DB
 from .outlook import SIMPLE_V, build_simple
-from .recommend import build_recs, recs_ok
+from .recommend import VERDICTS_V, build_recs, recs_ok
 from .service import record_forecasts, score_forecasts, validation
 from .signals import fmt_price
 from .telegram import Bot, format_brief, format_report
@@ -118,19 +120,20 @@ class Runtime:
     async def ensure_recs(self) -> None:
         """Stock picks missing or built without data (a failed download): try again, at most once an hour."""
         # Also when the stock verdicts were never computed (added after the first install).
-        if (recs_ok(self.db) and self.db.get("verdicts")) or time.time() - self.db.get("recs_try_at", 0) < 3600:
+        fresh = (self.db.get("verdicts") or {}).get("v") == VERDICTS_V
+        if (recs_ok(self.db) and fresh) or (fresh and time.time() - self.db.get("recs_try_at", 0) < 3600):
             return
         self.db.set("recs_try_at", int(time.time()))
         try:
             await self.refresh_data(stocks=True)
-            r = await build_recs(self.db)
+            r = await self.screen()
             log.info("stock screen rebuilt: %s screened, %s without data", r.get("screened"), r.get("missing"))
         except Exception:
             log.exception("stock screen failed")
 
     async def daily(self) -> None:
         await self.refresh_data(stocks=True)
-        await build_recs(self.db)
+        await self.screen()
         for a in STOCKS:
             try:
                 record_forecasts(self.db, a)
@@ -148,10 +151,13 @@ class Runtime:
                 log.exception("news or calendar refresh failed")
             if not recs_ok(self.db):
                 await self.refresh_data(stocks=True)
-                await build_recs(self.db)
+                await self.screen()
             brief = await build_brief(self.db, self.settings, slot=slot)
         lang = self.db.get("lang", "id")
         if push:
+            wc = self.db.get("watch_changes") or {}
+            if slot == "pre_idx" and time.time() - wc.get("at", 0) < 86400:
+                brief["watch_changes"] = wc.get("items", [])
             text = format_brief(brief, lang)
             if slot == "weekly":
                 text += "\n\n" + format_report(brief.get("report") or {}, lang)
@@ -169,7 +175,7 @@ class Runtime:
     async def check_alerts(self) -> None:
         self.ensure_level_alerts()
         lang = self.db.get("lang", "id")
-        for row in self.db.q("SELECT * FROM alerts WHERE triggered_at IS NULL"):
+        for row in self.db.q("SELECT * FROM alerts WHERE triggered_at IS NULL AND kind='price'"):
             asset = BY_KEY.get(row["asset"])
             q = self.db.one("SELECT price FROM quotes WHERE symbol=?", (asset.symbol,)) if asset else None
             if not q or not q["price"]:
@@ -177,21 +183,56 @@ class Runtime:
             price = q["price"]
             if (row["op"] == ">" and price > row["level"]) or (row["op"] == "<" and price < row["level"]):
                 self.db.x("UPDATE alerts SET triggered_at=?, last_price=? WHERE id=?", (int(time.time()), price, row["id"]))
-                d = asset.decimals
-                msg = (f"<b>Peringatan:</b> {asset.name} sekarang {fmt_price(asset, price, lang)}, sudah melewati {fmt_price(asset, row['level'], lang)}."
-                       if lang == "id" else
-                       f"<b>Alert:</b> {asset.name} is now {fmt_price(asset, price, lang)}, past {fmt_price(asset, row['level'], lang)}.")
-                await self.bot.send(msg)
-                body = (f"{asset.name} sekarang {fmt_price(asset, price, lang)}, sudah melewati {fmt_price(asset, row['level'], lang)}."
-                        if lang == "id" else f"{asset.name} is now {fmt_price(asset, price, lang)}, past {fmt_price(asset, row['level'], lang)}.")
-                await push.notify(self.db, f"{asset.name} {'naik ke atas' if row['op'] == '>' else 'turun ke bawah'} {fmt_price(asset, row['level'], lang)}"
-                                  if lang == "id" else f"{asset.name} {'above' if row['op'] == '>' else 'below'} {fmt_price(asset, row['level'], lang)}",
-                                  body, f"/#/a/{asset.key}", f"alert-{row['id']}")
+                title = f"{asset.name} {'naik ke' if row['op'] == '>' else 'turun ke'} {fmt_price(asset, row['level'], lang)}"
+                body = f"Sekarang {fmt_price(asset, price, lang)}" + (f" ({row['label']})" if row["label"] else "") + "."
+                v = self.verdict_line(asset)
+                if v:
+                    body += f" Keputusan ARAH: {v}."
+                if self.stale():
+                    body += " Data tertunda."
+                await self.announce(asset, title, body, row["id"])
+
+    def verdict_line(self, asset) -> str | None:
+        item = ((self.db.get("verdicts") or {}).get("items") or {}).get(asset.key)
+        return rules.text_tag(item["verdict"]) if item and item.get("verdict") in rules.ACTIONS else None
+
+    def stale(self) -> bool:
+        """True when Indonesian prices are not live, so a message should say its numbers may lag."""
+        sb = self.live.stockbit.status()
+        return not sb.get("usable") or bool(sb.get("error"))
+
+    async def announce(self, asset, title: str, body: str, alert_id: int | None = None) -> None:
+        """The same words on the phone (push) and in Telegram, each with a way back to the asset."""
+        url = f"/#/a/{asset.key}"
+        await push.notify(self.db, title, body, url, f"alert-{alert_id or asset.key}")
+        buttons = []
+        if self.settings.public_url:
+            buttons.append({"text": "Buka di ARAH", "url": self.settings.public_url + url})
+        if alert_id:
+            buttons.append({"text": "Matikan", "callback_data": f"off:{alert_id}"})
+        await self.bot.send(f"<b>{html.escape(title)}</b>\n{html.escape(body)}", buttons=buttons or None)
+
+    async def screen(self) -> dict:
+        """Run the stock screen, then tell the owner about each watched stock whose decision changed."""
+        before = ((self.db.get("verdicts") or {}).get("items") or {})
+        out = await build_recs(self.db)
+        changes: list[str] = []
+        after = ((self.db.get("verdicts") or {}).get("items") or {})
+        for row in self.db.q("SELECT id, asset FROM alerts WHERE kind='verdict'"):
+            old, new = (before.get(row["asset"]) or {}).get("verdict"), (after.get(row["asset"]) or {}).get("verdict")
+            asset = BY_KEY.get(row["asset"])
+            if asset and old in rules.ACTIONS and new in rules.ACTIONS and old != new:
+                changes.append(f"{asset.key} {rules.text_tag(old)} menjadi {rules.text_tag(new)}")
+                await self.announce(asset, f"Keputusan ARAH untuk {asset.key} berubah",
+                                    f"{rules.text_tag(old)} menjadi {rules.text_tag(new)}. {after[row['asset']].get('sentence', '')}", row["id"])
+        if changes:
+            self.db.set("watch_changes", {"at": int(time.time()), "items": changes})
+        return out
 
     async def watch_alerts(self) -> None:
         """Every two minutes: fresh prices for the assets that have an open alert, then the alert check.
         The 15-minute data refresh is too slow for "tell me when the dollar passes Rp 18,500"."""
-        keys = {r["asset"] for r in self.db.q("SELECT asset FROM alerts WHERE triggered_at IS NULL")}
+        keys = {r["asset"] for r in self.db.q("SELECT asset FROM alerts WHERE triggered_at IS NULL AND kind='price'")}
         for key in keys:
             asset = BY_KEY.get(key)
             if not asset:

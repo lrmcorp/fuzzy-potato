@@ -20,6 +20,8 @@ from .signals import both, fmt_num, fmt_pct, fmt_price, snapshot
 from .universe import BENCHMARK, BY_KEY, STOCKS, Asset
 
 log = logging.getLogger("arah.recommend")
+# Bumped when the verdict's words or shape change, so stored verdicts are recomputed on the next start.
+VERDICTS_V = 2
 
 # Minimum average daily value traded, in the stock's own currency.
 MIN_VALUE = {"ID": 20e9, "US": 50e6}
@@ -212,7 +214,7 @@ async def build_recs(db: DB, top: int = 5) -> dict:
             v = None
         if v:
             verdicts[a.key] = v
-    db.set("verdicts", {"at": int(time.time()), "items": verdicts})
+    db.set("verdicts", {"at": int(time.time()), "v": VERDICTS_V, "items": verdicts})
     for c in ("ID", "US"):
         out[c] = sorted(out[c], key=lambda x: -x["score"])[:top]
     if not sum(out["screened"].values()):

@@ -56,6 +56,8 @@ class Settings:
 
     telegram_token: str = field(default_factory=lambda: os.environ.get("TELEGRAM_BOT_TOKEN", ""))
     telegram_chat_id: str = field(default_factory=lambda: os.environ.get("TELEGRAM_CHAT_ID", ""))
+    # The address the owner opens ARAH at, for links in Telegram messages. Empty means no links.
+    public_url: str = field(default_factory=lambda: os.environ.get("ARAH_PUBLIC_URL", "").rstrip("/"))
 
     @property
     def db_path(self) -> Path:

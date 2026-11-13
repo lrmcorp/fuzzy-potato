@@ -1,49 +1,41 @@
 # ARAH design direction
 
-Reading this as: a personal market briefing for one Indonesian investor who wants the answer first,
-in a calm morning-newspaper style, dial ENERGY 1 / RHYTHM 2 / MOTION 1.
+The direction comes from the owner's redesign pack ("ARAH Redesign", SPEC.md with mockups for desktop 1280px and
+phone 390px). This file records what was built from it and the choices the owner made on top. Design tokens live in
+`web/src/tokens.css`, copied unchanged from the pack.
 
-## Who reads it and what they need
+Reading this as: a personal Indonesian stock and FX research app for one newcomer, mostly on a phone, in a calm and
+data-first style with charts and numbers instead of paragraphs, dial ENERGY 1 / RHYTHM 2 / MOTION 1.
 
-One person, new to markets, usually on a phone. The first screen answers four questions and nothing else:
-is Indonesia good or not, is abroad good or not, how is the rupiah against the dollar, and against the yuan.
-Each has two answers (now, next month) and one reason. Every stock carries one word to act on (Layak, Tunggu,
-Hindari) with its score and three reasons. Everything else is at most two taps away.
+## Owner decisions
+
+| Decision | Source |
+|---|---|
+| Numbers in Indonesian style: 5.311,36 · Rp 18.200 · −1,6% (U+2212 minus); ranges as "a sampai b" | Owner chose the pack's format over the earlier 1,000 style |
+| Stock actions Masuk / Masuk bertahap / Tunggu / Hindari, thresholds in `arah/verdict_rules.py` | Owner approved the pack's thresholds: Masuk = score ≥ 70 and chance ≥ 60%; bertahap = score ≥ 70, chance < 60%; Tunggu = 40 to 69 or no data; Hindari = score < 40 or chance ≤ 40% |
+| Markets, indices and FX show a direction (Naik / Datar / Turun) and the gauge from Menekan to Mendukung | Pack SPEC; the old words Layak, Bagus, Netral and Kurang bagus are gone from the app, the bot and notifications |
+| Each phase is built, tested and merged without waiting | Owner's choice for this redesign |
 
 ## Decisions and their reasons
 
 | Decision | Reason |
 |---|---|
-| One reading column, about 46rem wide | The brief is read top to bottom like an article, not scanned like a dashboard. |
-| The conclusion sentence is set in a serif, everything else in the theme sans | The serif marks "this is the verdict" the way a newspaper lede does. It is the typographic voice of the product. |
-| The horizon strip (1 hour to 1 month) repeats on every asset | It is the identity motif: the same seven steps, the same glyphs, everywhere. |
-| Direction uses glyphs in ink colour: ▲ ▼ ◆ | Green and red would be wrong: a rising USD/IDR is bad news for a rupiah holder, a rising IHSG is good. Shape carries direction, text carries meaning. |
-| One accent, deep teal, on the selected horizon and the primary button only | Teal stays clear of the red, amber and green reserved for the watch level, so the accent never reads as a market signal. |
-| Green, grey and red appear on answer tags (Bagus, Netral, Kurang bagus), verdict tags (Layak, Tunggu, Hindari) and the watch level | Colour means "good or not for you", never "price up or down": a rising USD/IDR is tagged red because the rupiah is weaker. Every tag carries its word, so colour is never the only signal. Netral and Tunggu are grey: no side is ahead. |
-| Five destinations in a bottom bar on phones (Ringkasan, Pasar, Berita, Peringatan, Atur), a left rail from 60rem | The owner reads on a phone; the bottom bar sits within thumb reach. The owner chose this layout. |
-| The bottom bar has words, no icons | Five short words read faster for a newcomer than five generic glyphs, and none of the stock icon shapes means "rupiah" or "alert level" better than the word. |
-| Sub-sections are a row of chips that scrolls sideways on a phone | Seven segments (Pilihan to Hitung) fit one thumb swipe instead of wrapping into a wall of buttons. Each chip is a real button with a pressed state. |
-| Market lists are rows, not tables: name, a 3-month line, price and today's change, the verdict under the price | Rows survive a 360px screen without sideways scrolling; the line shows the trend at a glance. Stocks are sorted by verdict score, best first. |
-| The stock page opens with the price and chart (today, 1M, 3M, 1Y, 5Y), then the verdict card, then four tabs: Analisa, Bandar & asing, Berita, Detail | The owner pointed at the terminal's stock page as the reference for what goes where; the order is price, then the answer, then the evidence. The look stays ARAH's own. |
-| The verdict word (Layak, Tunggu, Hindari) is set in the serif, with the score and a meter marked at 45 and 65 | The serif is the product's voice for conclusions; the marks show how far the score is from the next word. |
-| News is a numbered list ranked by importance, with "N media" next to the source | The order is the ranking, so numbers carry meaning; how many outlets ran a story is the plainest proof that it matters. |
-| Notifications go to the phone through the browser (web push), set up on the Peringatan page | The owner chose phone notifications without another account. iPhones need the app on the Home Screen first, and the page says so. |
-| Rules and whitespace separate sections; cards only for stock picks | A stock pick is a discrete item that can be compared and reordered. Sections of a brief are not. |
-| Light mode only | The owner asked for one bright look everywhere; no dark mode or theme switch. |
-| The summary is four cards with a chart each: price, now and next month, a 3-month line with the next-month cone, and the range | The owner found the text-heavy brief confusing. Reasons, sources and test results moved behind "Kenapa?" and "Data lain" on the detail page. |
-| The asset page opens with today's live chart, then the forecast: conclusion, projection chart, and each technique's view | The owner wants the chart and the system's analysis first. Short-horizon detail, reasons and sources sit behind two collapsed sections. |
-| A 1, 2 or 3-month filter sits directly above what it changes (summary cards, forecast) | One control per question, placed where its effect is seen. |
-| Live candles are ink only: hollow for a rising minute, filled for a falling one | Green and red already mean good or bad for the owner; candles must not reuse them for up and down. |
-| Technique paths use the first three slots of the validated categorical palette, each with its own dash pattern and an end label | Three lines pass the colour-blind checks together; dashes and labels mean colour is never the only cue. |
-| Motion: hover and focus states only | Numbers that move on their own distract from reading them. Respects reduced motion by having none to reduce. |
-| Today's chart and long ranges are drawn as a line; 1M keeps ink candles | A minute-by-minute candle row is noise on a phone; a line reads like the terminal the owner uses. One month of daily candles still shows each day's range. |
-| Astryx neutral theme as the base | Quiet defaults, accessible controls, and tokens that the few custom pieces reuse. |
+| Light mode only, Inter with tabular figures | Pack non-negotiable; tabular figures keep prices aligned in columns. |
+| Desktop: top bar with Ringkasan · Pasar · Berita · Peringatan (badge "N aktif") · Atur, a search field focused by `/`, and the data-freshness chip | Every page is one click away, and search is the fastest way to any stock. |
+| Phone: bottom tab bar Ringkasan · Pasar · Cari · Peringatan · Atur (56px plus safe area); asset pages swap it for an action bar [☆] [Pasang peringatan] [Tanya] | Thumb reach; on an asset page the next action matters more than navigation. |
+| One verdict vocabulary everywhere, each with its own mark (● ◐ ■ ▼) | Meaning never rests on colour alone, and web, push and Telegram never disagree. |
+| Colour follows what a move means for a rupiah holder; the ▲/▼ arrow follows the price | A rising USD/IDR is drawn ▲ in orange: up in price, bad for the owner. |
+| The asset page opens with the Keputusan card, then 6 months of history with a +1/2/3 month forecast (50% and 90% bands, labelled at the right edge, with a table view) | The answer first, then the evidence; the bands carry the range, so there is no separate "kisaran" block. |
+| The technique list shows only the techniques used plus the best comparison; the rest sit behind one button | A newcomer sees what decided the answer, not every method that was tried. |
+| Picks show a trade-plan ruler (batas rugi, area beli, kini, target 1 and 2) and "Hitung lot" replaces the currency calculator | Risk and reward on one line; position size is the question a plan raises next. |
+| One alert sheet everywhere: the direction comes from the current price, presets come from the trade plan (else the 9-in-10 range), and "Batalkan" removes the whole group | Setting an alert takes 2 to 3 taps from search, the watchlist, the asset page or a pick. |
+| Data freshness is one component: the time when live, an amber "Tertunda 15 mnt" chip when Stockbit is not connected, "Sinyal dijeda" when data is over a day old | The owner can reconnect Stockbit from the chip by pasting a fresh session; delayed data is never shown next to a green "live" dot. |
+| Charts are drawn at the width they are shown | The 12px labels stay 12px on a 390px phone instead of shrinking with the drawing. |
 
 ## Honesty rules for the interface
 
-- A percentage is always labelled as a chance, never as a promise.
-- Every forecast shows whether it passed the historical test, in words.
-- When data is stale or thin, the screen says so next to the number it affects.
-- Empty lists stay empty and say why. No filler picks.
-- The stock verdict says it comes from a fixed rule not yet tested on past data, on the card itself.
-- Community posts from Stockbit are labelled as unverified opinion wherever they appear.
+- Every forecast sentence names an actor ("ARAH memperkirakan…"); odds are written as "1 dari 2" and "9 dari 10".
+- The stock verdict comes from a fixed rule not yet tested on past data.
+- Community posts from Stockbit are labelled as unverified opinion.
+- Empty, loading and error states say what is missing; no "—" in empty cells.
+- One disclaimer per page, in the footer: "Alat riset pribadi. Angka adalah peluang, bukan saran investasi."

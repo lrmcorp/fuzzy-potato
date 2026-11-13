@@ -79,7 +79,7 @@ def format_view(view: dict, lang: str) -> str:
 
 
 MARK = {"good": "🟢", "neutral": "⚪", "bad": "🔴"}
-VERDICT = {"good": ("Bagus", "Good"), "neutral": ("Netral", "Neutral"), "bad": ("Kurang bagus", "Not good")}
+VERDICT = {"good": ("Mendukung", "Supportive"), "neutral": ("Seimbang", "Balanced"), "bad": ("Menekan", "Pressing")}
 
 
 def format_brief(brief: dict, lang: str) -> str:
@@ -87,7 +87,10 @@ def format_brief(brief: dict, lang: str) -> str:
     s = brief.get("simple") or {}
     nm = lambda c: c["name_en"] if lang == "en" else c["name"]
     now_w, next_w = ("Sekarang", "Bulan depan") if lang == "id" else ("Now", "Next month")
-    lines = [f"<b>{esc(brief['headline'][lang])}</b>"]
+    # The morning message opens with the same sentence as the home page.
+    lines = [f"<b>{esc(s.get('headline') or brief['headline'][lang])}</b>"]
+    for ch in brief.get("watch_changes") or []:
+        lines.append(f"Pantauan: {esc(ch)}")
     if brief.get("outlook"):
         lines += ["", esc(brief["outlook"][lang])]
 
@@ -159,7 +162,7 @@ def format_recs(recs: dict, market: str, lang: str) -> str:
         u = BY_KEY[c["key"]].unit if c["key"] in BY_KEY else ""
         out.append(f"<b>{esc(c['key'])}</b> {esc(c['name'])}  {money(c['price'], d, u, lang)}")
         out += [f"{i}. {esc(s[lang])}" for i, s in enumerate(c["strengths"], 1)]
-        out.append(("<b>Kenapa masih layak:</b> " if lang == "id" else "<b>Why still worth it:</b> ") + esc(c["why"][lang]))
+        out.append(("<b>Kenapa masih bisa masuk:</b> " if lang == "id" else "<b>Why still worth it:</b> ") + esc(c["why"][lang]))
         out.append(f"{'Masuk' if lang == 'id' else 'Entry'} {money(plan['entry'][0], d, u, lang)} - {fmt_num(plan['entry'][1], d, lang)} | "
                    f"Target {money(plan['targets'][0], d, u, lang)} | {'Batas rugi' if lang == 'id' else 'Stop'} {money(plan['stop'], d, u, lang)}")
         out.append(("Risiko: " if lang == "id" else "Risk: ") + esc(c["risks"][0][lang]))
@@ -177,15 +180,18 @@ class Bot:
     def lang(self) -> str:
         return self.db.get("lang", "id")
 
-    async def send(self, text: str) -> bool:
+    async def send(self, text: str, buttons: list[dict] | None = None) -> bool:
         if not self.settings.telegram_enabled:
             return False
         try:
             async with httpx.AsyncClient(timeout=30) as client:
-                for chunk in _chunks(text, 3900):
-                    r = await client.post(f"{self.base}/sendMessage", json={
-                        "chat_id": self.settings.telegram_chat_id, "text": chunk, "parse_mode": "HTML",
-                        "disable_web_page_preview": True})
+                chunks = list(_chunks(text, 3900))
+                for i, chunk in enumerate(chunks):
+                    body = {"chat_id": self.settings.telegram_chat_id, "text": chunk, "parse_mode": "HTML",
+                            "disable_web_page_preview": True}
+                    if buttons and i == len(chunks) - 1:
+                        body["reply_markup"] = {"inline_keyboard": [buttons]}
+                    r = await client.post(f"{self.base}/sendMessage", json=body)
                     if r.status_code != 200:
                         log.warning("telegram send failed: %s %s", r.status_code, r.text[:200])
                         return False
@@ -295,6 +301,15 @@ class Bot:
         return (f"Peringatan dipasang: {asset.name} {args[1]} {money(level, asset.decimals, asset.unit, lang)}" if lang == "id"
                 else f"Alert set: {asset.name} {args[1]} {money(level, asset.decimals, asset.unit, lang)}")
 
+    async def on_button(self, client: httpx.AsyncClient, cb: dict) -> None:
+        """[Matikan] under an alert message: delete that alert."""
+        data = str(cb.get("data") or "")
+        if data.startswith("off:") and data[4:].isdigit():
+            self.db.x("DELETE FROM alerts WHERE id=?", (int(data[4:]),))
+            await _answer(client, self.base, cb.get("id", ""), "Peringatan dimatikan.")
+        else:
+            await _answer(client, self.base, cb.get("id", ""), "")
+
     async def poll_forever(self) -> None:
         if not self.settings.telegram_enabled:
             return
@@ -305,6 +320,10 @@ class Bot:
                     r = await client.get(f"{self.base}/getUpdates", params={"timeout": 25, "offset": self.offset})
                     for upd in r.json().get("result", []):
                         self.offset = upd["update_id"] + 1
+                        cb = upd.get("callback_query") or {}
+                        if cb and str((cb.get("message") or {}).get("chat", {}).get("id")) == str(self.settings.telegram_chat_id):
+                            await self.on_button(client, cb)
+                            continue
                         msg = upd.get("message") or {}
                         if str(msg.get("chat", {}).get("id")) != str(self.settings.telegram_chat_id):
                             continue
@@ -320,6 +339,13 @@ class Bot:
                 except Exception as e:
                     log.warning("telegram poll error: %s", e)
                     await asyncio.sleep(5)
+
+
+async def _answer(client: httpx.AsyncClient, base: str, cb_id: str, text: str) -> None:
+    try:
+        await client.post(f"{base}/answerCallbackQuery", json={"callback_query_id": cb_id, "text": text})
+    except httpx.HTTPError:
+        pass
 
 
 def _chunks(text: str, size: int):

@@ -9,6 +9,7 @@ services:
     env_file: ../.env.vps
     environment:
       ARAH_REVISION: ${ARAH_REVISION:-unknown}
+      ARAH_PUBLIC_URL: https://arah.lnint.xyz
     volumes:
       - arah_data:/data
     networks:

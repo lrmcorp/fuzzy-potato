@@ -254,13 +254,15 @@ def test_number_format_and_units():
     from arah.signals import fmt_num, fmt_pct, fmt_price
     from arah.universe import BY_KEY
 
-    assert fmt_num(18228.4, 0, "id") == "18,228" and fmt_num(1234.5, 2, "en") == "1,234.50"
-    assert fmt_pct(-1.25, "id") == "-1.2%" or fmt_pct(-1.25, "id") == "-1.3%"
-    assert fmt_price(BY_KEY["USDIDR"], 18228) == "Rp 18,228"
-    assert fmt_price(BY_KEY["BBCA"], 9875) == "Rp 9,875"
-    assert fmt_price(BY_KEY["NVDA"], 181.5) == "$ 181.50"
-    assert fmt_price(BY_KEY["IHSG"], 5115.04) == "5,115.04"
-    assert fmt_price(BY_KEY["USDJPY"], 154.2) == "¥ 154.20"
+    # Indonesian style, as the owner chose with the redesign: 5.311,36, Rp 18.228, U+2212 minus.
+    assert fmt_num(18228.4, 0, "id") == "18.228" and fmt_num(1234.5, 2, "en") == "1.234,50"
+    assert fmt_num(-0.004, 2) == "0,00" and fmt_num(-1234.5, 1) == "\u22121.234,5"
+    assert fmt_pct(-1.26, "id") == "\u22121,3%" and fmt_pct(1.24) == "+1,2%" and fmt_pct(0.01) == "0,0%"
+    assert fmt_price(BY_KEY["USDIDR"], 18228) == "Rp 18.228"
+    assert fmt_price(BY_KEY["BBCA"], 9875) == "Rp 9.875"
+    assert fmt_price(BY_KEY["NVDA"], 181.5) == "$ 181,50"
+    assert fmt_price(BY_KEY["IHSG"], 5115.04) == "5.115,04"
+    assert fmt_price(BY_KEY["USDJPY"], 154.2) == "¥ 154,20"
     # 62% up for IHSG is good; 62% up for USD/IDR (rupiah weakening) is not good; 55% is neutral.
     assert next_state(0.62, BY_KEY["IHSG"]) == "good" and next_state(0.62, BY_KEY["USDIDR"]) == "bad"
     assert next_state(0.55, BY_KEY["IHSG"]) == "neutral" and next_state(0.40, BY_KEY["IHSG"]) == "bad"
@@ -423,7 +425,7 @@ def test_redesign_endpoints_verdict_history_feed_and_push(db, monkeypatch):
     c = TestClient(create_app(Settings(password="", secret="k" * 32, openrouter_key="", claude_bin="/nonexistent"), db, background=False))
 
     v = c.get("/api/verdict/BBCA").json()
-    assert v["verdict"] in ("layak", "tunggu", "hindari") and 0 <= v["score"] <= 100 and len(v["reasons"]) == 3
+    assert v["verdict"] in ("masuk", "bertahap", "tunggu", "hindari") and 0 <= v["score"] <= 100 and len(v["reasons"]) == 3
     assert all(r["text"]["id"] and "—" not in r["text"]["id"] for r in v["reasons"]) and v["tested"] is False
     assert c.get("/api/verdict/USDIDR").status_code == 404  # verdicts are for stocks
 
@@ -443,3 +445,30 @@ def test_redesign_endpoints_verdict_history_feed_and_push(db, monkeypatch):
     ok = c.post("/api/push/subscribe", json={"endpoint": "https://push.example/abc", "keys": {"p256dh": "x", "auth": "y"}})
     assert ok.json()["devices"] == 1 and sent  # a welcome notification goes out at once
     assert c.post("/api/push/unsubscribe", json={"endpoint": "https://push.example/abc"}).json()["devices"] == 0
+
+
+def test_search_watch_grouped_alerts_plan_and_pulse(db):
+    c = TestClient(create_app(Settings(password="", secret="k" * 32, openrouter_key="", claude_bin="/nonexistent"), db, background=False))
+    r = c.get("/api/search?q=bukit").json()["items"]
+    assert r and r[0]["key"] == "PTBA" and r[0]["price"]
+    assert c.get("/api/search?q=USD/IDR").json()["items"][0]["tag"]["key"] in ("naik", "datar", "turun")
+
+    # Watching a stock also turns on "tell me when ARAH's decision changes".
+    assert c.post("/api/watchlist", json={"key": "PTBA", "on": True}).json()["items"] == ["PTBA"]
+    assert c.get("/api/watchlist").json()["items"][0]["key"] == "PTBA"
+    assert db.one("SELECT COUNT(*) n FROM alerts WHERE asset='PTBA' AND kind='verdict'")["n"] == 1
+
+    plan = c.get("/api/plan/PTBA").json()
+    assert plan["klass"] == "stock" and plan["levels"] and plan["price"]
+    price = plan["price"]
+    g = c.post("/api/alerts/batch", json={"asset": "PTBA", "levels": [{"level": price * 1.1, "label": "Target 1"},
+                                                                       {"level": price * 0.9, "label": "Batas rugi"}]}).json()
+    assert g["count"] == 2
+    ops = {r["label"]: r["op"] for r in db.q("SELECT label, op FROM alerts WHERE grp=?", (g["group"],))}
+    assert ops == {"Target 1": ">", "Batas rugi": "<"}  # direction follows from the current price
+    assert c.get("/api/pulse").json()["alerts_active"] == 3
+    c.delete(f"/api/alerts/group/{g['group']}")  # one "Batalkan" removes the whole sheet's alerts
+    p = c.get("/api/pulse").json()
+    assert p["alerts_active"] == 1 and p["state"] in ("live", "delayed", "paused")
+    assert c.post("/api/alerts/batch", json={"asset": "PTBA", "levels": []}).status_code == 400
+    assert c.post("/api/stockbit/session", json={"value": "not a session value at all"}).status_code == 400

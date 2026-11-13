@@ -72,6 +72,11 @@ class DB:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.executescript(SCHEMA)
+        # Columns added after the first install. SQLite has no "ADD COLUMN IF NOT EXISTS".
+        have = {r[1] for r in self._conn.execute("PRAGMA table_info(alerts)").fetchall()}
+        for col, decl in (("kind", "TEXT NOT NULL DEFAULT 'price'"), ("grp", "TEXT"), ("label", "TEXT")):
+            if col not in have:
+                self._conn.execute(f"ALTER TABLE alerts ADD COLUMN {col} {decl}")
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:

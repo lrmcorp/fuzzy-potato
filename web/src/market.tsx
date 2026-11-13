@@ -1,99 +1,232 @@
-import {useMemo, useState} from 'react';
-import {EmptyState} from '@astryxdesign/core/EmptyState';
-import {TextInput} from '@astryxdesign/core/TextInput';
-import {api, type MarketRow} from './api';
-import {Spark} from './charts';
-import {Async, ChipBar, VerdictTag, VigilanceLine} from './components';
+/* Pasar (redesign pack prompt 04, mockups Pasar.html and MobilePasar.html). */
+import {Fragment, useState} from 'react';
+import {api, type MarketRow, type RecCard, type Simple} from './api';
+import {openAlertSheet} from './alertsheet';
 import {useLoad} from './hooks';
-import {useT, type Key} from './i18n';
-import {CalcPage, RecsPanel} from './pages';
+import {useT} from './i18n';
+import {ChangeText, Icon, Seg, Skeleton, Sparkline, VerdictTag} from './ui';
 
-interface Props {onAuth: () => void; seg: string}
-
-// Segments in the order a newcomer asks: what to buy, Indonesian stocks, US stocks, the indices,
-// currencies, commodities, then the exchange calculator.
-export const SEGMENTS: {key: string; label: Key; group?: string}[] = [
-  {key: 'pilihan', label: 'seg_picks'},
-  {key: 'saham-id', label: 'tab_id', group: 'stock_id'},
-  {key: 'saham-as', label: 'tab_us', group: 'stock_us'},
-  {key: 'indeks', label: 'indices', group: 'index'},
-  {key: 'kurs', label: 'nav_fx', group: 'fx'},
-  {key: 'komoditas', label: 'tab_comm', group: 'commodity'},
-  {key: 'hitung', label: 'nav_calc'},
+const SEGS = [
+  {key: 'pilihan', text: 'Pilihan ARAH'}, {key: 'saham', text: 'Saham'}, {key: 'indeks', text: 'Indeks'},
+  {key: 'kurs', text: 'Kurs'}, {key: 'komoditas', text: 'Komoditas'},
 ];
+const GROUP: Record<string, string> = {indeks: 'index', kurs: 'fx', komoditas: 'commodity'};
 
-function Row({r}: {r: MarketRow}) {
-  const {nm, money, pct, t} = useT();
-  const fx = r.klass === 'fx';
-  // Colour on the daily change means good or bad for the owner: a rising rupiah rate is bad news.
-  const good = (r.chg1d ?? 0) >= 0 ? !fx : fx;
+/** One line from the market's condition: how big a position the moment allows. */
+function ContextChip({s}: {s: Simple | null | undefined}) {
+  const {pct} = useT();
+  const c = s?.indonesia;
+  if (!c?.gauge) return null;
+  const g = c.gauge.now;
+  const tone = g < 0.4 ? 'orange' : g > 0.6 ? 'green' : 'grey';
+  const advice = g < 0.4 ? 'masuk kecil' : g > 0.6 ? 'masuk normal' : 'masuk bertahap';
+  return <span className={`ctx tag-${tone}`}>IHSG {pct(c.chg1m ?? 0, 1)} sebulan · {advice}</span>;
+}
+
+/** Trade plan on one line: stop, buy zone, "Kini", target 1 and target 2. */
+function Ruler({c, mini}: {c: RecCard; mini?: boolean}) {
+  const {num, range} = useT();
+  const p = c.plan;
+  const d = c.decimals;
+  const lo = p.stop - (p.targets[1] - p.stop) * 0.08, hi = p.targets[1] + (p.targets[1] - p.stop) * 0.04;
+  const x = (v: number) => `${((v - lo) / (hi - lo)) * 100}%`;
+  const w = (a: number, b: number) => `${((b - a) / (hi - lo)) * 100}%`;
+  if (mini) return (
+    <div className="mini-ruler" role="img" aria-label={`Batas rugi ${num(p.stop, d)}, kini ${num(c.price, d)}, target ${num(p.targets[0], d)}`}>
+      <span className="ruler-track" style={{top: 0}} />
+      <span className="ruler-risk" style={{top: 0, left: x(p.stop), width: w(p.stop, p.entry[0])}} />
+      <span className="ruler-reward" style={{top: 0, left: x(c.price), width: w(c.price, p.targets[1])}} />
+      <span className="ruler-tick" style={{top: -6, left: x(c.price), background: 'var(--ink)'}} />
+    </div>
+  );
+  return (
+    <div className="ruler" role="img" aria-label={`Batas rugi ${num(p.stop, d)}, beli ${range(p.entry[0], p.entry[1], d)}, kini ${num(c.price, d)}, target 1 ${num(p.targets[0], d)}, target 2 ${num(p.targets[1], d)}`}>
+      <span className="ruler-track" />
+      <span className="ruler-risk" style={{left: x(p.stop), width: w(p.stop, p.entry[0])}} />
+      <span className="ruler-buy" style={{left: x(p.entry[0]), width: w(p.entry[0], p.entry[1])}} />
+      <span className="ruler-reward" style={{left: x(p.entry[1]), width: w(p.entry[1], p.targets[1])}} />
+      <span className="ruler-tick" style={{left: x(p.stop), background: 'var(--down)'}} />
+      <span className="ruler-lbl" style={{left: x(p.stop), color: 'var(--down)'}}>Batas rugi</span>
+      <span className="ruler-val" style={{left: x(p.stop)}}>{num(p.stop, d)}</span>
+      <span className="ruler-tick" style={{left: x(c.price), background: 'var(--ink)', width: 3}} />
+      <span className="ruler-lbl" style={{left: x(c.price)}}>Kini</span>
+      <span className="ruler-buyl" style={{left: x((p.entry[0] + p.entry[1]) / 2)}}>beli {range(p.entry[0], p.entry[1], d)}</span>
+      {p.targets.map((tg, i) => (
+        <Fragment key={i}>
+          <span className="ruler-tick" style={{left: x(tg), background: 'var(--up)'}} />
+          <span className="ruler-lbl" style={{left: x(tg), color: 'var(--up)'}}>Target {i + 1}</span>
+          <span className="ruler-val" style={{left: x(tg)}}>{num(tg, d)}</span>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+/** "Hitung lot": capital and risk in, lots out. The loss per share is the distance to the stop. */
+function LotCalc({c}: {c: RecCard}) {
+  const {num} = useT();
+  const [cap, setCap] = useState('100.000.000');
+  const [risk, setRisk] = useState('1');
+  const capital = Number(cap.replace(/\D/g, ''));
+  const r = Number(risk.replace(',', '.'));
+  const perShare = c.price - c.plan.stop;
+  const perLot = c.country === 'ID' ? 100 : 1;
+  const lots = capital > 0 && r > 0 && perShare > 0 ? Math.floor((capital * r / 100) / (perShare * perLot)) : 0;
+  const cost = lots * perLot * c.price;
+  return (
+    <div className="lot">
+      <label className="field"><span>Modal (Rp)</span><input inputMode="numeric" value={cap} onChange={e => setCap(e.target.value)} /></label>
+      <label className="field"><span>Risiko per transaksi (%)</span><input inputMode="decimal" value={risk} onChange={e => setRisk(e.target.value)} /></label>
+      <p style={{margin: 0}} aria-live="polite">
+        {lots > 0 ? <><output>{num(lots, 0)} {perLot === 100 ? 'lot' : 'lembar'}</output><br /><span className="caption">sekitar {num(cost, 0)}; rugi maks {num(capital * r / 100, 0)} bila batas rugi kena</span></>
+          : <span className="caption">Isi modal dan risiko di atas nol.</span>}
+      </p>
+    </div>
+  );
+}
+
+function PickActions({c, lot, setLot}: {c: RecCard; lot: boolean; setLot: (v: boolean) => void}) {
+  return (
+    <div className="chips" style={{alignItems: 'center'}}>
+      <button type="button" className="btn btn-primary" onClick={() => openAlertSheet(c.key, {allPlan: true})}>Pasang 3 peringatan</button>
+      <button type="button" className="btn" aria-expanded={lot} onClick={() => setLot(!lot)}>Hitung lot</button>
+      <a className="btn btn-link" href={`#/a/${encodeURIComponent(c.key)}`} style={{fontWeight: 600}}>Detail {c.key}</a>
+    </div>
+  );
+}
+
+function PickRow({c, paused}: {c: RecCard; paused: boolean}) {
+  const {num, pct, l} = useT();
+  const [open, setOpen] = useState(false);
+  const [lot, setLot] = useState(false);
+  const has = !!c.plan;
+  const t1 = has ? (c.plan.targets[0] / c.price - 1) * 100 : null;
+  const loss = has ? (c.plan.stop / c.price - 1) * 100 : null;
+  return (
+    <>
+      <tr>
+        <td><a href={`#/a/${encodeURIComponent(c.key)}`} style={{color: 'var(--ink)'}}><b className="row-title">{c.key}</b> <span className="muted">{c.name}</span></a></td>
+        <td><VerdictTag tag={c.tag} paused={paused} /></td>
+        <td className="num">{num(c.price, c.decimals)}</td>
+        {has ? <><td className="num chg-up" style={{fontWeight: 600}}>{pct(t1, 1)}</td><td className="num chg-down" style={{fontWeight: 600}}>{pct(loss, 1)}</td></>
+          : <td className="num muted" colSpan={2}>Rencana belum tersedia</td>}
+        <td style={{width: 48}}>
+          <button type="button" className="icon-btn" aria-expanded={open} aria-label={`${open ? 'Tutup' : 'Buka'} rencana ${c.key}`} onClick={() => setOpen(!open)}>
+            <Icon name="chevron" className="chev" />
+          </button>
+        </td>
+      </tr>
+      {open && (
+        <tr className="expanded-row">
+          <td colSpan={6}>
+            {has ? (
+              <div className="pick-expand">
+                <div className="stack">
+                  <Ruler c={c} />
+                  <PickActions c={c} lot={lot} setLot={setLot} />
+                  {lot && <LotCalc c={c} />}
+                </div>
+                <ul className="plus">{c.strengths.slice(0, 3).map((s, i) => <li key={i}>{l(s)}</li>)}</ul>
+              </div>
+            ) : <p className="body">Rencana belum tersedia</p>}
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function PickCard({c, paused}: {c: RecCard; paused: boolean}) {
+  const {num, pct, l} = useT();
+  const [lot, setLot] = useState(false);
+  const [why, setWhy] = useState(false);
+  const has = !!c.plan;
+  return (
+    <article className="pcard">
+      <div className="pcard-top">
+        <a href={`#/a/${encodeURIComponent(c.key)}`} style={{color: 'var(--ink)'}}><b className="row-title">{c.key}</b> <span className="muted">{num(c.price, c.decimals)}</span></a>
+        <VerdictTag tag={c.tag} paused={paused} />
+      </div>
+      {has ? (
+        <>
+          <p className="body" style={{margin: 0}}>Target <b className="chg-up">{pct((c.plan.targets[0] / c.price - 1) * 100, 1)}</b> · Rugi maks <b className="chg-down">{pct((c.plan.stop / c.price - 1) * 100, 1)}</b></p>
+          <Ruler c={c} mini />
+          <button type="button" className="btn btn-primary btn-block" onClick={() => openAlertSheet(c.key, {allPlan: true})}>Pasang 3 peringatan</button>
+          <div className="chips">
+            <button type="button" className="btn" aria-expanded={lot} onClick={() => setLot(!lot)}>Hitung lot</button>
+            <button type="button" className="btn" aria-expanded={why} onClick={() => setWhy(!why)}>Alasan</button>
+            <a className="btn btn-link" href={`#/a/${encodeURIComponent(c.key)}`} style={{fontWeight: 600}}>Detail</a>
+          </div>
+          {lot && <LotCalc c={c} />}
+          {why && <ul className="plus">{c.strengths.slice(0, 3).map((s, i) => <li key={i}>{l(s)}</li>)}</ul>}
+        </>
+      ) : <p className="body" style={{margin: 0}}>Rencana belum tersedia</p>}
+    </article>
+  );
+}
+
+function Picks({onAuth, paused}: {onAuth: () => void; paused: boolean}) {
+  const recs = useLoad(api.recs, [], onAuth);
+  if (!recs.data) return <div className="card"><Skeleton lines={4} /></div>;
+  const all = [...recs.data.ID, ...recs.data.US];
+  if (all.length === 0) return <div className="card"><p className="body" style={{margin: 0}}>Hari ini belum ada saham yang lolos. ARAH menunggu.</p></div>;
+  return (
+    <>
+      <div className="card only-desk" style={{padding: 0, overflowX: 'auto'}}>
+        <table className="ptable">
+          <thead><tr><th style={{paddingLeft: 'var(--s5)'}}>Saham</th><th>Keputusan</th><th className="num">Harga</th><th className="num">Target 1</th><th className="num">Rugi maks</th><th /></tr></thead>
+          <tbody>{all.map(c => <PickRow key={c.key} c={c} paused={paused} />)}</tbody>
+        </table>
+      </div>
+      <div className="pcards only-phone" style={{flexDirection: 'column'}}>{all.map(c => <PickCard key={c.key} c={c} paused={paused} />)}</div>
+    </>
+  );
+}
+
+function QuoteRow({r, paused}: {r: MarketRow; paused: boolean}) {
+  const {num} = useT();
+  const stock = r.klass === 'stock';
   return (
     <li>
-      <a className="qrow" href={`#/a/${encodeURIComponent(r.key)}`}>
-        <span className="qrow-name">
-          <strong>{r.klass === 'stock' ? r.key : nm(r)}</strong>
-          <span className="muted small">{r.klass === 'stock' ? r.name : r.name !== r.key ? r.key : ''}</span>
-        </span>
-        <Spark values={r.spark} label={`${nm(r)}: ${t('chart_hist')}`} />
-        <span className="qrow-px">
-          <span className="price">{money(r.price, r.decimals, r.unit)}</span>
-          {r.chg1d != null && <span className={`small ${Math.abs(r.chg1d) < 0.05 ? 'muted' : good ? 'delta-up' : 'delta-down'}`}>{pct(r.chg1d, 2)}</span>}
-        </span>
-        {r.verdict && <span className="qrow-v"><VerdictTag v={r.verdict} /></span>}
+      <a className="wl-row" href={`#/a/${encodeURIComponent(r.key)}`}>
+        <span className="wl-name"><strong>{stock ? r.key : r.name}</strong> <span className="muted">{stock ? r.name : r.name !== r.key ? r.key : ''}</span></span>
+        <span className="wl-tag"><VerdictTag tag={r.tag} paused={paused && stock} /></span>
+        <span className="wl-px">{num(r.price, r.price < 100 ? 2 : r.decimals)}</span>
+        <ChangeText value={r.chg1d} upIsGood={(r.up_is ?? 1) >= 0} digits={2} />
+        <span className="wl-spark"><Sparkline values={r.spark.slice(-30)} label={`${r.key}: sebulan terakhir`} height={32} /></span>
       </a>
     </li>
   );
 }
 
-function Quotes({onAuth, group}: {onAuth: () => void; group: string}) {
-  const {t, l} = useT();
-  const [q, setQ] = useState('');
-  const rows = useLoad(() => api.markets(group, '1w'), [group], onAuth);
-  const usd = useLoad(() => (group === 'fx' ? api.asset('USDIDR', '1w') : Promise.resolve(null)), [group], onAuth);
-  const stocks = group.startsWith('stock');
-  return (
-    <>
-      {group === 'fx' && usd.data?.vigilance && (
-        <VigilanceLine v={usd.data.vigilance} decimals={0} horizonName={l(usd.data.horizon_name)} />
-      )}
-      {stocks && (
-        <div className="search">
-          <TextInput label={t('search_stock')} value={q} onChange={setQ} width="100%" placeholder={group === 'stock_id' ? 'BBCA, Telkom' : 'NVDA, Apple'} />
-        </div>
-      )}
-      <Async state={rows}>
-        {d => {
-          const needle = q.trim().toLowerCase();
-          let list = d.rows.filter(r => !needle || r.key.toLowerCase().includes(needle) || r.name.toLowerCase().includes(needle));
-          // Stocks: best verdict first, so the list answers "which ones are worth a look".
-          if (stocks) list = [...list].sort((a, b) => (b.verdict?.score ?? -1) - (a.verdict?.score ?? -1));
-          if (d.rows.length === 0) return <EmptyState isCompact title={t('recs_wait_title')} description={t('recs_wait_desc')} />;
-          if (list.length === 0) return <p className="note">{t('no_match')}</p>;
-          return (
-            <>
-              {stocks && <p className="note">{t('verdict_list_note')}</p>}
-              <ul className="qlist">{list.map(r => <Row key={r.key} r={r} />)}</ul>
-            </>
-          );
-        }}
-      </Async>
-    </>
-  );
+function Quotes({group, onAuth, paused}: {group: string; onAuth: () => void; paused: boolean}) {
+  const rows = useLoad(() => api.markets(group, '1m'), [group], onAuth);
+  if (rows.error && !rows.data) return <div className="card"><p className="err">Data gagal dimuat. Coba lagi nanti.</p></div>;
+  if (!rows.data) return <div className="card"><Skeleton lines={6} /></div>;
+  const list = group.startsWith('stock') ? [...rows.data.rows].sort((a, b) => (b.score ?? -1) - (a.score ?? -1)) : rows.data.rows;
+  if (list.length === 0) return <div className="card"><p className="body" style={{margin: 0}}>Data harga belum terunduh. ARAH mencoba lagi setiap jam.</p></div>;
+  return <div className="card" style={{paddingTop: 'var(--s2)', paddingBottom: 'var(--s2)'}}><ul className="wl qrows">{list.map(r => <QuoteRow key={r.key} r={r} paused={paused} />)}</ul></div>;
 }
 
-export function MarketPage({onAuth, seg}: Props) {
-  const {t} = useT();
-  const current = SEGMENTS.find(s => s.key === seg) ?? SEGMENTS[0];
-  const items = useMemo(() => SEGMENTS.map(s => ({key: s.key, text: t(s.label)})), [t]);
+export function MarketPage({onAuth, seg, paused}: {onAuth: () => void; seg: string; paused: boolean}) {
+  const [mkt, setMkt] = useState<'ID' | 'US'>('ID');
+  const b = useLoad(api.brief, [], onAuth);
+  const current = SEGS.find(s => s.key === seg) ? seg : seg === 'saham-id' ? 'saham' : seg === 'saham-as' ? 'saham' : 'pilihan';
   return (
     <>
-      <header className="page-head"><h1 className="page-title">{t('nav_market')}</h1></header>
-      <ChipBar items={items} value={current.key} label={t('market')} onChange={k => { window.location.hash = `/pasar/${k}`; }} />
-      <div className="seg-body">
-        {current.key === 'pilihan' ? <RecsPanel onAuth={onAuth} />
-          : current.key === 'hitung' ? <CalcPage onAuth={onAuth} embedded />
-          : <Quotes key={current.group} onAuth={onAuth} group={current.group!} />}
+      <div className="p-head">
+        <h1 className="h1">{current === 'pilihan' ? <><span className="only-desk">Pasar</span><span className="only-phone">Pilihan ARAH</span></> : 'Pasar'}</h1>
+        <div className="filter" role="group" aria-label="Pilih pasar">
+          {SEGS.map(s => (
+            <button key={s.key} type="button" aria-pressed={current === s.key} onClick={() => { window.location.hash = `/pasar/${s.key}`; }}>{s.text}</button>
+          ))}
+        </div>
       </div>
+      {current === 'pilihan' && <ContextChip s={b.data?.brief?.simple} />}
+      {current === 'saham' && <Seg label="Bursa" value={mkt} onChange={v => setMkt(v as 'ID' | 'US')} options={[{key: 'ID', text: 'Indonesia'}, {key: 'US', text: 'Amerika'}]} />}
+      {current === 'pilihan' ? <Picks onAuth={onAuth} paused={paused} />
+        : current === 'saham' ? <Quotes key={mkt} group={mkt === 'ID' ? 'stock_id' : 'stock_us'} onAuth={onAuth} paused={paused} />
+        : <Quotes key={current} group={GROUP[current]} onAuth={onAuth} paused={paused} />}
     </>
   );
 }
