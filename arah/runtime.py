@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import logging
 import time
 
@@ -14,6 +15,7 @@ from .brief import build_brief
 from .config import BRIEF_SCHEDULE, DEFAULT_HORIZONS, WEEKLY_OUTLOOK, Settings
 from .data.bca import refresh_bca
 from .data.calendar import refresh_calendar
+from . import push
 from .data import sbterm
 from .data.frankfurter import fill as fill_fx
 from .data.news import refresh_news
@@ -34,6 +36,8 @@ class Runtime:
     def __init__(self, db: DB, settings: Settings):
         self.db, self.settings = db, settings
         GATE.attach(db)
+        from .live import Live
+        self.live = Live(db)
         self.bot = Bot(db, settings, on_brief=lambda: self.run_brief("manual", push=False))
         self.scheduler = AsyncIOScheduler(timezone=settings.timezone)
         self._lock = asyncio.Lock()
@@ -113,7 +117,8 @@ class Runtime:
 
     async def ensure_recs(self) -> None:
         """Stock picks missing or built without data (a failed download): try again, at most once an hour."""
-        if recs_ok(self.db) or time.time() - self.db.get("recs_try_at", 0) < 3600:
+        # Also when the stock verdicts were never computed (added after the first install).
+        if (recs_ok(self.db) and self.db.get("verdicts")) or time.time() - self.db.get("recs_try_at", 0) < 3600:
             return
         self.db.set("recs_try_at", int(time.time()))
         try:
@@ -156,6 +161,9 @@ class Runtime:
         if changed:
             head = "<b>Jawaban ARAH berubah</b>" if lang == "id" else "<b>ARAH's answers changed</b>"
             await self.bot.send(head + "\n" + "\n".join(changed))
+            plain = [re.sub(r"<[^>]+>", "", c) for c in changed]
+            await push.notify(self.db, "Jawaban ARAH berubah" if lang == "id" else "ARAH's answers changed",
+                              "; ".join(plain)[:240], "/#/", "flips")
         return brief
 
     async def check_alerts(self) -> None:
@@ -174,6 +182,27 @@ class Runtime:
                        if lang == "id" else
                        f"<b>Alert:</b> {asset.name} is now {fmt_price(asset, price, lang)}, past {fmt_price(asset, row['level'], lang)}.")
                 await self.bot.send(msg)
+                body = (f"{asset.name} sekarang {fmt_price(asset, price, lang)}, sudah melewati {fmt_price(asset, row['level'], lang)}."
+                        if lang == "id" else f"{asset.name} is now {fmt_price(asset, price, lang)}, past {fmt_price(asset, row['level'], lang)}.")
+                await push.notify(self.db, f"{asset.name} {'naik ke atas' if row['op'] == '>' else 'turun ke bawah'} {fmt_price(asset, row['level'], lang)}"
+                                  if lang == "id" else f"{asset.name} {'above' if row['op'] == '>' else 'below'} {fmt_price(asset, row['level'], lang)}",
+                                  body, f"/#/a/{asset.key}", f"alert-{row['id']}")
+
+    async def watch_alerts(self) -> None:
+        """Every two minutes: fresh prices for the assets that have an open alert, then the alert check.
+        The 15-minute data refresh is too slow for "tell me when the dollar passes Rp 18,500"."""
+        keys = {r["asset"] for r in self.db.q("SELECT asset FROM alerts WHERE triggered_at IS NULL")}
+        for key in keys:
+            asset = BY_KEY.get(key)
+            if not asset:
+                continue
+            try:
+                r = await self.live.get(asset)
+            except Exception:
+                continue
+            if r.get("last") and r.get("source") != "daily":
+                self.db.x("UPDATE quotes SET price=?, fetched_at=? WHERE symbol=?", (r["last"], int(time.time()), asset.symbol))
+        await self.check_alerts()
 
     def ensure_level_alerts(self) -> None:
         """Keep one alert per configured level that the price has not reached yet."""
@@ -235,6 +264,7 @@ class Runtime:
     def start(self) -> None:
         tz = self.settings.timezone
         self.scheduler.add_job(self.tick, IntervalTrigger(minutes=15), id="tick", max_instances=1, coalesce=True)
+        self.scheduler.add_job(self.watch_alerts, IntervalTrigger(minutes=2), id="alerts", max_instances=1, coalesce=True)
         for slot, hhmm in BRIEF_SCHEDULE:
             h, m = hhmm.split(":")
             self.scheduler.add_job(self.run_brief, CronTrigger(hour=int(h), minute=int(m), timezone=tz), args=[slot],

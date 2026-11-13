@@ -2,7 +2,7 @@ import type {ReactNode} from 'react';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
 import {Skeleton} from '@astryxdesign/core/Skeleton';
-import type {AssetView, Direction, HorizonRow, Reason, Validation, Vigilance} from './api';
+import type {AssetView, Direction, HorizonRow, Reason, StockVerdict, Validation, Vigilance} from './api';
 import type {Loaded} from './hooks';
 import {useT} from './i18n';
 
@@ -109,4 +109,22 @@ export function Lines({n}: {n: number}) {
 
 export function AssetLink({k, children}: {k: string; children: ReactNode}) {
   return <a className="asset-link" href={`#/a/${k}`}>{children}</a>;
+}
+
+/** A row of tappable chips that scrolls sideways on a phone instead of wrapping into a wall of buttons. */
+export function ChipBar({items, value, label, onChange}: {items: {key: string; text: string}[]; value: string; label: string; onChange: (k: string) => void}) {
+  return (
+    <div className="chipbar" role="group" aria-label={label}>
+      {items.map(i => (
+        <button key={i.key} type="button" className="chipbar-i" aria-pressed={value === i.key} onClick={() => onChange(i.key)}>
+          {i.text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function VerdictTag({v, size = 'sm'}: {v: {verdict: StockVerdict['verdict']; label: {id: string; en: string}; score: number}; size?: 'sm' | 'lg'}) {
+  const {l} = useT();
+  return <span className={`vtag vtag-${v.verdict} vtag-${size}`}>{l(v.label)} <span className="vtag-n">{v.score}</span></span>;
 }

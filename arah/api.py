@@ -21,14 +21,14 @@ from .agents import analyze_asset, ask, get_insight
 from .extras import ask_context, calc, weekly_report
 from .config import BRIEF_SCHEDULE, DEFAULT_HORIZONS, Settings, get_settings, parse_horizon
 from .data.news import COUNTRY_TOPICS, top_stories
-from .data.yahoo import fetch_fundamentals, refresh_many
+from .data.yahoo import fetch_fundamentals, load_bars, refresh_many
 from .live import Live
 from .outlook import build_simple
 from .techniques import techniques
 from .db import DB
 from .llm import budget_state, claude_calls_today
 from .runtime import Runtime
-from .service import all_horizons, build_view, horizon_name, track_record, validation
+from .service import all_horizons, build_view, forecast_asset, horizon_name, track_record, validation
 from .signals import snapshot
 from .universe import BY_KEY, COUNTRIES, CRYPTO, COMMODITIES, DEFAULT_LEVELS, FX, INDICES, STOCKS, resolve
 
@@ -169,6 +169,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         if group not in groups:
             raise HTTPException(400, "unknown group")
         rows, snaps = [], {}
+        verdicts = (db.get("verdicts") or {}).get("items") or {}
         for a in groups[group]:
             h = horizon_or_400(horizon, a)
             v = build_view(db, a, h, insight=get_insight(db, a.key), with_chart=False, snaps=snaps)
@@ -178,7 +179,8 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
             rows.append({"key": a.key, "name": a.name, "name_en": a.nm("en"), "decimals": a.decimals, "unit": a.unit, "up_is": a.up_is,
                          "price": v["forecast"]["s0"], "chg1d": v["snapshot"]["chg1d"], "chg1w": v["snapshot"]["chg1w"],
                          "direction": v["direction"], "p_up": v["forecast"]["p_up"], "q05": v["forecast"]["q05"],
-                         "q95": v["forecast"]["q95"], "vigilance": v["vigilance"], "spark": s.get("spark", [])[-40:]})
+                         "q95": v["forecast"]["q95"], "vigilance": v["vigilance"], "spark": s.get("spark", [])[-40:],
+                         "klass": a.klass, "verdict": {k: verdicts[a.key][k] for k in ("verdict", "label", "score")} if a.key in verdicts else None})
         return {"group": group, "horizon": horizon, "rows": rows}
 
     @app.get("/api/live/{key}", dependencies=[Depends(auth)])
@@ -306,6 +308,103 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         if not live.stockbit.status().get("usable"):
             raise HTTPException(409, "Stockbit is not configured")
         return await sbterm.snapshot(db, live.stockbit, a.key)
+
+    @app.get("/api/verdict/{key}", dependencies=[Depends(auth)])
+    async def stock_verdict(key: str):
+        """Layak / Tunggu / Hindari for one stock, fresh, with its three main reasons."""
+        from .verdict import score
+
+        a = asset_or_404(key)
+        if a.klass != "stock":
+            raise HTTPException(404, "verdicts are for stocks")
+        fund = await fetch_fundamentals(db, a.symbol)
+        sbt = None
+        if a.country == "ID":
+            sbt = {k: (db.get(f"sbt:{k}:{a.key}") or {}).get("v") for k in ("bandar", "foreign")}
+        try:
+            _, f1, _ = await asyncio.to_thread(forecast_asset, db, a, "1m")
+        except ValueError:
+            raise HTTPException(409, "not enough history yet")
+        v = score(db, a, f1.p_up, fund, sbt)
+        if not v:
+            raise HTTPException(409, "not enough history yet")
+        return v
+
+    @app.get("/api/history/{key}", dependencies=[Depends(auth)])
+    def price_history(key: str, range: str = Query("3m", pattern="^(1w|1m|3m|6m|1y|5y)$")):
+        """Daily candles for the detail chart's longer ranges."""
+        a = asset_or_404(key)
+        days = {"1w": 7, "1m": 31, "3m": 92, "6m": 183, "1y": 366, "5y": 1830}[range]
+        b = load_bars(db, a.symbol, "1d", 2000)
+        since = time.time() - days * 86400
+        bars = [{"t": int(t), "o": float(o), "h": float(h), "l": float(l), "c": float(c), "v": float(v)}
+                for t, o, h, l, c, v in zip(b["ts"], b["o"], b["h"], b["l"], b["c"], b["v"]) if t >= since]
+        return {"key": a.key, "range": range, "decimals": a.decimals, "unit": a.unit, "bars": bars}
+
+    @app.get("/api/feed", dependencies=[Depends(auth)])
+    def news_feed(scope: str = Query("ID", pattern="^(ID|US|ASIA|GLOBAL)$"), topic: str | None = Query(None, max_length=20)):
+        """Ranked stories for one region, optionally one topic, with the desk's summary on top."""
+        groups = {"ID": COUNTRY_TOPICS["ID"] + ["id_flow"], "US": COUNTRY_TOPICS["US"],
+                  "ASIA": COUNTRY_TOPICS["JP"] + COUNTRY_TOPICS["SG"] + COUNTRY_TOPICS["CN"], "GLOBAL": COUNTRY_TOPICS["GLOBAL"]}
+        topics = groups[scope]
+        if topic:
+            if topic not in topics:
+                raise HTTPException(400, "unknown topic for this region")
+            topics = [topic]
+        brief = db.latest_report("brief") or {}
+        desks = {c: (brief.get("countries") or {}).get(c) for c in ({"ASIA": ["JP", "SG", "CN"]}.get(scope) or [scope])}
+        return {"scope": scope, "topics": groups[scope], "items": top_stories(db, topics, limit=40, max_age_h=72),
+                "desks": [{"country": c, "summary": d.get("summary"), "mood": d.get("mood"), "events": d.get("events", [])}
+                          for c, d in desks.items() if d and d.get("summary")]}
+
+    @app.get("/api/feed/{key}", dependencies=[Depends(auth)])
+    async def ticker_feed(key: str):
+        """News for one asset: its own headlines (refreshed at most every 30 minutes) and, for an Indonesian
+        stock, the busiest Stockbit posts about it."""
+        from .data import sbterm
+        from .data.news import refresh_ticker_news
+
+        a = asset_or_404(key)
+        if time.time() - (db.get(f"tnews_at:{a.key}") or 0) > 1800:
+            db.set(f"tnews_at:{a.key}", int(time.time()))
+            try:
+                await refresh_ticker_news(db, a.key, a.name, a.country)
+            except Exception as e:  # the feed is a bonus; the page must still load
+                log.info("ticker news %s failed: %s", a.key, e)
+        posts = []
+        if a.country == "ID" and a.klass in ("stock", "index") and live.stockbit.status().get("usable"):
+            posts = await sbterm.stream(db, live.stockbit, a.key) or []
+        return {"key": a.key, "items": top_stories(db, [f"t:{a.key}"], limit=20, max_age_h=24 * 7), "posts": posts}
+
+    @app.get("/api/push/key", dependencies=[Depends(auth)])
+    def push_key():
+        from . import push
+        return {"key": push.public_key(db), "devices": len(push.subscriptions(db)), "last": db.get("push_last")}
+
+    @app.post("/api/push/subscribe", dependencies=[Depends(auth)])
+    async def push_subscribe(request: Request):
+        from . import push
+        try:
+            n = push.subscribe(db, await request.json())
+        except (ValueError, TypeError) as e:
+            raise HTTPException(400, str(e))
+        await push.notify(db, "ARAH", "Notifikasi aktif. Anda akan diberi tahu saat harga melewati batas.", "/#/peringatan", "welcome")
+        return {"devices": n}
+
+    @app.post("/api/push/unsubscribe", dependencies=[Depends(auth)])
+    async def push_unsubscribe(request: Request):
+        from . import push
+        body = await request.json()
+        push.unsubscribe(db, str((body or {}).get("endpoint", "")))
+        return {"devices": len(push.subscriptions(db))}
+
+    @app.post("/api/push/test", dependencies=[Depends(auth)])
+    async def push_test():
+        from . import push
+        if time.time() - (db.get("push_test_at") or 0) < 30:
+            raise HTTPException(429, "wait a moment")
+        db.set("push_test_at", int(time.time()))
+        return {"sent": await push.notify(db, "ARAH: tes", "Notifikasi berfungsi.", "/#/peringatan", "test")}
 
     @app.get("/api/probe/stockbit", dependencies=[Depends(auth)])
     async def stockbit_probe(path: str | None = Query(None, max_length=300)):

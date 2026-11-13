@@ -2,7 +2,7 @@
 :root {
   color-scheme: light;
   --arah-accent: #0f6b63;
-  --arah-good: #1a7f4b; --arah-good-bg: #e6f4ec;
+  --arah-good: #16723f; --arah-good-bg: #e6f4ec;
   --arah-bad: #b42318; --arah-bad-bg: #fdecea;
   --arah-neutral: #5b6472; --arah-neutral-bg: #eef0f3;
   --arah-ink: #1f2328; --arah-line: #e4e7eb; --arah-soft: #f6f7f9;
@@ -18,23 +18,108 @@ a:hover { color: var(--arah-accent); }
 .skip { position: absolute; left: -999px; top: 0; padding: 0.75rem 1rem; background: var(--color-background-surface); z-index: 20; }
 .skip:focus { left: 0.5rem; top: 0.5rem; }
 
-.top { border-bottom: 1px solid var(--color-border-emphasized); background: var(--color-background-surface); }
-.top-in { max-width: var(--arah-col); margin: 0 auto; padding: 0.5rem 1rem 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 1.5rem; }
-.brand { font-weight: 700; letter-spacing: 0.04em; text-decoration: none; padding: 0.5rem 0; }
-.brand { display: inline-flex; align-items: center; gap: 0.45rem; }
+/* Shell. Phone first: a slim brand bar on top, the five destinations in a bar at the bottom within
+   thumb reach. From 60rem the same five move into a rail on the left and the bottom bar goes away. */
+.top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; height: 3rem; padding: 0 1rem;
+  background: var(--color-background-surface); border-bottom: 1px solid var(--color-border); }
+.brand { font-weight: 700; letter-spacing: 0.04em; text-decoration: none; display: inline-flex; align-items: center; gap: 0.45rem; min-height: 44px; }
 .brand-by { font-weight: 400; letter-spacing: 0; color: var(--color-text-secondary); }
 /* The LRM logo is drawn as a mask filled with the text colour, so it reads in light and dark alike. */
 .lrm-mark { display: inline-block; background: currentColor; -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; }
 .lrm-mark.icon { --m: url(/lrm-icon.png); width: 1.05rem; height: 1.45rem; }
 .lrm-mark.full { --m: url(/lrm-logo.png); width: min(100%, 13.5rem); aspect-ratio: 338 / 102; }
-.top nav { flex: 1 1 20rem; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-.top nav ul { display: flex; gap: 0.25rem; list-style: none; margin: 0; padding: 0; }
-.top nav a { display: block; padding: 0.75rem 0.6rem; min-height: 44px; white-space: nowrap; text-decoration: none; color: var(--color-text-secondary); border-bottom: 2px solid transparent; }
-.top nav a:hover { color: var(--color-text-primary); }
-.top nav a[aria-current="page"] { color: var(--color-text-primary); border-bottom-color: var(--arah-accent); font-weight: 600; }
 
-.page { max-width: var(--arah-col); margin: 0 auto; padding: 1.5rem 1rem 3rem; }
-.foot { max-width: var(--arah-col); margin: 0 auto; padding: 1rem 1rem 2.5rem; border-top: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: 0.8125rem; }
+.tabs { position: fixed; z-index: 10; left: 0; right: 0; bottom: 0; background: var(--color-background-surface);
+  border-top: 1px solid var(--color-border-emphasized); padding-bottom: env(safe-area-inset-bottom); }
+.tabs ul { display: grid; grid-template-columns: repeat(5, 1fr); list-style: none; margin: 0; padding: 0; }
+.tabs a { display: flex; align-items: center; justify-content: center; min-height: 3.5rem; padding: 0 0.15rem; text-align: center;
+  text-decoration: none; font-size: 0.8125rem; line-height: 1.15; color: var(--color-text-secondary); border-top: 3px solid transparent; }
+.tabs a:hover { color: var(--color-text-primary); }
+/* The one accent: which destination you are in. */
+.tabs a[aria-current="page"] { color: var(--color-text-primary); font-weight: 700; border-top-color: var(--arah-accent); }
+
+.page { max-width: 46rem; margin: 0 auto; padding: 1rem 1rem calc(5rem + env(safe-area-inset-bottom)); }
+.foot { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: 0.8125rem; }
+
+@media (min-width: 60rem) {
+  .app { display: grid; grid-template-columns: 13rem minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: 100vh; }
+  .top { grid-column: 1 / -1; padding: 0 1.5rem; }
+  .tabs { position: sticky; top: 3rem; align-self: start; bottom: auto; border-top: 0; border-right: 1px solid var(--color-border); height: calc(100vh - 3rem); padding: 1rem 0; }
+  .tabs ul { grid-template-columns: 1fr; gap: 0.15rem; }
+  .tabs a { justify-content: flex-start; min-height: 44px; padding: 0 1.5rem; font-size: 0.9375rem; border-top: 0; border-left: 3px solid transparent; }
+  .tabs a[aria-current="page"] { border-left-color: var(--arah-accent); background: var(--color-background-muted); }
+  .page { margin: 0; padding: 1.5rem 2rem 3rem; max-width: 52rem; }
+}
+
+.page-title { font-size: 1.5rem; font-weight: 700; margin: 0; line-height: 1.2; }
+
+/* Chip bars: one row that scrolls sideways on a phone instead of wrapping into a wall of buttons. */
+.chipbar { display: flex; gap: 0.4rem; overflow-x: auto; scrollbar-width: none; margin: 0.75rem -1rem; padding: 0.15rem 1rem; }
+.chipbar::-webkit-scrollbar { display: none; }
+.chipbar-i { flex: 0 0 auto; min-height: 44px; padding: 0 0.9rem; border-radius: 8px; border: 1px solid var(--color-border-emphasized);
+  background: var(--color-background-surface); color: var(--color-text-primary); font: inherit; font-size: 0.875rem; cursor: pointer; white-space: nowrap; }
+.chipbar-i:hover { background: var(--color-overlay-hover); }
+.chipbar-i[aria-pressed="true"] { background: var(--color-text-primary); color: var(--color-background-surface); border-color: var(--color-text-primary); font-weight: 600; }
+@media (min-width: 60rem) { .chipbar { margin: 0.75rem 0; padding: 0.15rem 0; flex-wrap: wrap; } }
+.seg-body { margin-top: 0.5rem; }
+
+/* Quote rows: name, a 3-month line, price and today's change; the verdict sits under the price. */
+.qlist { list-style: none; margin: 0; padding: 0; }
+.qlist li + li { border-top: 1px solid var(--color-border); }
+.qrow { display: grid; grid-template-columns: minmax(0, 1fr) 4.5rem auto; grid-template-areas: "name spark px" "name spark v";
+  align-items: center; column-gap: 0.75rem; padding: 0.7rem 0; min-height: 44px; text-decoration: none; color: inherit; }
+.qrow:hover { background: var(--color-overlay-hover); }
+.qrow-name { grid-area: name; display: grid; min-width: 0; }
+.qrow-name > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qrow .spark { grid-area: spark; width: 4.5rem; }
+.qrow-px { grid-area: px; display: grid; justify-items: end; font-variant-numeric: tabular-nums; }
+.qrow-v { grid-area: v; justify-self: end; margin-top: 0.2rem; }
+.search { margin: 0.25rem 0 0.75rem; }
+
+/* Verdict tags and card. Green, grey and red mean worth buying, wait and avoid; the word is always printed. */
+.vtag { display: inline-flex; align-items: baseline; gap: 0.35rem; padding: 0.15rem 0.5rem; border-radius: 4px; font-weight: 700; font-size: 0.8125rem; white-space: nowrap; }
+.vtag-n { font-weight: 500; font-variant-numeric: tabular-nums; opacity: 0.85; }
+.vtag-layak { background: var(--arah-good-bg); color: var(--arah-good); }
+.vtag-tunggu { background: var(--arah-neutral-bg); color: var(--arah-neutral); }
+.vtag-hindari { background: var(--arah-bad-bg); color: var(--arah-bad); }
+.vcard { margin: 1rem 0; padding: 1rem; border-radius: 8px; border: 1px solid var(--color-border-emphasized); border-top: 4px solid var(--arah-neutral); }
+.vcard.is-empty { min-height: 9rem; background: var(--color-background-muted); border-top-color: var(--color-border); }
+.vcard-layak { border-top-color: var(--arah-good); } .vcard-hindari { border-top-color: var(--arah-bad); }
+.vcard-top { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+/* The verdict word uses the serif, the product's voice for conclusions. */
+.vcard-word { font-family: var(--arah-serif); font-size: 2rem; font-weight: 600; margin: 0; line-height: 1.1; }
+.vcard-layak .vcard-word { color: var(--arah-good); } .vcard-hindari .vcard-word { color: var(--arah-bad); } .vcard-tunggu .vcard-word { color: var(--arah-neutral); }
+.vcard-n { font-size: 1.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.meter { position: relative; height: 6px; margin: 0.6rem 0 0.25rem; border-radius: 3px; background: var(--color-background-muted); }
+.meter-fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--color-text-primary); }
+.meter-mark { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--color-text-secondary); }
+.vreasons { list-style: none; margin: 0.5rem 0; padding: 0; }
+.vreasons li { display: grid; grid-template-columns: 1.5rem 1fr; padding: 0.3rem 0; }
+.vmark { font-weight: 700; }
+.vreasons .is-good .vmark { color: var(--arah-good); } .vreasons .is-bad .vmark { color: var(--arah-bad); }
+
+/* Panels hold one task each (notifications, a new alert). Forms are one column on a phone. */
+.panel { margin: 1rem 0; padding: 1rem; border: 1px solid var(--color-border-emphasized); border-radius: 8px; }
+.panel-h { font-size: 1.0625rem; font-weight: 700; margin: 0 0 0.5rem; }
+.panel .actions { margin-top: 0.75rem; }
+.actions.wrap { margin-top: 0.5rem; }
+.form-grid { display: grid; gap: 0.75rem; margin: 0.75rem 0; align-items: end; }
+@media (min-width: 40rem) { .form-grid { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); } }
+.alist { list-style: none; margin: 0; padding: 0; }
+.alist li { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 44px; padding: 0.25rem 0; border-bottom: 1px solid var(--color-border); }
+.alist.done { color: var(--color-text-secondary); }
+
+/* News: numbered like a ranked list, because the order is the ranking. */
+.stories { margin: 0.5rem 0; padding-left: 1.6rem; }
+.stories li { padding: 0.55rem 0; border-bottom: 1px solid var(--color-border); }
+.stories a { font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.stories a:hover { text-decoration: underline; }
+.story-meta { display: flex; flex-wrap: wrap; gap: 0.15rem 0.6rem; margin-top: 0.2rem; font-size: 0.8125rem; color: var(--color-text-secondary); }
+.story-n { font-weight: 700; color: var(--color-text-primary); }
+.desk { margin: 0.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--color-text-primary); }
+.desk-ev { margin: 0.4rem 0; font-size: 0.9375rem; }
+.price-block { margin-top: 0.5rem; }
+.ahead .lead { margin-top: 0.1rem; }
 
 .kicker, .note, .muted, .lead { color: var(--color-text-secondary); }
 .kicker, .note, .small { font-size: 0.8125rem; }

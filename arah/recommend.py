@@ -11,6 +11,7 @@ import math
 import time
 
 from .data import sbterm
+from .verdict import score as verdict_score
 from .data.stockbit import Stockbit
 from .data.yahoo import fetch_fundamentals
 from .db import DB
@@ -201,6 +202,17 @@ async def build_recs(db: DB, top: int = 5) -> dict:
         out["screened"][a.country] += 1
         if card["ok"]:
             out[a.country].append(card)
+    # A verdict for every stock, kept with the screen so lists can show it without recomputing.
+    verdicts = {}
+    for a, fd in zip(STOCKS, funds):
+        try:
+            _, f1, _ = forecast_asset(db, a, "1m")
+            v = verdict_score(db, a, f1.p_up, fd, sbts.get(a.key))
+        except (ValueError, KeyError, TypeError):
+            v = None
+        if v:
+            verdicts[a.key] = v
+    db.set("verdicts", {"at": int(time.time()), "items": verdicts})
     for c in ("ID", "US"):
         out[c] = sorted(out[c], key=lambda x: -x["score"])[:top]
     if not sum(out["screened"].values()):

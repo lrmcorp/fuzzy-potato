@@ -86,6 +86,7 @@ export interface Recs {at: number | null; ID: RecCard[]; US: RecCard[]; screened
 export interface MarketRow {
   key: string; name: string; name_en: string; decimals: number; unit?: string; price: number; chg1d: number | null; chg1w: number | null;
   direction: Direction; p_up: number; q05: number; q95: number; vigilance: Vigilance | null; spark: number[];
+  klass?: string; verdict?: {verdict: StockVerdict['verdict']; label: L; score: number} | null;
 }
 export interface TrackRow {horizon: string; name: L; n: number; calls: number; call_hits: number; brier: number | null;
   brier_quant: number | null; cover90: number | null}
@@ -104,6 +105,18 @@ export interface Status {
 }
 export interface AlertItem {id: number; asset: string; name: string; decimals: number; unit?: string; op: string; level: number;
   triggered_at: number | null; last_price: number | null}
+
+export interface StockVerdict {
+  key: string; verdict: 'layak' | 'tunggu' | 'hindari'; label: L; score: number;
+  parts: Record<string, {points: number; max: number}>;
+  reasons: {part: string; share: number; good: boolean; text: L}[]; tested: boolean; at: number;
+}
+export interface Story {id: string; topic: string; country: string; title: string; source: string; url: string; published_at: number; outlets: number}
+export interface Feed {scope: string; topics: string[]; items: Story[];
+  desks: {country: string; summary: L | null; mood: number | null; events: DeskEvent[]}[]}
+export interface TickerFeed {key: string; items: Story[]; posts: NonNullable<SbTerminal['stream']>}
+export interface History {key: string; range: string; decimals: number; unit: string; bars: Bar[]}
+export interface PushInfo {key: string; devices: number; last: {at: number; title: string; sent: number} | null}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -143,5 +156,13 @@ export const api = {
   alerts: () => call<{items: AlertItem[]}>('/api/alerts'),
   addAlert: (asset: string, op: string, level: number) =>
     call<{items: AlertItem[]}>('/api/alerts', {method: 'POST', body: JSON.stringify({asset, op, level})}),
+  verdict: (key: string) => call<StockVerdict>(`/api/verdict/${encodeURIComponent(key)}`),
+  history: (key: string, range: string) => call<History>(`/api/history/${encodeURIComponent(key)}?range=${range}`),
+  feed: (scope: string, topic?: string) => call<Feed>(`/api/feed?scope=${scope}${topic ? `&topic=${topic}` : ''}`),
+  tickerFeed: (key: string) => call<TickerFeed>(`/api/feed/${encodeURIComponent(key)}`),
+  pushInfo: () => call<PushInfo>('/api/push/key'),
+  pushSubscribe: (sub: PushSubscriptionJSON) => call<{devices: number}>('/api/push/subscribe', {method: 'POST', body: JSON.stringify(sub)}),
+  pushUnsubscribe: (endpoint: string) => call<{devices: number}>('/api/push/unsubscribe', {method: 'POST', body: JSON.stringify({endpoint})}),
+  pushTest: () => call<{sent: number}>('/api/push/test', {method: 'POST'}),
   delAlert: (id: number) => call<{items: AlertItem[]}>(`/api/alerts/${id}`, {method: 'DELETE'}),
 };
