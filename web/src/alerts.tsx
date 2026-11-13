@@ -6,6 +6,40 @@ import {useT} from './i18n';
 import {disablePush, enablePush, pushState, type PushState} from './push';
 import {Icon, Skeleton, toast} from './ui';
 
+/** Which kinds of notification come, one switch each, plus the quiet hours. */
+function PushKinds() {
+  const p = useLoad(api.pushPrefs, []);
+  const [prefs, setPrefs] = useState<Record<string, boolean> | null>(null);
+  useEffect(() => { if (p.data) setPrefs(p.data.prefs); }, [p.data]);
+  if (!p.data || !prefs) return <Skeleton lines={3} />;
+  const flip = async (k: string) => {
+    const next = {...prefs, [k]: !prefs[k]};
+    setPrefs(next);
+    try { setPrefs((await api.setPushPrefs({[k]: next[k]})).prefs); } catch { setPrefs(prefs); toast({text: 'Belum tersimpan. Coba lagi.'}); }
+  };
+  return (
+    <div className="push-kinds">
+      <h3 className="hero-sub">Kirim notifikasi untuk</h3>
+      <ul>
+        {p.data.kinds.map(k => (
+          <li key={k.key}>
+            <label className="switch-row">
+              <span><b>{k.title}</b><span className="caption">{k.text}</span></span>
+              <input type="checkbox" role="switch" checked={!!prefs[k.key]} onChange={() => flip(k.key)} />
+            </label>
+          </li>
+        ))}
+        <li>
+          <label className="switch-row">
+            <span><b>Jam tenang 21.00 sampai 06.00</b><span className="caption">Ringkasan pasar, agenda, dan info koneksi ditahan. Peringatan harga dan Pilihan tetap masuk.</span></span>
+            <input type="checkbox" role="switch" checked={!!prefs.quiet} onChange={() => flip('quiet')} />
+          </label>
+        </li>
+      </ul>
+    </div>
+  );
+}
+
 function PushCard() {
   const [state, setState] = useState<PushState>('checking');
   const [busy, setBusy] = useState(false);
@@ -31,11 +65,12 @@ function PushCard() {
       )}
       {state === 'off' && (
         <div className="stack">
-          <p className="body" style={{margin: 0}}>Peringatan muncul di HP walaupun aplikasi tertutup.</p>
+          <p className="body" style={{margin: 0}}>Peringatan, Pilihan ARAH, dan ringkasan pasar muncul di HP walaupun aplikasi tertutup.</p>
           <div><button type="button" className="btn btn-primary" onClick={() => run(enablePush)} disabled={busy}>Nyalakan notifikasi</button></div>
         </div>
       )}
       {state === 'denied' && <p className="body" style={{margin: 0}}>Notifikasi diblokir browser. Pakai Telegram saja?</p>}
+      {(state === 'on' || state === 'off') && <PushKinds />}
       {state === 'ios-home' && <p className="body" style={{margin: 0}}>Di iPhone: buka di Safari, ketuk Bagikan, pilih "Tambahkan ke Layar Utama", lalu buka ARAH dari ikon itu.</p>}
       {state === 'unsupported' && <p className="body" style={{margin: 0}}>Browser ini tidak mendukung notifikasi. Pakai Telegram saja?</p>}
     </section>

@@ -47,9 +47,9 @@ function HeroGauge({now, next, h}: {now: number; next: number; h: string}) {
 
 function GaugeLegend({now, next}: {now: number; next: number}) {
   return (
-    <div className="hg-legend">
-      <span><i className="lg-dot" style={{background: now < 0.4 ? 'var(--down)' : now > 0.6 ? 'var(--up)' : 'var(--ink-2)'}} />Sekarang: {zone(now)}</span>
-      <span><i className="lg-ring" />Prakiraan: {zone(next)}</span>
+    <div className="hg-legend inline">
+      <span><i className="lg-dot" style={{background: now < 0.4 ? 'var(--down)' : now > 0.6 ? 'var(--up)' : 'var(--ink-2)'}} />Sekarang {zone(now)}</span>
+      <span><i className="lg-ring" />Prakiraan {zone(next)}</span>
     </div>
   );
 }
@@ -61,8 +61,10 @@ function Tile({t}: {t: TileData}) {
   return (
     <a className="tile" href={t.href}>
       <span className="tile-lbl">{t.label}</span>
-      {t.value != null ? <span className="tile-val">{t.value}</span> : <span className="tile-val none">Belum ada data</span>}
-      {tag && <span className={`tag tag-${tag.tone}`}><Mark icon={tag.icon} />{tag.label}</span>}
+      <span className="tile-row">
+        {t.value != null ? <span className="tile-val">{t.value}</span> : <span className="tile-val none">Belum ada data</span>}
+        {tag && <span className={`tag tag-${tag.tone}`}><Mark icon={tag.icon} />{tag.label}</span>}
+      </span>
     </a>
   );
 }
@@ -121,10 +123,8 @@ function RegionCol({id, title, href, sentence, card, tiles, news, h, hidden, con
         {card?.gauge && <GaugeLegend now={card.gauge.now} next={card.gauge.next} />}
         {controls}
       </div>
-      <h3 className="hero-sub m-only">Yang menggerakkan</h3>
       <div className="tiles">{tiles.map(t => <Tile key={t.label} t={t} />)}</div>
-      <span className="m-only"><NewsRow n={news} /></span>
-      <span className="d-only"><NewsRow n={news} compact /></span>
+      <NewsRow n={news} compact />
     </section>
   );
 }

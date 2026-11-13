@@ -72,8 +72,14 @@ def _send_one(db: DB, sub: dict, payload: str) -> bool:
         return False
 
 
-async def notify(db: DB, title: str, body: str, url: str = "/", tag: str | None = None) -> int:
-    """Send to every subscribed device. Returns how many accepted it."""
+async def notify(db: DB, title: str, body: str, url: str = "/", tag: str | None = None, kind: str | None = None) -> int:
+    """Send to every subscribed device. Returns how many accepted it. With a `kind`, the owner's switches in Atur
+    and the quiet hours decide whether it goes out at all; without one (tests, welcome) it always goes."""
+    from .notif import allowed
+
+    if kind and not allowed(db, kind):
+        log.info("push %s held back by settings or quiet hours", kind)
+        return 0
     subs = subscriptions(db)
     if not subs:
         return 0

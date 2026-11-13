@@ -31,7 +31,7 @@ from .llm import budget_state, claude_calls_today
 from .runtime import Runtime
 from .service import all_horizons, build_view, forecast_asset, horizon_name, record_summary, track_record, validation
 from .signals import snapshot
-from . import panel
+from . import notif, panel, push
 from .data import agenda_id
 from . import verdict_rules as rules
 from .signals import id_numbers
@@ -341,6 +341,15 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         """Simulasi modal: today's picks for this capital and the model's ranges in rupiah."""
         r = recs()
         return simulate_capital(db, r, capital, market, r.get("profile"))
+
+    @app.get("/api/push/prefs", dependencies=[Depends(auth)])
+    def push_prefs():
+        return {"prefs": notif.prefs(db), "kinds": [{"key": k, "title": t, "text": x} for k, (t, x) in notif.KINDS.items()],
+                "devices": len(push.subscriptions(db)), "last": db.get("push_last")}
+
+    @app.post("/api/push/prefs", dependencies=[Depends(auth)])
+    def push_prefs_set(body: dict):
+        return {"prefs": notif.set_prefs(db, body or {})}
 
     @app.get("/api/profile", dependencies=[Depends(auth)])
     def profile_get():

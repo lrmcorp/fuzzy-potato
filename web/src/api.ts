@@ -153,6 +153,8 @@ export interface SimItem {key: string; name: string; sector: string | null; tag:
   units: number; unit: string; cost: number; stop: number; loss_at_stop: number; target1: number; outcomes: Record<string, SimOut>}
 export interface SimResult {capital: number; market: 'ID' | 'US'; fx: number | null; profile: string | null; items: SimItem[]; cash: number;
   invested?: number; horizons: string[]; total?: Record<string, SimOut> | null; loss_at_stops?: number; need?: {key: string; rp: number} | null}
+export interface PushPrefs {prefs: Record<string, boolean>; kinds: {key: string; title: string; text: string}[]; devices: number;
+  last: {at: number; title: string; sent: number} | null}
 export type RiskProfile = 'hati-hati' | 'sedang' | 'berani';
 export interface Factor {label: string; side: number | null; value: number | null; kind: 'pct' | 'idr'; href?: string}
 
@@ -211,6 +213,8 @@ export const api = {
   undoAlerts: (group: string) => call<{items: AlertItem[]}>(`/api/alerts/group/${encodeURIComponent(group)}`, {method: 'DELETE'}),
   pulse: () => call<PulseInfo>('/api/pulse'),
   panel: () => call<PanelInfo>('/api/panel'),
+  pushPrefs: () => call<PushPrefs>('/api/push/prefs'),
+  setPushPrefs: (p: Record<string, boolean>) => call<{prefs: Record<string, boolean>}>('/api/push/prefs', {method: 'POST', body: JSON.stringify(p)}),
   simulate: (capital: number, market: string) => call<SimResult>(`/api/simulate?capital=${Math.round(capital)}&market=${market}`),
   setProfile: (profile: RiskProfile) => call<{profile: RiskProfile}>('/api/profile', {method: 'POST', body: JSON.stringify({profile})}),
   stockbitSession: (value: string) => call('/api/stockbit/session', {method: 'POST', body: JSON.stringify({value})}),
