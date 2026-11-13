@@ -166,7 +166,8 @@ export interface KursInfo {usd: KursRate | null; cny: KursRate | null;
   peers: {key: string; name: string; chg1m: number}[];
   news: {title: string; url: string; sources: string[]; impact?: string; published_at: number}[]}
 export type RiskProfile = 'hati-hati' | 'sedang' | 'berani';
-export interface Factor {label: string; side: number | null; value: number | null; kind: 'pct' | 'idr'; href?: string}
+export interface Factor {label: string; side: number | null; value: number | null; kind: 'pct' | 'idr'; href?: string;
+  level?: number; decimals?: number; unit?: string; buy?: number | null; sell?: number | null}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
