@@ -102,7 +102,7 @@ function Shell({route, pulse, reloadPulse, children}: {route: string; pulse: Pul
         </div>
       )}
       <main id="main" className="main">{children}</main>
-      <footer className="foot">Alat riset pribadi. Angka adalah peluang, bukan saran investasi.</footer>
+      <footer className="foot">ARAH (AI Research &amp; Analysis Hub) by LRM Corporation - Internal Use Only</footer>
       <nav className="tabbar" aria-label="Menu utama">
         {PHONE.map(n => (
           <a key={n.to} href={`#${n.to}`} aria-current={n.match(route) ? 'page' : undefined}>

@@ -38,4 +38,4 @@ data-first style with charts and numbers instead of paragraphs, dial ENERGY 1 / 
 - The stock verdict comes from a fixed rule not yet tested on past data.
 - Community posts from Stockbit are labelled as unverified opinion.
 - Empty, loading and error states say what is missing; no "—" in empty cells.
-- One disclaimer per page, in the footer: "Alat riset pribadi. Angka adalah peluang, bukan saran investasi."
+- The footer reads "ARAH (AI Research & Analysis Hub) by LRM Corporation - Internal Use Only" (the owner's wording, replacing the pack's disclaimer).
