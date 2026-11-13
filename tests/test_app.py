@@ -231,6 +231,9 @@ def test_forecast_and_summary_horizons(db):
         assert len(j["techniques"]) == 7 and j["votes"]["up"] + j["votes"]["down"] + j["votes"]["none"] == 7
         cc = j["conclusion"]
         assert cc["q05"] < cc["q50"] < cc["q95"] and abs(j["tilt"]) <= 0.08
+        assert "sim" in j["used"] and all(x["purpose"]["id"] and x["status"]["id"] for x in j["techniques"])
+        # A technique counts as used only when it gives a view and carries weight.
+        assert all(x["key"] == "sim" or (x["vote"] != 0 and x["weight"] > 0) for x in j["techniques"] if x["status"]["used"])
     assert c.get("/api/forecast/IHSG?h=1h").status_code == 422  # hourly horizons are not offered here
     s = c.get("/api/simple?h=3m").json()
     assert s["horizon"] == "3m" and s["indonesia"]["next"]["state"] in ("good", "bad")
