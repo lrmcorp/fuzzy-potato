@@ -3,8 +3,8 @@
 //
 // Locked down on purpose:
 // - Every request must carry the x-relay-key header equal to the RELAY_KEY secret of this Worker.
-// - Only read paths are forwarded (price charts, fundamentals, Stockbit charts and order book),
-//   plus Stockbit's token refresh. Nothing that places orders or changes an account.
+// - Only read paths are forwarded (price charts, fundamentals; Stockbit charts, order book, broker summary,
+//   running trade, foreign flow, insider filings and news stream), plus Stockbit's token refresh. Nothing that places orders or changes an account.
 // - Nothing is logged or stored here.
 //
 // Paste this whole file into the Worker's code editor (Cloudflare dashboard), then add the secret
@@ -16,7 +16,9 @@ const UPSTREAM = {
 };
 const ALLOW = {
   yahoo: [/^\/v8\/finance\/chart\/[^/]+$/, /^\/ws\/fundamentals-timeseries\/v1\/finance\/timeseries\/[^/]+$/],
-  stockbit: [/^\/charts\//, /^\/company-price-feed\//],
+  stockbit: [/^\/charts\//, /^\/company-price-feed\//, /^\/marketdetectors\//, /^\/order-trade\/broker\//,
+    /^\/order-trade\/running-trade/, /^\/order-trade\/trade-book\//, /^\/findata-view\/foreign-domestic\//,
+    /^\/insider\/company\//, /^\/stream\/v3\/symbol\//],
 };
 const STOCKBIT_REFRESH = '/login/refresh';
 

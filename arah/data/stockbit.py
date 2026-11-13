@@ -24,7 +24,11 @@ from . import relay
 
 log = logging.getLogger("arah.stockbit")
 EXODUS = relay.base("stockbit", "https://exodus.stockbit.com")
-READ_PREFIXES = ("/charts/", "/company-price-feed/")
+# Read-only data the owner's terminal shows: prices, order book, broker summary, broker distribution,
+# running trade, foreign flow, insider (major holder) filings and the stock's news stream.
+READ_PREFIXES = ("/charts/", "/company-price-feed/", "/marketdetectors/", "/order-trade/broker/",
+                 "/order-trade/running-trade", "/order-trade/trade-book/", "/findata-view/foreign-domestic/",
+                 "/insider/company/", "/stream/v3/symbol/")
 PACE = 1.0
 TTL = 5.0
 INDEX_CODES = {"IHSG": "IHSG", "LQ45": "LQ45"}
@@ -187,6 +191,28 @@ class Stockbit:
             self.db.set("stockbit_error", None)
             self._cache[path] = (time.time(), data)
             return data
+
+    async def probe(self, path: str) -> tuple[int, object]:
+        """One read-only request, returning the HTTP status and the parsed body (or a short text), for
+        finding the right parameters. Same guard, session and pace as `get`."""
+        if not is_read_path(path):
+            raise StockbitError(f"refused a non read-only path: {path}")
+        s = self.session
+        if not s:
+            raise StockbitError("no Stockbit session configured")
+        async with self._lock:
+            wait = PACE - (time.monotonic() - self._last)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            async with httpx.AsyncClient(timeout=15) as client:
+                if not s.get("access") or (token_exp(s["access"]) or 0) < time.time() + 60:
+                    s = await self._refresh(client, s)
+                r = await client.get(EXODUS + path, headers=self._headers(s["access"]))
+            self._last = time.monotonic()
+        try:
+            return r.status_code, r.json()
+        except ValueError:
+            return r.status_code, r.text[:160]
 
     @staticmethod
     def code(asset_key: str) -> str:
