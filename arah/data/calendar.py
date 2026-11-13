@@ -66,7 +66,7 @@ def pick(raw: list) -> list[dict]:
             continue
         title = str(ev.get("title") or "").strip()[:120]
         if title:
-            out.append({"at": ts, "country": COUNTRY[ev["country"]], "title": title, "why": why_for(title),
+            out.append({"at": ts, "country": COUNTRY[ev["country"]], "title": title, "why": why_for(title), "impact": ev.get("impact"),
                         "forecast": str(ev.get("forecast") or "")[:20], "previous": str(ev.get("previous") or "")[:20]})
     out.sort(key=lambda e: e["at"])
     merged: list[dict] = []

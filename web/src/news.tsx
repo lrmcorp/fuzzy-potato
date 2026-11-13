@@ -34,9 +34,9 @@ export function StoryList({items, empty}: {items: Story[]; empty: string}) {
   );
 }
 
-export function NewsPage({onAuth}: {onAuth: () => void}) {
+export function NewsPage({onAuth, scope: first}: {onAuth: () => void; scope?: string}) {
   const {t, l} = useT();
-  const [scope, setScope] = useState('ID');
+  const [scope, setScope] = useState(first && ['ID', 'US', 'ASIA', 'GLOBAL'].includes(first) ? first : 'ID');
   const [topic, setTopic] = useState('');
   const feed = useLoad(() => api.feed(scope, topic || undefined), [scope, topic], onAuth);
   const scopes = useMemo(() => SCOPES.map(s => ({key: s.key, text: t(s.label)})), [t]);

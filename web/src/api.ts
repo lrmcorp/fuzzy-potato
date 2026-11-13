@@ -35,7 +35,8 @@ export interface SimpleCard {
   votes?: {up: number; down: number; none: number} | null; horizon?: string;
   touch: Record<string, number>; bca: {currency: string; buy: number; sell: number; at: number} | null;
 }
-export interface EventItem {at: number; country: string; title?: string; what?: L; why?: L; source: 'calendar' | 'news'; side?: 'id' | 'world'}
+export interface EventItem {at: number; country: string; title?: string; what?: L; why?: L; source: 'calendar' | 'news'; side?: 'id' | 'world';
+  forecast?: string; previous?: string; impact?: string}
 export interface Report {days: number; total: number; right: number; wrong: number}
 export interface Answer {verdict: State; confidence: 'thin' | 'fair' | 'strong'; answer: L; points: Reason[]; risk: L | null}
 export interface Calc {currency: string; amount_idr: number; rate: number; source: 'bca' | 'market'; rate_at: number | null; now: number;
@@ -71,7 +72,7 @@ export interface Simple {
   horizon?: string;
   indonesia: SimpleCard | null; usd: SimpleCard | null; cny: SimpleCard | null;
   abroad?: {now: {state: State; name: L; text: L}; next: {state: State; name: L; p_good?: number}; gauge?: {now: number; next: number}; countries: SimpleCard[]};
-  headline?: string | null;
+  headline?: string | null; headline_us?: string | null;
 }
 export interface Brief {
   at: number; mode: 'team' | 'rules'; headline: L; outlook: L | null; simple?: Simple;

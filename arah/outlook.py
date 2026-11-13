@@ -26,7 +26,7 @@ NEXT_NAMES = STATE_NAMES
 # 40% to be "Menekan". Anything between is a coin toss with a slight lean, shown as "Seimbang".
 GOOD_AT, BAD_AT = 0.60, 0.40
 # Bumped when the summary's shape or rules change, so a stored one is rebuilt on the next start.
-SIMPLE_V = 3
+SIMPLE_V = 4
 
 
 def price_now(snap: dict, asset: Asset) -> int:
@@ -179,12 +179,12 @@ def _abroad_text(lang: str, n: int, ups: int, downs: int) -> str:
     return f"Of {n} markets watched, {ups} rose and {downs} fell this month."
 
 
-def headline(card_id: dict | None, horizon: str = "1m") -> str | None:
-    """One sentence with an actor, from the IHSG card: "Pasar tertekan. ARAH memperkirakan datar dalam 1 bulan." """
+def headline(card_id: dict | None, horizon: str = "1m", subject: str = "Pasar") -> str | None:
+    """One sentence with an actor, from a market card: "Pasar tertekan. ARAH memperkirakan datar dalam 1 bulan." """
     if not card_id:
         return None
     g = card_id["gauge"]["now"]
-    now = "Pasar tertekan." if g < 0.4 else "Pasar menguat." if g > 0.6 else "Pasar tenang."
+    now = f"{subject} tertekan." if g < 0.4 else f"{subject} menguat." if g > 0.6 else f"{subject} tenang."
     months = {"1m": "1 bulan", "2m": "2 bulan", "3m": "3 bulan"}.get(horizon, "1 bulan")
     return f"{now} ARAH memperkirakan {card_id['next']['dir']} dalam {months}."
 
@@ -213,4 +213,6 @@ def build_simple(db: DB, snaps: dict, horizon: str = "1m") -> dict:
             "gauge": {"now": round(g_now, 3), "next": round(p_good, 3)},
             "countries": countries,
         }
+    us = next((c for c in out.get("abroad", {}).get("countries", []) if c.get("country") == "US"), None)
+    out["headline_us"] = headline(us, horizon, "Wall Street")
     return out
