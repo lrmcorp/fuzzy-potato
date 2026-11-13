@@ -48,6 +48,9 @@ class Gate:
     def attach(self, db: DB) -> None:
         self.db = db
         st = db.get("yahoo_pause") or {}
+        # A pause earned on the direct route says nothing about the relay (or the other way round).
+        if bool(st.get("relay")) != relay.ON:
+            st = {}
         self._until, self._step = float(st.get("until", 0)), int(st.get("step", 0))
 
     def paused_until(self) -> float:
@@ -58,13 +61,13 @@ class Gate:
         self._until = time.time() + 900 * 2 ** (self._step - 1)
         log.warning("Yahoo answered 429: pausing Yahoo calls until %s", time.strftime("%H:%M", time.localtime(self._until)))
         if self.db:
-            self.db.set("yahoo_pause", {"until": int(self._until), "step": self._step})
+            self.db.set("yahoo_pause", {"until": int(self._until), "step": self._step, "relay": relay.ON})
 
     def ok(self) -> None:
         if self._step:
             self._step = 0
             if self.db:
-                self.db.set("yahoo_pause", {"until": 0, "step": 0})
+                self.db.set("yahoo_pause", {"until": 0, "step": 0, "relay": relay.ON})
 
 
 GATE = Gate()

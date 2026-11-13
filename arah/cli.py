@@ -210,6 +210,45 @@ def selfcheck():
              + ". ARAH retries every hour; to force now: docker compose -f deploy/compose.yaml restart arah  [T9]")
 
 
+@app.command("probe-stockbit")
+def probe_stockbit():
+    """Print the SHAPE of Stockbit's chart answers (field names, counts, first and last dates), to fix parsing.
+    Read-only, prints no token, price list or account data."""
+    import time as _time
+
+    from .data.stockbit import Stockbit, StockbitError
+
+    sb = Stockbit(_rt().db)
+
+    def shape(v, depth=0):
+        if isinstance(v, dict):
+            return "{" + ", ".join(f"{k}: {shape(x, depth + 1) if depth < 2 else type(x).__name__}" for k, x in list(v.items())[:12]) + "}"
+        if isinstance(v, list):
+            return f"list[{len(v)}]" + (f" of {shape(v[0], depth + 1)}" if v and depth < 2 else "")
+        return type(v).__name__
+
+    def when(x):
+        try:
+            x = float(x)
+            return _time.strftime("%Y-%m-%d %H:%M UTC", _time.gmtime(x / 1000 if x > 1e11 else x))
+        except (TypeError, ValueError):
+            return str(x)[:25]
+
+    for code in ("IHSG", "BBCA"):
+        for tf in ("today", "1d", "1w", "1m", "3m", "1y", "3y", "5y"):
+            path = f"/charts/{code}/daily?timeframe={tf}&chart_type=PRICE_CHART_TYPE_CANDLE"
+            try:
+                data = asyncio.run(sb.get(path))
+            except StockbitError as e:
+                typer.echo(f"{code} {tf:>5}: error {str(e)[:80]}")
+                continue
+            lists = {k: v for k, v in data.items() if isinstance(v, list)} if isinstance(data, dict) else {}
+            span = "; ".join(f"{k}: {len(v)} rows, first {when((v[0] or {}).get('date') if isinstance(v[0], dict) else None)}, "
+                             f"last {when((v[-1] or {}).get('date') if isinstance(v[-1], dict) else None)}"
+                             for k, v in lists.items() if v)
+            typer.echo(f"{code} {tf:>5}: {shape(data)}" + (f"  | {span}" if span else ""))
+
+
 @app.command()
 def doctor():
     """Check configuration and connectivity."""
