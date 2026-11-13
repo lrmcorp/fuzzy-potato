@@ -1,5 +1,5 @@
-"""One word a newcomer can act on for each stock: Layak (worth buying), Tunggu (wait) or Hindari (avoid),
-with a 0 to 100 score and the three reasons that moved it most.
+"""The action for each stock (Masuk, Masuk bertahap, Tunggu, Hindari; see verdict_rules.py), from a 0 to 100
+technical score, the forecast's chance of a rise, and the three reasons that moved it most.
 
 The score is a plain rule over data ARAH already has, so every point can be explained:
 
@@ -10,9 +10,9 @@ The score is a plain rule over data ARAH already has, so every point can be expl
   value          15  P/E below its own average of recent years, and profit growing
   calm           10  not overheated (RSI) and not swinging much more than usual
 
-A part with no data is left out and the score is taken over the parts that remain, so a US stock
-(no bandar data) is not marked down for it. The rule has not been tested on past data yet; the
-screen says so.
+The technical score is taken over every part except "chance", which stays a separate bar. A part with
+no data is left out and the score is taken over the parts that remain, so a US stock (no bandar data)
+is not marked down for it. The rule has not been tested on past data yet; the screen says so.
 """
 from __future__ import annotations
 
@@ -21,9 +21,8 @@ import time
 from .db import DB
 from .signals import fmt_pct, snapshot
 from .universe import Asset
+from . import verdict_rules as rules
 
-LABELS = {"layak": ("Layak", "Worth buying"), "tunggu": ("Tunggu", "Wait"), "hindari": ("Hindari", "Avoid")}
-LAYAK_AT, HINDARI_BELOW = 65, 45
 
 
 def _clip(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -103,29 +102,31 @@ def score(db: DB, asset: Asset, p_up: float | None, fund: dict | None = None, sb
                    f"Not overheated (RSI {rsi:.0f}).")
         parts.append(("calm", _clip(calm, 0, 10), 10, {"id": note, "en": note_en}))
 
-    got, most = sum(x[1] for x in parts), sum(x[2] for x in parts)
-    sc = round(100 * got / most) if most else 50
-    key = "layak" if sc >= LAYAK_AT else "hindari" if sc < HINDARI_BELOW else "tunggu"
-    # The reasons that pushed hardest toward the answer: the strongest parts for Layak, the weakest for
+    # "Kondisi teknikal": every part except the forecast's chance, which is shown as its own bar.
+    tech = [x for x in parts if x[0] != "chance"]
+    got, most = sum(x[1] for x in tech), sum(x[2] for x in tech)
+    sc = round(100 * got / most) if most else None
+    key = rules.action(sc, p_up)
+    # The reasons that pushed hardest toward the answer: the strongest parts for Masuk, the weakest for
     # Hindari, and for Tunggu both sides, because "wait" means the good and the bad roughly cancel.
     best = sorted(parts, key=lambda x: x[1] / x[2], reverse=True)
-    if key == "layak":
+    if key in ("masuk", "bertahap"):
         picked = best[:3]
     elif key == "hindari":
         picked = best[::-1][:3]
     else:
         picked = [best[-1], best[0]] + [x for x in best[1:-1]][:1]
     reasons = [{"part": k, "share": round(pt / mx, 2), "good": pt / mx >= 0.5, "text": r} for k, pt, mx, r in picked]
-    return {"key": asset.key, "verdict": key, "label": dict(zip(("id", "en"), LABELS[key])), "score": sc,
+    t = rules.tag(key)
+    return {"key": asset.key, "verdict": key, "label": {"id": t["label"], "en": t["label"]}, "icon": t["icon"], "tone": t["tone"],
+            "sentence": rules.sentence(key, sc, p_up), "score": sc, "p_up": p_up,
             "parts": {k: {"points": round(pt, 1), "max": mx} for k, pt, mx, _ in parts}, "reasons": reasons,
             "chg1m": s.get("chg1m"), "tested": False, "at": int(time.time())}
 
 
 def describe(v: dict, lang: str = "id") -> str:
     """One sentence for Telegram or a notification."""
-    word = v["label"][lang]
-    return (f"{word} (skor {v['score']}/100): " if lang == "id" else f"{word} (score {v['score']}/100): ") + \
-        v["reasons"][0]["text"][lang] if v.get("reasons") else word
+    return f"{rules.text_tag(v['verdict'])}: {v['sentence']}"
 
 
-__all__ = ["score", "describe", "LABELS", "fmt_pct"]
+__all__ = ["score", "describe", "fmt_pct"]

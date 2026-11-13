@@ -29,7 +29,8 @@ export type State = 'good' | 'neutral' | 'bad';
 export interface SimpleCard {
   key: string; name: string; name_en: string; decimals: number; unit?: string; klass: string; country?: string; price: number;
   chg1d?: number | null; chg1m?: number | null; spark?: number[];
-  now: {state: State; name: L; text: L}; next: {state: State; name: L; text: L; p_up: number; p_good?: number; range: [number, number]};
+  now: {state: State; name: L; text: L}; next: {state: State; name: L; text: L; p_up: number; p_good?: number; range: [number, number]; dir?: 'naik' | 'datar' | 'turun'};
+  gauge?: {now: number; next: number}; up_is?: number;
   why: L | null; reasons: Reason[]; watch: L | null; from_team: boolean; grade: Validation['grade'] | null;
   votes?: {up: number; down: number; none: number} | null; horizon?: string;
   touch: Record<string, number>; bca: {currency: string; buy: number; sell: number; at: number} | null;
@@ -45,7 +46,7 @@ export interface Technique {
   purpose: L; status: L & {used: boolean};
 }
 export interface Forecast {
-  key: string; name: string; name_en: string; klass: string; up_is: number; horizon: string; horizon_name: L; steps: number;
+  key: string; name: string; name_en: string; klass: string; country?: string; up_is: number; horizon: string; horizon_name: L; steps: number;
   s0: number; decimals: number; unit?: string; techniques: Technique[]; votes: {up: number; down: number; none: number}; tilt: number;
   conclusion: {p_up: number; q05: number; q25: number; q50: number; q75: number; q95: number; band: Band[]};
   tested: number; used: string[]; history: {t: number; c: number}[];
@@ -69,7 +70,8 @@ export interface LiveData {
 export interface Simple {
   horizon?: string;
   indonesia: SimpleCard | null; usd: SimpleCard | null; cny: SimpleCard | null;
-  abroad?: {now: {state: State; name: L; text: L}; next: {state: State; name: L; p_good?: number}; countries: SimpleCard[]};
+  abroad?: {now: {state: State; name: L; text: L}; next: {state: State; name: L; p_good?: number}; gauge?: {now: number; next: number}; countries: SimpleCard[]};
+  headline?: string | null;
 }
 export interface Brief {
   at: number; mode: 'team' | 'rules'; headline: L; outlook: L | null; simple?: Simple;
@@ -79,14 +81,14 @@ export interface Brief {
 }
 export interface RecCard {
   key: string; name: string; country: string; decimals: number; unit?: string; price: number; chg1d: number | null;
-  strengths: L[]; risks: L[]; why: L; p_up_1m: number; pe: number | null;
+  strengths: L[]; risks: L[]; why: L; p_up_1m: number; pe: number | null; tag?: TagInfo | null; score?: number | null;
   plan: {entry: [number, number]; stop: number; targets: [number, number]; rr: number}; spark: number[];
 }
 export interface Recs {at: number | null; ID: RecCard[]; US: RecCard[]; screened: {ID: number; US: number}}
 export interface MarketRow {
   key: string; name: string; name_en: string; decimals: number; unit?: string; price: number; chg1d: number | null; chg1w: number | null;
   direction: Direction; p_up: number; q05: number; q95: number; vigilance: Vigilance | null; spark: number[];
-  klass?: string; verdict?: {verdict: StockVerdict['verdict']; label: L; score: number} | null;
+  klass?: string; tag?: TagInfo | null; score?: number | null; up_is?: number;
 }
 export interface TrackRow {horizon: string; name: L; n: number; calls: number; call_hits: number; brier: number | null;
   brier_quant: number | null; cover90: number | null}
@@ -104,10 +106,13 @@ export interface Status {
   schedule: {slot: string; time: string}[]; timezone: string;
 }
 export interface AlertItem {id: number; asset: string; name: string; decimals: number; unit?: string; op: string; level: number;
+  kind?: 'price' | 'verdict'; grp?: string | null; label?: string | null;
   triggered_at: number | null; last_price: number | null}
 
+export interface TagInfo {key: string; label: string; icon: string; tone: 'green' | 'grey' | 'orange'}
 export interface StockVerdict {
-  key: string; verdict: 'layak' | 'tunggu' | 'hindari'; label: L; score: number;
+  key: string; verdict: 'masuk' | 'bertahap' | 'tunggu' | 'hindari'; label: L; icon: string; tone: TagInfo['tone']; sentence: string;
+  score: number | null; p_up: number | null;
   parts: Record<string, {points: number; max: number}>;
   reasons: {part: string; share: number; good: boolean; text: L}[]; tested: boolean; at: number;
 }
@@ -117,6 +122,14 @@ export interface Feed {scope: string; topics: string[]; items: Story[];
 export interface TickerFeed {key: string; items: Story[]; posts: NonNullable<SbTerminal['stream']>}
 export interface History {key: string; range: string; decimals: number; unit: string; bars: Bar[]}
 export interface PushInfo {key: string; devices: number; last: {at: number; title: string; sent: number} | null}
+
+export interface QuickRow {key: string; name: string; name_en: string; klass: string; country: string; unit: string; decimals: number;
+  up_is: number; price: number | null; chg1d: number | null; spark: number[]; tag: TagInfo | null; alerts?: number}
+export interface PlanLevel {level: number; label: string; kind: 'stop' | 'target' | 'band'}
+export interface PlanInfo {key: string; name: string; klass: string; price: number | null; decimals: number; unit: string; from_plan: boolean;
+  plan: {entry: [number, number]; stop: number; targets: [number, number]; rr: number} | null; levels: PlanLevel[]}
+export interface PulseInfo {state: 'live' | 'delayed' | 'paused'; at: number | null; since: number | null; stockbit: boolean; delay_min: number;
+  alerts_active: number; telegram: boolean}
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -164,5 +177,15 @@ export const api = {
   pushSubscribe: (sub: PushSubscriptionJSON) => call<{devices: number}>('/api/push/subscribe', {method: 'POST', body: JSON.stringify(sub)}),
   pushUnsubscribe: (endpoint: string) => call<{devices: number}>('/api/push/unsubscribe', {method: 'POST', body: JSON.stringify({endpoint})}),
   pushTest: () => call<{sent: number}>('/api/push/test', {method: 'POST'}),
+  search: (q: string) => call<{q: string; items: QuickRow[]}>(`/api/search?q=${encodeURIComponent(q)}`),
+  watchlist: () => call<{items: QuickRow[]}>('/api/watchlist'),
+  watch: (key: string, on: boolean) => call<{items: string[]; on: boolean}>('/api/watchlist', {method: 'POST', body: JSON.stringify({key, on})}),
+  plan: (key: string) => call<PlanInfo>(`/api/plan/${encodeURIComponent(key)}`),
+  addAlerts: (asset: string, levels: {level: number; label?: string}[], verdict_change: boolean) =>
+    call<{group: string; count: number}>('/api/alerts/batch', {method: 'POST', body: JSON.stringify({asset, levels, verdict_change})}),
+  undoAlerts: (group: string) => call<{items: AlertItem[]}>(`/api/alerts/group/${encodeURIComponent(group)}`, {method: 'DELETE'}),
+  pulse: () => call<PulseInfo>('/api/pulse'),
+  stockbitSession: (value: string) => call('/api/stockbit/session', {method: 'POST', body: JSON.stringify({value})}),
+  askTelegram: (question: string, answer: string) => call<{sent: boolean}>('/api/ask/telegram', {method: 'POST', body: JSON.stringify({question, answer})}),
   delAlert: (id: number) => call<{items: AlertItem[]}>(`/api/alerts/${id}`, {method: 'DELETE'}),
 };

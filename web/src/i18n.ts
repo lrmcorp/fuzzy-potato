@@ -4,10 +4,6 @@ import type {L, Lang} from './api';
 const S = {
   refresh: ['Perbarui', 'Refresh'], q_id_short: ['Saham Indonesia (IHSG)', 'Indonesian stocks (IHSG)'],
   range_next: ['Kisaran bulan depan', 'Next month range'], abroad_foot: ['Bursa AS, Jepang, Singapura, China', 'US, Japan, Singapore, China markets'],
-  legend_good: ['= menguntungkan Anda', '= works for you'], legend_bad: ['= kurang menguntungkan', '= works against you'],
-  legend_neutral: ['= peluang di bawah 60%, belum ada sisi yang unggul', '= under a 60% chance, neither side is ahead'],
-  neutral: ['Netral', 'Neutral'],
-  concl_neutral: ['Di bawah 60%, jadi belum layak disebut bagus atau kurang bagus.', 'Below 60%, so not enough to call either way.'],
   more_detail: ['Data lain', 'More data'],
   nav_today: ['Ringkasan', 'Summary'], nav_fx: ['Kurs', 'Currencies'], nav_stocks: ['Saham', 'Stocks'],
   nav_world: ['Dunia', 'World'], nav_track: ['Rekam jejak', 'Track record'], nav_settings: ['Atur', 'Settings'],
@@ -35,7 +31,7 @@ const S = {
   ask_btn: ['Tanya', 'Ask'], ask_fail: ['Pertanyaan itu belum bisa dijawab sekarang.', 'That question cannot be answered right now.'],
   ask_short: ['Tulis pertanyaan minimal 5 huruf.', 'Write a question of at least 5 characters.'],
   conf: ['keyakinan', 'confidence'], c_thin: ['tipis', 'thin'], c_fair: ['cukup', 'fair'], c_strong: ['kuat', 'strong'],
-  risk_one: ['Risiko', 'Risk'], good: ['Bagus', 'Good'], bad: ['Kurang bagus', 'Not good'],
+  risk_one: ['Risiko', 'Risk'], good: ['Mendukung', 'Supportive'], bad: ['Menekan', 'Pressing'],
   calc_title: ['Hitung tukar rupiah', 'Rupiah exchange calculator'],
   calc_lead: ['Berapa yang Anda dapat hari ini, dan kira-kira berapa sebulan lagi.', 'What you get today, and roughly what you would get in a month.'],
   amount: ['Jumlah rupiah', 'Rupiah amount'], currency: ['Mata uang tujuan', 'Target currency'], calc_btn: ['Hitung', 'Calculate'],
@@ -63,14 +59,9 @@ const S = {
   rng_1m: ['sebulan', 'in a month'], rng_3m: ['3 bulan', 'in 3 months'], rng_1y: ['setahun', 'in a year'], rng_5y: ['5 tahun', 'in 5 years'],
   hist_none: ['Riwayat harga belum tersedia untuk rentang ini.', 'No price history for this range yet.'],
   score_of: ['Skor {n} dari 100', 'Score {n} out of 100'], plus: ['Mendukung', 'In favour'], minus: ['Menahan', 'Against'],
-  v_layak_means: ['Layak: lebih banyak alasan untuk masuk daripada menahan. Tetap masuk bertahap dan pasang batas rugi.', 'Worth buying: more reasons to enter than to hold back. Still buy in parts and set a stop.'],
-  v_tunggu_means: ['Tunggu: alasan baik dan buruk masih seimbang. Pantau dulu sampai salah satu lebih jelas.', 'Wait: the good and the bad roughly cancel out. Watch until one side is clearer.'],
-  v_hindari_means: ['Hindari: lebih banyak alasan untuk menahan diri. Bukan berarti pasti turun, hanya peluangnya kurang mendukung.', 'Avoid: more reasons to hold back. It does not mean it will fall, only that the odds are not on your side.'],
   how_scored: ['Cara skor dihitung', 'How the score is made'],
   part_trend: ['Tren harga', 'Price trend'], part_chance: ['Peluang naik sebulan', 'Chance of a rise in a month'], part_flow: ['Bandar & asing', 'Brokers & foreign flow'],
   part_value: ['Valuasi', 'Valuation'], part_calm: ['Tidak terlalu panas atau liar', 'Not overheated or wild'],
-  verdict_rule: ['Skor 65 ke atas: Layak. 45 sampai 64: Tunggu. Di bawah 45: Hindari. Bagian yang datanya belum ada tidak dihitung.', 'Score 65 or more: worth buying. 45 to 64: wait. Below 45: avoid. Parts without data are left out.'],
-  verdict_untested: ['Skor ini dari aturan tetap dan belum diuji pada data masa lalu. Bukan saran investasi.', 'This score comes from a fixed rule and has not been tested on past data yet. Not investment advice.'],
   no_ticker_news: ['Belum ada berita tentang aset ini dalam seminggu terakhir.', 'No news about this asset in the last week.'],
   news_lead: ['Berita yang dimuat banyak media naik ke atas. Angka di sebelah sumber adalah jumlah media yang memuatnya.', 'Stories carried by many outlets rise to the top. The number next to the source is how many outlets ran it.'],
   news_rank_note: ['Diurutkan menurut jumlah media, mutu sumber, kata yang menggerakkan pasar, dan seberapa baru.', 'Ranked by number of outlets, source quality, market-moving words and freshness.'],
@@ -133,7 +124,6 @@ const S = {
   why_q: ['Kenapa?', 'Why?'], open_chart: ['Lihat grafik', 'See the chart'],
   sub_id: ['Diukur dari IHSG, indeks seluruh saham Indonesia.', 'Measured by the IHSG, the index of all Indonesian stocks.'],
   sub_abroad: ['Diukur dari bursa AS, Jepang, Singapura dan China.', 'Measured by the US, Japan, Singapore and China stock markets.'],
-  sub_fx: ['Bagus berarti rupiah menguat, jadi biaya ke luar negeri lebih murah.', 'Good means a stronger rupiah, so going abroad costs less.'],
   c_EU: ['Eropa', 'Europe'], c_GB: ['Inggris', 'United Kingdom'], c_GLOBAL: ['Global', 'Global'],
   c_ID: ['Indonesia', 'Indonesia'], c_US: ['Amerika Serikat', 'United States'], c_JP: ['Jepang', 'Japan'], c_SG: ['Singapura', 'Singapore'], c_CN: ['China', 'China'],
   by_team: ['Alasan dari tim analis AI.', 'Reasons from the AI analyst team.'], by_rules: ['Alasan dari data pasar.', 'Reasons from market data.'],
@@ -180,7 +170,7 @@ const S = {
   commodities: ['Komoditas dan kripto', 'Commodities and crypto'],
   market_id: ['Indonesia', 'Indonesia'], market_us: ['Amerika Serikat', 'United States'],
   tab_recs: ['Pilihan', 'Picks'], tab_id: ['Saham ID', 'ID stocks'], tab_us: ['Saham AS', 'US stocks'], tab_comm: ['Komoditas', 'Commodities'], market: ['Pasar', 'Market'],
-  strengths: ['3 keunggulan', '3 strengths'], why_enter: ['Kenapa masih layak masuk', 'Why it is still worth entering'],
+  strengths: ['3 keunggulan', '3 strengths'], why_enter: ['Kenapa masih bisa masuk', 'Why it is still worth entering'],
   risks: ['Risiko', 'Risks'], plan: ['Rencana', 'Plan'], entry: ['Masuk', 'Entry'], target: ['Target', 'Target'],
   stop: ['Batas rugi', 'Stop'], rr: ['Imbal banding risiko', 'Reward to risk'],
   no_recs_title: ['Tidak ada saham yang lolos saringan hari ini', 'No stock passed the screen today'],
@@ -246,15 +236,25 @@ export function useT() {
   };
   const l = (text: L | null | undefined) => (text ? text[lang] : '');
   const nm = (x: {name: string; name_en?: string}) => (lang === 'en' && x.name_en ? x.name_en : x.name);
-  const locale = lang === 'id' ? 'id-ID' : 'en-US';
-  // Numbers read 1,234.56 in both languages: the owner's choice, and the way bank and broker apps show them.
-  const num = (x: number, decimals = 2) =>
-    new Intl.NumberFormat('en-US', {minimumFractionDigits: decimals, maximumFractionDigits: decimals}).format(x);
-  /** A price with its currency in front: "Rp 18,228", "$ 181.50". Index points have no unit. */
+  // Indonesian number style everywhere (the owner's choice): 5.311,36, Rp 18.200, and a true minus sign.
+  const MINUS = '\u2212';
+  const fmt = (x: number, decimals: number) =>
+    new Intl.NumberFormat('id-ID', {minimumFractionDigits: decimals, maximumFractionDigits: decimals}).format(Math.abs(x));
+  const num = (x: number, decimals = 2) => {
+    const s = fmt(x, decimals);
+    return x < 0 && /[1-9]/.test(s) ? MINUS + s : s;
+  };
+  /** A price with its currency in front: "Rp 18.228", "$ 181,50". Index points have no unit. */
   const money = (x: number, decimals = 2, unit?: string) => (unit ? `${unit} ${num(x, decimals)}` : num(x, decimals));
-  const pct = (x: number | null | undefined, digits = 1) =>
-    x == null ? '' : `${x > 0 ? '+' : ''}${new Intl.NumberFormat('en-US', {minimumFractionDigits: digits, maximumFractionDigits: digits}).format(x)}%`;
+  const pct = (x: number | null | undefined, digits = 1) => {
+    if (x == null) return '';
+    const s = fmt(x, digits);
+    const zero = !/[1-9]/.test(s);
+    return `${zero ? '' : x > 0 ? '+' : MINUS}${s}%`;
+  };
+  /** Ranges are written in words: "4.606 sampai 6.091". */
+  const range = (lo: number, hi: number, decimals = 0) => `${num(lo, decimals)} ${lang === 'id' ? 'sampai' : 'to'} ${num(hi, decimals)}`;
   const when = (ts: number | null | undefined) =>
-    ts ? new Intl.DateTimeFormat(locale, {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}).format(ts * 1000) : '';
-  return {t, l, nm, num, money, pct, when, lang};
+    ts ? new Intl.DateTimeFormat('id-ID', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}).format(ts * 1000) : '';
+  return {t, l, nm, num, money, pct, range, when, lang};
 }

@@ -10,7 +10,6 @@
   --arah-col: 62rem;
 }
 
-body { background: var(--color-background-surface); color: var(--color-text-primary); }
 a { color: inherit; text-underline-offset: 0.18em; }
 a:hover { color: var(--arah-accent); }
 :focus-visible { outline: 2px solid var(--arah-accent); outline-offset: 2px; border-radius: 2px; }
@@ -18,40 +17,6 @@ a:hover { color: var(--arah-accent); }
 .skip { position: absolute; left: -999px; top: 0; padding: 0.75rem 1rem; background: var(--color-background-surface); z-index: 20; }
 .skip:focus { left: 0.5rem; top: 0.5rem; }
 
-/* Shell. Phone first: a slim brand bar on top, the five destinations in a bar at the bottom within
-   thumb reach. From 60rem the same five move into a rail on the left and the bottom bar goes away. */
-.top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; height: 3rem; padding: 0 1rem;
-  background: var(--color-background-surface); border-bottom: 1px solid var(--color-border); }
-.brand { font-weight: 700; letter-spacing: 0.04em; text-decoration: none; display: inline-flex; align-items: center; gap: 0.45rem; min-height: 44px; }
-.brand-by { font-weight: 400; letter-spacing: 0; color: var(--color-text-secondary); }
-/* The LRM logo is drawn as a mask filled with the text colour, so it reads in light and dark alike. */
-.lrm-mark { display: inline-block; background: currentColor; -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; }
-.lrm-mark.icon { --m: url(/lrm-icon.png); width: 1.05rem; height: 1.45rem; }
-.lrm-mark.full { --m: url(/lrm-logo.png); width: min(100%, 13.5rem); aspect-ratio: 338 / 102; }
-
-.tabs { position: fixed; z-index: 10; left: 0; right: 0; bottom: 0; background: var(--color-background-surface);
-  border-top: 1px solid var(--color-border-emphasized); padding-bottom: env(safe-area-inset-bottom); }
-.tabs ul { display: grid; grid-template-columns: repeat(5, 1fr); list-style: none; margin: 0; padding: 0; }
-.tabs a { display: flex; align-items: center; justify-content: center; min-height: 3.5rem; padding: 0 0.15rem; text-align: center;
-  text-decoration: none; font-size: 0.8125rem; line-height: 1.15; color: var(--color-text-secondary); border-top: 3px solid transparent; }
-.tabs a:hover { color: var(--color-text-primary); }
-/* The one accent: which destination you are in. */
-.tabs a[aria-current="page"] { color: var(--color-text-primary); font-weight: 700; border-top-color: var(--arah-accent); }
-
-.page { max-width: 46rem; margin: 0 auto; padding: 1rem 1rem calc(5rem + env(safe-area-inset-bottom)); }
-.foot { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: 0.8125rem; }
-
-@media (min-width: 60rem) {
-  .app { display: grid; grid-template-columns: 13rem minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: 100vh; }
-  .top { grid-column: 1 / -1; padding: 0 1.5rem; }
-  .tabs { position: sticky; top: 3rem; align-self: start; bottom: auto; border-top: 0; border-right: 1px solid var(--color-border); height: calc(100vh - 3rem); padding: 1rem 0; }
-  .tabs ul { grid-template-columns: 1fr; gap: 0.15rem; }
-  .tabs a { justify-content: flex-start; min-height: 44px; padding: 0 1.5rem; font-size: 0.9375rem; border-top: 0; border-left: 3px solid transparent; }
-  .tabs a[aria-current="page"] { border-left-color: var(--arah-accent); background: var(--color-background-muted); }
-  .page { margin: 0; padding: 1.5rem 2rem 3rem; max-width: 52rem; }
-}
-
-.page-title { font-size: 1.5rem; font-weight: 700; margin: 0; line-height: 1.2; }
 
 /* Chip bars: one row that scrolls sideways on a phone instead of wrapping into a wall of buttons. */
 .chipbar { display: flex; gap: 0.4rem; overflow-x: auto; scrollbar-width: none; margin: 0.75rem -1rem; padding: 0.15rem 1rem; }
@@ -144,7 +109,6 @@ a:hover { color: var(--arah-accent); }
 .change { font-variant-numeric: tabular-nums; font-size: 0.875rem; }
 .asset-link { text-decoration-color: var(--color-border-emphasized); }
 .more { margin: 0.75rem 0 0; font-size: 0.875rem; }
-.back { margin: 0 0 1rem; font-size: 0.875rem; }
 .watch { margin: 0.75rem 0 0; }
 
 .glyph { display: inline-block; width: 1em; text-align: center; font-size: 0.8em; }

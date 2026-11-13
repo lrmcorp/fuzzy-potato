@@ -9,6 +9,7 @@ import os
 import secrets
 import time
 from contextlib import asynccontextmanager
+from html import escape as html_escape
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
@@ -30,6 +31,8 @@ from .llm import budget_state, claude_calls_today
 from .runtime import Runtime
 from .service import all_horizons, build_view, forecast_asset, horizon_name, track_record, validation
 from .signals import snapshot
+from . import verdict_rules as rules
+from .recommend import VERDICTS_V
 from .universe import BY_KEY, COUNTRIES, CRYPTO, COMMODITIES, DEFAULT_LEVELS, FX, INDICES, STOCKS, resolve
 
 log = logging.getLogger("arah.api")
@@ -67,6 +70,31 @@ class SettingsBody(BaseModel):
 
 class AskBody(BaseModel):
     question: str = Field(min_length=5, max_length=400)
+
+
+class WatchBody(BaseModel):
+    key: str = Field(max_length=20)
+    on: bool = True
+
+
+class LevelIn(BaseModel):
+    level: float = Field(gt=0)
+    label: str | None = Field(default=None, max_length=40)
+
+
+class AlertBatch(BaseModel):
+    asset: str = Field(max_length=20)
+    levels: list[LevelIn] = Field(default_factory=list, max_length=6)
+    verdict_change: bool = False
+
+
+class SessionBody(BaseModel):
+    value: str = Field(min_length=20, max_length=20000)
+
+
+class TelegramBody(BaseModel):
+    question: str = Field(max_length=500)
+    answer: str = Field(max_length=3000)
 
 
 class AlertBody(BaseModel):
@@ -169,7 +197,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         if group not in groups:
             raise HTTPException(400, "unknown group")
         rows, snaps = [], {}
-        verdicts = (db.get("verdicts") or {}).get("items") or {}
+        verdicts = verdict_items()
         for a in groups[group]:
             h = horizon_or_400(horizon, a)
             v = build_view(db, a, h, insight=get_insight(db, a.key), with_chart=False, snaps=snaps)
@@ -180,7 +208,9 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
                          "price": v["forecast"]["s0"], "chg1d": v["snapshot"]["chg1d"], "chg1w": v["snapshot"]["chg1w"],
                          "direction": v["direction"], "p_up": v["forecast"]["p_up"], "q05": v["forecast"]["q05"],
                          "q95": v["forecast"]["q95"], "vigilance": v["vigilance"], "spark": s.get("spark", [])[-40:],
-                         "klass": a.klass, "verdict": {k: verdicts[a.key][k] for k in ("verdict", "label", "score")} if a.key in verdicts else None})
+                         "klass": a.klass, "score": (verdicts.get(a.key) or {}).get("score"),
+                         "tag": (rules.tag(verdicts[a.key]["verdict"]) if a.key in verdicts and verdicts[a.key].get("verdict") in rules.ACTIONS else None)
+                         if a.klass == "stock" else rules.tag(rules.direction(v["forecast"]["p_up"]))})
         return {"group": group, "horizon": horizon, "rows": rows}
 
     @app.get("/api/live/{key}", dependencies=[Depends(auth)])
@@ -202,7 +232,7 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
             out = await asyncio.to_thread(techniques, db, a, h)
         except ValueError as e:
             raise HTTPException(400, str(e))
-        out["name"], out["name_en"], out["up_is"], out["klass"] = a.name, a.nm("en"), a.up_is, a.klass
+        out["name"], out["name_en"], out["up_is"], out["klass"], out["country"] = a.name, a.nm("en"), a.up_is, a.klass, a.country
         out["horizon_name"] = horizon_name(h)
         return out
 
@@ -260,7 +290,14 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
 
     @app.get("/api/recs", dependencies=[Depends(auth)])
     def recs():
-        return db.latest_report("recs") or {"ID": [], "US": [], "screened": {"ID": 0, "US": 0}, "at": None}
+        r = db.latest_report("recs") or {"ID": [], "US": [], "screened": {"ID": 0, "US": 0}, "at": None}
+        vs = verdict_items()
+        for m in ("ID", "US"):
+            for c in r.get(m, []):
+                v = vs.get(c["key"]) or {}
+                c["tag"] = rules.tag(v["verdict"]) if v.get("verdict") in rules.ACTIONS else None
+                c["score"] = v.get("score")
+        return r
 
     @app.get("/api/news", dependencies=[Depends(auth)])
     def news(country: str = "ID"):
@@ -309,9 +346,151 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
             raise HTTPException(409, "Stockbit is not configured")
         return await sbterm.snapshot(db, live.stockbit, a.key)
 
+    def quick_row(a, verdicts: dict) -> dict:
+        """One line about an asset for search results, the watchlist and alerts: price, today's change,
+        a 3-month line, and the action (stocks) or the forecast direction (everything else)."""
+        s = snapshot(db, a) or {}
+        row = {"key": a.key, "name": a.name, "name_en": a.nm("en"), "klass": a.klass, "country": a.country, "unit": a.unit,
+               "decimals": a.decimals, "up_is": a.up_is, "price": s.get("live") or s.get("price"), "chg1d": s.get("chg1d"),
+               "spark": (s.get("spark") or [])[-60:], "tag": None}
+        if a.klass == "stock":
+            v = verdicts.get(a.key)
+            if v and v.get("verdict") in rules.ACTIONS:
+                row["tag"] = rules.tag(v["verdict"])
+        elif s:
+            try:
+                _, f1, _ = forecast_asset(db, a, "1m")
+                row["tag"] = rules.tag(rules.direction(f1.p_up))
+            except ValueError:
+                pass
+        return row
+
+    def verdict_items() -> dict:
+        v = db.get("verdicts") or {}
+        return v.get("items") or {} if v.get("v") == VERDICTS_V else {}
+
+    @app.get("/api/search", dependencies=[Depends(auth)])
+    def search(q: str = Query("", max_length=40)):
+        """Tickers first (exact code, then code or name starting with the words, then containing them)."""
+        needle = q.strip().lower()
+        if not needle:
+            return {"q": q, "items": []}
+        pool = [a for a in BY_KEY.values() if a.klass != "gauge"]
+        def rank(a):
+            k, n = a.key.lower(), a.name.lower()
+            if k == needle.replace("/", ""):
+                return 0
+            if k.startswith(needle) or n.startswith(needle):
+                return 1
+            if needle in k or needle in n or any(w.startswith(needle) for w in n.split()):
+                return 2
+            return 9
+        hits = sorted((a for a in pool if rank(a) < 9), key=lambda a: (rank(a), a.key))[:8]
+        vs = verdict_items()
+        return {"q": q, "items": [quick_row(a, vs) for a in hits]}
+
+    @app.get("/api/watchlist", dependencies=[Depends(auth)])
+    def watchlist():
+        vs = verdict_items()
+        counts = {r["asset"]: r["n"] for r in db.q("SELECT asset, COUNT(*) n FROM alerts WHERE triggered_at IS NULL AND kind='price' GROUP BY asset")}
+        rows = []
+        for k in db.get("watchlist", []):
+            if k in BY_KEY:
+                rows.append(quick_row(BY_KEY[k], vs) | {"alerts": counts.get(k, 0)})
+        return {"items": rows}
+
+    @app.post("/api/watchlist", dependencies=[Depends(auth)])
+    def watch(body: WatchBody):
+        a = asset_or_404(body.key)
+        keys = [k for k in db.get("watchlist", []) if k != a.key]
+        if body.on:
+            keys.insert(0, a.key)
+            # Watching a stock also means "tell me when ARAH's decision on it changes".
+            if a.klass == "stock" and not db.one("SELECT 1 FROM alerts WHERE asset=? AND kind='verdict'", (a.key,)):
+                db.x("INSERT INTO alerts (asset, op, level, created_at, kind, label) VALUES (?,?,?,?,?,?)",
+                     (a.key, "=", 0, int(time.time()), "verdict", "Keputusan ARAH berubah"))
+        db.set("watchlist", keys[:40])
+        return {"items": keys[:40], "on": body.on}
+
+    @app.get("/api/plan/{key}", dependencies=[Depends(auth)])
+    async def trade_plan(key: str):
+        """Levels for the alert sheet: the pick's trade plan when there is one, else the forecast's 9-in-10 range."""
+        a = asset_or_404(key)
+        s = snapshot(db, a) or {}
+        price = s.get("live") or s.get("price")
+        recs = db.latest_report("recs") or {}
+        card = next((c for m in ("ID", "US") for c in recs.get(m, []) if c.get("key") == a.key), None)
+        levels = []
+        if card and card.get("plan"):
+            p = card["plan"]
+            levels = [{"level": p["stop"], "label": "Batas rugi", "kind": "stop"},
+                      {"level": p["targets"][0], "label": "Target 1", "kind": "target"},
+                      {"level": p["targets"][1], "label": "Target 2", "kind": "target"}]
+        else:
+            try:
+                _, f1, _ = await asyncio.to_thread(forecast_asset, db, a, "1m")
+                levels = [{"level": f1.q05, "label": "Batas bawah 9 dari 10", "kind": "band"},
+                          {"level": f1.q95, "label": "Batas atas 9 dari 10", "kind": "band"}]
+            except ValueError:
+                levels = []
+        return {"key": a.key, "name": a.name, "klass": a.klass, "price": price, "decimals": a.decimals, "unit": a.unit,
+                "from_plan": bool(card and card.get("plan")), "plan": card.get("plan") if card else None, "levels": levels}
+
+    @app.post("/api/alerts/batch", dependencies=[Depends(auth)])
+    def add_alerts(body: AlertBatch):
+        """Several alerts from one sheet, as one group so a single "Batalkan" removes them all.
+        The direction of each price alert follows from the current price."""
+        a = asset_or_404(body.asset)
+        s = snapshot(db, a) or {}
+        price = s.get("live") or s.get("price")
+        if not price:
+            raise HTTPException(409, "no current price for this asset")
+        grp = secrets.token_hex(6)
+        now = int(time.time())
+        n = 0
+        for lv in body.levels:
+            if lv.level <= 0 or abs(lv.level - price) < 1e-9:
+                continue
+            db.x("INSERT INTO alerts (asset, op, level, created_at, kind, grp, label) VALUES (?,?,?,?,?,?,?)",
+                 (a.key, ">" if lv.level > price else "<", lv.level, now, "price", grp, (lv.label or "")[:40]))
+            n += 1
+        if body.verdict_change and not db.one("SELECT 1 FROM alerts WHERE asset=? AND kind='verdict'", (a.key,)):
+            db.x("INSERT INTO alerts (asset, op, level, created_at, kind, grp, label) VALUES (?,?,?,?,?,?,?)",
+                 (a.key, "=", 0, now, "verdict", grp, "Keputusan ARAH berubah"))
+            n += 1
+        if not n:
+            raise HTTPException(400, "nothing to set")
+        return {"group": grp, "count": n}
+
+    @app.delete("/api/alerts/group/{grp}", dependencies=[Depends(auth)])
+    def undo_alerts(grp: str):
+        db.x("DELETE FROM alerts WHERE grp=?", (grp[:20],))
+        return alerts()
+
+    @app.post("/api/stockbit/session", dependencies=[Depends(auth)])
+    def stockbit_session(body: SessionBody):
+        """Reconnect Stockbit from the web: the owner pastes a fresh credentialStorage value."""
+        from .data.stockbit import parse_session
+
+        sess = parse_session(body.value.strip())
+        if not sess:
+            raise HTTPException(400, "that is not a Stockbit session value")
+        db.set("stockbit_session", sess)
+        db.set("stockbit_error", None)
+        return live.stockbit.status()
+
+    @app.post("/api/ask/telegram", dependencies=[Depends(auth)])
+    async def ask_to_telegram(body: TelegramBody):
+        if not settings.telegram_enabled:
+            raise HTTPException(409, "Telegram is not connected")
+        ok = await rt.bot.send(f"<b>Tanya ARAH:</b> {html_escape(body.question)}\n\n{html_escape(body.answer)}")
+        if not ok:
+            raise HTTPException(502, "Telegram did not accept the message")
+        return {"sent": True}
+
     @app.get("/api/verdict/{key}", dependencies=[Depends(auth)])
     async def stock_verdict(key: str):
-        """Layak / Tunggu / Hindari for one stock, fresh, with its three main reasons."""
+        """The action for one stock (Masuk, Masuk bertahap, Tunggu, Hindari), fresh, with its three main reasons."""
         from .verdict import score
 
         a = asset_or_404(key)
@@ -418,6 +597,28 @@ def create_app(settings: Settings | None = None, db: DB | None = None, backgroun
         if not live.stockbit.session:
             raise HTTPException(409, "Stockbit is not configured")
         return {"lines": await probe_lines(live.stockbit, [path] if path else None)}
+
+    @app.get("/api/pulse", dependencies=[Depends(auth)])
+    def pulse():
+        """Polled by every page: how fresh the data is, and how many alerts are active (for the nav badge).
+
+        live     Stockbit answers: Indonesian prices are realtime; shown as the time only.
+        delayed  Stockbit is not connected: Indonesian prices come about 15 minutes late.
+        paused   No data refresh for more than a day: signals are paused and verdicts greyed out.
+        """
+        ds = db.get("data_status") or {}
+        at = ds.get("at")
+        sb = live.stockbit.status()
+        err = sb.get("error") or {}
+        if not at or time.time() - at > 86400:
+            state = "paused"
+        elif sb.get("usable") and not err:
+            state = "live"
+        else:
+            state = "delayed"
+        n = db.one("SELECT COUNT(*) n FROM alerts WHERE triggered_at IS NULL")["n"]
+        return {"state": state, "at": at, "since": err.get("at"), "stockbit": bool(sb.get("configured")), "delay_min": 15,
+                "alerts_active": n, "telegram": settings.telegram_enabled}
 
     @app.get("/api/settings", dependencies=[Depends(auth)])
     def get_prefs():

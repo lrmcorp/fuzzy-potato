@@ -76,7 +76,7 @@ def simple_states(brief: dict | None) -> dict[str, tuple]:
 
 TITLES = {"indonesia": ("Indonesia", "Indonesia"), "abroad": ("Luar negeri", "Abroad"),
           "usd": ("Rupiah vs dolar AS", "Rupiah vs US dollar"), "cny": ("Rupiah vs yuan", "Rupiah vs yuan")}
-WORDS = {"good": ("Bagus", "Good"), "neutral": ("Netral", "Neutral"), "bad": ("Kurang bagus", "Not good")}
+WORDS = {"good": ("Mendukung", "Supportive"), "neutral": ("Seimbang", "Balanced"), "bad": ("Menekan", "Pressing")}
 
 
 def flips(old: dict | None, new: dict, lang: str) -> list[str]:

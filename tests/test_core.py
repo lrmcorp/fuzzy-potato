@@ -236,3 +236,13 @@ def test_top_stories_merges_one_story_and_ranks_by_outlets(tmp_path):
     _store(db, "id_market", "ID", [{"title": "Video: lomba lari pagi di Jakarta", "source": "", "url": "u4", "published_at": now}])
     top = top_stories(db, ["id_insider", "id_market"], limit=5)
     assert top[0]["outlets"] == 3 and "MSCI" in top[0]["title"] and len(top) == 2
+
+
+def test_verdict_rules_follow_the_approved_thresholds():
+    from arah.verdict_rules import action, direction, text_tag
+
+    assert action(70, 0.60) == "masuk" and action(85, 0.59) == "bertahap"
+    assert action(69, 0.70) == "tunggu" and action(None, 0.7) == "tunggu" and action(80, None) == "tunggu"
+    assert action(39, 0.70) == "hindari" and action(90, 0.40) == "hindari"
+    assert direction(0.61) == "naik" and direction(0.5) == "datar" and direction(0.38) == "turun"
+    assert text_tag("bertahap") == "◐ Masuk bertahap"
