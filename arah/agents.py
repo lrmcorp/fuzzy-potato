@@ -10,7 +10,7 @@ import logging
 import time
 
 from .config import Settings
-from .data.news import headlines, refresh_ticker_news
+from .data.news import COUNTRY_TOPICS, headlines, refresh_ticker_news, top_stories
 from .db import DB
 from .llm import BudgetExceeded, LLMError, chat_json
 from .service import all_horizons
@@ -21,8 +21,7 @@ log = logging.getLogger("arah.agents")
 
 LLM_TILT_CAP = 0.06
 INSIGHT_TTL = 18 * 3600
-DESK_TOPICS = {"ID": ["id_market", "id_politics"], "US": ["us_market", "us_politics"], "JP": ["jp"],
-               "SG": ["sg"], "CN": ["cn"], "GLOBAL": ["global"]}
+DESK_TOPICS = COUNTRY_TOPICS
 WORLD_KEYS = ["SPX", "NASDAQ", "N225", "STI", "SSE", "IHSG", "USDIDR", "CNYIDR", "DXY", "US10Y", "VIX", "GOLD", "BRENT", "CPO", "BTC"]
 
 GROUND_RULES = (
@@ -65,12 +64,19 @@ def _text(v) -> dict | None:
     return None
 
 
+def _by(n: dict) -> str:
+    """Source, plus how many other outlets ran the same story: a story many outlets carry matters more."""
+    more = n.get("outlets", 1) - 1
+    return f"{n['source']}" + (f" (+{more} other outlets)" if more > 0 else "")
+
+
 def _refs(v, valid: set[str]) -> list[str]:
     return [r for r in v if isinstance(r, str) and r in valid] if isinstance(v, list) else []
 
 
 async def run_desk(db: DB, settings: Settings, country: str, wlines: list[str]) -> dict | None:
-    news = headlines(db, DESK_TOPICS[country], limit=22)
+    # The most important stories first (one line per story, with how many outlets ran it), not just the newest.
+    news = top_stories(db, DESK_TOPICS[country], limit=30)
     if not news:
         return None
     nmap = {f"N{i}": n for i, n in enumerate(news, 1)}
@@ -88,12 +94,15 @@ async def run_desk(db: DB, settings: Settings, country: str, wlines: list[str]) 
         f"for that region and say what it means for prices. {GROUND_RULES}"
     )
     user = (
-        "Market figures:\n" + "\n".join(wlines) + "\n\nHeadlines from the last two days:\n"
-        + "\n".join(f"{k} | {n['source']} | {n['title']}" for k, n in nmap.items() if k not in fmap)
+        "Market figures:\n" + "\n".join(wlines) + "\n\nHeadlines from the last two days, most important first. "
+        "'(+N other outlets)' means N more outlets ran the same story, so it is widely confirmed. Reports of "
+        "insiders or controlling shareholders buying or selling, buybacks, rights issues, index changes and analyst "
+        "call changes count as market-moving when they concern large listed companies:\n"
+        + "\n".join(f"{k} | {_by(n)} | {n['title']}" for k, n in nmap.items() if k not in fmap)
         + flow_block
         + "\n\nReturn JSON: {\"summary\": {\"id\": str, \"en\": str} (two sentences on what matters most), "
         "\"mood\": integer -2..2 for local stocks and currency (-2 clearly negative, 2 clearly positive), "
-        "\"events\": [up to 4 of {\"refs\": [headline ids], \"what\": {id,en}, \"effect\": {id,en} "
+        "\"events\": [up to 6 of {\"refs\": [headline ids], \"what\": {id,en}, \"effect\": {id,en} "
         "(one sentence: which asset it moves and which way)}], "
         f"\"ahead\": [up to {6 if country == 'ID' else 3} of {{\"refs\": [headline ids], \"date\": \"YYYY-MM-DD\", \"what\": {{id,en}}}} for scheduled "
         "events in the next 30 days whose date a headline states outright; leave empty when no headline gives a date]"
@@ -114,7 +123,7 @@ async def run_desk(db: DB, settings: Settings, country: str, wlines: list[str]) 
     if not summary:
         return None
     events = []
-    for ev in raw.get("events", [])[:4] if isinstance(raw.get("events"), list) else []:
+    for ev in raw.get("events", [])[:6] if isinstance(raw.get("events"), list) else []:
         refs, what, effect = _refs(ev.get("refs"), set(nmap)), _text(ev.get("what")), _text(ev.get("effect"))
         if refs and what and effect:
             events.append({"what": what, "effect": effect,
@@ -268,8 +277,9 @@ async def analyze_asset(db: DB, settings: Settings, asset: Asset) -> dict | None
     if not settings.llm_enabled:
         return None
     await refresh_ticker_news(db, asset.key, asset.name, asset.country)
-    topics = [f"t:{asset.key}"] + DESK_TOPICS.get(asset.country, ["global"])[:1]
-    news = headlines(db, topics, limit=18, max_age_h=96)
+    # The company's own news, plus insider and corporate-action reports for its market.
+    topics = [f"t:{asset.key}"] + DESK_TOPICS.get(asset.country, ["global"])[:3]
+    news = top_stories(db, topics, limit=24, max_age_h=96)
     nmap = {f"N{i}": n for i, n in enumerate(news, 1)}
     snaps: dict = {}
     block, facts, _ = asset_block(db, asset, snaps)
@@ -283,7 +293,7 @@ async def analyze_asset(db: DB, settings: Settings, asset: Asset) -> dict | None
     )
     user = (
         "World figures:\n" + "\n".join(wlines) + f"\n\n{block}\n\nHeadlines:\n"
-        + "\n".join(f"{k} | {n['source']} | {n['title']}" for k, n in nmap.items())
+        + "\n".join(f"{k} | {_by(n)} | {n['title']}" for k, n in nmap.items())
         + "\n\nReturn JSON: {\"bull\": {id,en} (max 45 words), \"bear\": {id,en} (max 45 words), "
         "\"tilt\": {\"short\": n, \"medium\": n, \"long\": n}, \"reasons\": [3 to 5 of {\"text\": {id,en} (max 22 words), "
         "\"lean\": 1|-1|0, \"refs\": [ids such as \"F2\", \"W7\", \"N3\"]}], \"watch\": {id,en}}"

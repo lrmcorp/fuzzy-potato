@@ -187,6 +187,14 @@ def selfcheck():
             ok(f"forecast IHSG {h}: chance of a rise {f['conclusion']['p_up'] * 100:.0f}%, {used} of 7 techniques used")
         except Exception as e:
             warn(f"forecast IHSG {h}: {str(e)[:120]}  [T9]")
+    nf = db.get("news_feeds") or {}
+    feeds = nf.get("feeds") or {}
+    if feeds:
+        good = sum(1 for v in feeds.values() if v)
+        silent = [u.split("/")[2] for u, v in feeds.items() if not v]
+        (ok if good >= len(feeds) * 0.6 else warn)(
+            f"news: {good} of {len(feeds)} feeds answered at the last brief"
+            + (f"; silent: {', '.join(sorted(set(silent))[:6])}" if silent else ""))
     from .recommend import recs_ok
 
     r = db.latest_report("recs") or {}
