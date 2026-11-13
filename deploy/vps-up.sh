@@ -7,7 +7,9 @@ cd "$(dirname "$0")/.."
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo -n"
 # The running commit, shown on the Settings page so anyone can see which version is live.
 REV="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-compose() { $SUDO env ARAH_REVISION="$REV" docker compose -f deploy/compose.yaml "$@"; }
+# The public address may be overridden in .env.vps; compose.yaml falls back to https://arah.hasseedev.com.
+PUBLIC_URL="$(sed -n "s/^ARAH_PUBLIC_URL=['\"]\{0,1\}\([^'\"]*\)['\"]\{0,1\}$/\1/p" .env.vps 2>/dev/null | tail -n 1)"
+compose() { $SUDO env ARAH_REVISION="$REV" ${PUBLIC_URL:+ARAH_PUBLIC_URL="$PUBLIC_URL"} docker compose -f deploy/compose.yaml "$@"; }
 
 [ -s .env.vps ] || { echo "Missing .env.vps. Create it with deploy/write-vps-env.sh first." >&2; exit 1; }
 $SUDO docker network inspect lnint-edge >/dev/null 2>&1 || $SUDO docker network create lnint-edge

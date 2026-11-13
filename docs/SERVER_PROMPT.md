@@ -34,7 +34,7 @@ Baris yang tidak Anda isi biarkan berisi `...`; baris itu dilewati.
 
 ```text
 TUGAS
-Deploy ARAH by LRM ke server ini sampai https://arah.lnint.xyz bisa dibuka, meminta kata sandi pemilik,
+Deploy ARAH by LRM ke server ini sampai https://arah.hasseedev.com bisa dibuka, meminta kata sandi pemilik,
 menampilkan grafik live dan prakiraan, dan memperbarui dirinya sendiri setiap ada commit baru di branch
 main. Kerjakan sampai selesai tanpa bertanya balik, kecuali bagian MASALAH menyuruh melapor ke pemilik.
 Langkah yang sama dipakai untuk pemasangan pertama maupun pembaruan; skrip aman dijalankan ulang.
@@ -45,18 +45,18 @@ SERVER
   perintah di riwayatnya. Folder rumah pengguna adalah /home/ubuntu.
 - Port 80 dan 443 dipegang kontainer Caddy ln-demo-caddy-1 dari repo lrmcorp/ln. Jangan pasang web server
   lain dan jangan buka port lain.
-- DNS arah.lnint.xyz -> 43.152.240.47 sudah aktif.
+- DNS arah.hasseedev.com -> 43.152.240.47 sudah aktif.
 - Koneksi keluar yang dipakai: github.com, registry.npmjs.org, pypi.org, Docker Hub, query1 dan query2.finance.yahoo.com, api.frankfurter.dev,
   news.google.com, www.cnbcindonesia.com, www.bca.co.id, nfs.faireconomy.media, openrouter.ai,
   data-api.binance.vision, exodus.stockbit.com, api.telegram.org.
 
 CARA KERJANYA
 ARAH berjalan sebagai kontainer Docker "arah" di jaringan lnint-edge, tanpa port yang dibuka ke host. Caddy
-meneruskan https://arah.lnint.xyz ke arah:8787. Skrip deploy/server-deploy.sh mengerjakan semuanya:
+meneruskan https://arah.hasseedev.com ke arah:8787. Skrip deploy/server-deploy.sh mengerjakan semuanya:
 1. memeriksa server (Docker, disk, Caddy, DNS);
 2. menyimpan pengaturan ke /home/ubuntu/arah/.env.vps (izin 600, nilai lama dipertahankan);
 3. membangun dan menjalankan kontainer, lalu menunggu sampai sehat;
-4. memastikan Caddy melayani arah.lnint.xyz;
+4. memastikan Caddy melayani arah.hasseedev.com;
 5. menguji dari dalam jaringan Docker, di server lewat HTTPS, dan dari internet;
 6. memeriksa fitur: riwayat harga, grafik live per sumber, prakiraan 1/2/3 bulan, dan sesi Stockbit;
 7. memasang pembaruan otomatis tiap 5 menit yang kembali ke versi sebelumnya bila versi baru gagal.
@@ -78,7 +78,7 @@ membawa kode [T1] sampai [T9] yang dijelaskan di bagian MASALAH.
 LANGKAH 2: PASTIKAN BERHASIL
 Deploy selesai bila semua ini benar:
 1. Laporan tidak memuat FAIL.
-2. Ada baris "OK    https://arah.lnint.xyz answers 200 with a valid certificate".
+2. Ada baris "OK    https://arah.hasseedev.com answers 200 with a valid certificate".
 3. Ada baris "OK    forecast IHSG 1m", "2m" dan "3m".
 4. Ada baris "OK    live BTC: binance, realtime".
 5. Jika STOCKBIT_SESSION diisi: ada "OK    Stockbit session usable". Pada jam bursa (Senin sampai Jumat,
@@ -87,7 +87,7 @@ Deploy selesai bila semua ini benar:
    docker compose -f /home/ubuntu/arah/deploy/compose.yaml exec -T arah arah selfcheck
 6. docker ps --format '{{.Names}} {{.Status}}' | grep arah   menunjukkan "(healthy)".
 7. systemctl is-active arah-update.timer   menjawab "active".
-8. Di browser, https://arah.lnint.xyz menampilkan logo LRM dan kolom kata sandi. Setelah masuk:
+8. Di browser, https://arah.hasseedev.com menampilkan logo LRM dan kolom kata sandi. Setelah masuk:
    - halaman Ringkasan punya empat kartu bergrafik dan pilihan 1 / 2 / 3 bulan;
    - membuka satu kartu menampilkan grafik "Hari ini", kotak Kesimpulan, grafik "Arah grafik ke depan",
      dan daftar teknik;
@@ -140,7 +140,8 @@ MASALAH (perbaiki, lalu jalankan ulang LANGKAH 1; baris VALUES boleh dibiarkan .
        tab Firewall, izinkan TCP 80 dan 443 dari 0.0.0.0/0.
      - Di server pun gagal: docker logs --tail 50 ln-demo-caddy-1 | grep -i -E "arah|certificate|error"
        Sertifikat terbit saat diakses pertama kali dan butuh port 80 terbuka. Tunggu 2 menit, ulangi.
-     - DNS ke alamat lain: perbaiki record A "arah" di DNSPod (lnint.xyz) ke 43.152.240.47, tanpa AAAA.
+     - DNS ke alamat lain: perbaiki record A "arah" di Cloudflare (hasseedev.com) ke 43.152.240.47,
+       mode DNS only (awan abu-abu), tanpa AAAA.
 [T7] Pembaruan otomatis tidak terpasang. Jalankan bash /home/ubuntu/arah/deploy/install-auto-update.sh dan
      laporkan pesannya bila gagal.
 [T8] Stockbit.
@@ -168,7 +169,7 @@ ATURAN
   termasuk di laporan.
 - Jangan membuka port 8787 ke host atau internet, dan jangan menonaktifkan kata sandi dashboard.
 - Jangan mengubah berkas di /home/ubuntu/ln selain yang dilakukan skrip: folder itu ditimpa setiap deploy ln.
-  Blok arah.lnint.xyz sudah ada di repo lrmcorp/ln, jadi tidak hilang pada deploy berikutnya.
+  Blok arah.hasseedev.com sudah ada di repo lrmcorp/ln, jadi tidak hilang pada deploy berikutnya.
 - Jangan mengubah berkas di /home/ubuntu/arah dengan tangan: pembaruan otomatis berhenti bila ada perubahan
   lokal. Ubah pengaturan dengan menjalankan ulang LANGKAH 1 berisi nilai baru.
 - Jika satu masalah tidak selesai setelah dua kali percobaan sesuai bagian MASALAH, berhenti dan laporkan.

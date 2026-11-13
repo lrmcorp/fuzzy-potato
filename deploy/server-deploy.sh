@@ -9,13 +9,28 @@
 # It never prints a secret.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
-DOMAIN="${ARAH_DOMAIN:-arah.lnint.xyz}"
+DOMAIN="${ARAH_DOMAIN:-arah.hasseedev.com}"
 SERVER_IP="${ARAH_SERVER_IP:-43.152.240.47}"
 CADDY="${ARAH_CADDY_CONTAINER:-ln-demo-caddy-1}"
 BLOCK="$DOMAIN {
   encode zstd gzip
   reverse_proxy arah:8787
 }"
+
+# True when the Caddyfile on stdin has a site block whose address list names $DOMAIN, alone or next to
+# other names ("arah.hasseedev.com, www.example.com {"), so a shared block is never duplicated.
+serves_domain() {
+  awk -v d="$DOMAIN" '
+    /^[^[:space:]#].*\{[[:space:]]*$/ {
+      line = $0; sub(/\{[[:space:]]*$/, "", line); gsub(/,/, " ", line)
+      n = split(line, a, /[[:space:]]+/)
+      for (i = 1; i <= n; i++) {
+        h = a[i]; sub(/^https?:\/\//, "", h); sub(/:[0-9]+$/, "", h)
+        if (h == d) found = 1
+      }
+    }
+    END { exit !found }'
+}
 
 declare -a REPORT=()
 ok()   { REPORT+=("OK    $1"); echo "OK    $1"; }
@@ -74,13 +89,13 @@ step "4/7 Caddy site for $DOMAIN"
 src="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/caddy/Caddyfile"}}{{.Source}}{{end}}{{end}}' "$CADDY")"
 [ -n "$src" ] && [ -f "$src" ] || fail "cannot find the Caddyfile mounted into $CADDY  [T5]"
 echo "Caddy reads $src"
-if ! grep -q "^$DOMAIN {" "$src"; then
+if ! serves_domain < "$src"; then
   # lrmcorp/ln main carries this exact block, so the next ln deploy keeps it.
   cp "$src" "$src.bak.$(date +%s)"
   printf '\n# ARAH by LRM dashboard, deployed separately from lrmcorp/fuzzy-potato onto the lnint-edge network.\n%s\n' "$BLOCK" >> "$src"
   echo "Added the $DOMAIN block to $src (a backup sits next to it)."
 fi
-if docker exec "$CADDY" grep -q "^$DOMAIN {" /etc/caddy/Caddyfile 2>/dev/null; then
+if docker exec "$CADDY" cat /etc/caddy/Caddyfile 2>/dev/null | serves_domain; then
   ok "Caddy already serves $DOMAIN"
 else
   envs=()
@@ -92,7 +107,7 @@ else
   # The file is bind-mounted and may have been replaced, so only a restart is sure to load it.
   docker restart "$CADDY" >/dev/null || fail "Caddy did not restart  [T5]"
   sleep 5
-  docker exec "$CADDY" grep -q "^$DOMAIN {" /etc/caddy/Caddyfile || fail "Caddy restarted but still lacks the $DOMAIN block  [T5]"
+  docker exec "$CADDY" cat /etc/caddy/Caddyfile | serves_domain || fail "Caddy restarted but still lacks the $DOMAIN block  [T5]"
   ok "Caddy restarted with the $DOMAIN site"
 fi
 

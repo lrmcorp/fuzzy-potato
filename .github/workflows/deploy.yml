@@ -78,8 +78,8 @@ jobs:
             echo \"container health: \$state\"
             [ \"\$state\" = healthy ] || { sudo -n docker compose -f deploy/compose.yaml logs --tail 60 arah; exit 1; }
             sudo -n docker image prune -f >/dev/null"
-      # Fails until lrmcorp/ln has deployed its Caddy site for arah.lnint.xyz; the container itself is already verified above.
+      # Fails until lrmcorp/ln has deployed its Caddy site for arah.hasseedev.com; the container itself is already verified above.
       - name: Verify public HTTPS
         run: |
           curl -fsS --connect-timeout 5 --max-time 12 --retry 8 --retry-delay 5 --retry-all-errors \
-            https://arah.lnint.xyz/api/session | grep -q '"auth_required":true'
+            https://arah.hasseedev.com/api/session | grep -q '"auth_required":true'
